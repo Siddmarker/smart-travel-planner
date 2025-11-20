@@ -25,8 +25,8 @@ export async function initGoogleMaps(): Promise<void> {
     }
 
     try {
-        await googleMapsLoader.importLibrary('places');
-        await googleMapsLoader.importLibrary('maps');
+        await (googleMapsLoader as any).importLibrary('places');
+        await (googleMapsLoader as any).importLibrary('maps');
         isGoogleMapsLoaded = true;
     } catch (error) {
         console.error('Failed to load Google Maps:', error);

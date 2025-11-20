@@ -169,12 +169,19 @@ export const useStore = create<AppState>((set) => ({
             if (trip.id === tripId) {
                 const updatedDays = [...trip.days];
                 if (!updatedDays[dayIndex]) {
-                    updatedDays[dayIndex] = { date: '', places: [] };
+                    updatedDays[dayIndex] = { id: crypto.randomUUID(), date: new Date().toISOString(), items: [] };
                 }
-                if (!updatedDays[dayIndex].places) {
-                    updatedDays[dayIndex].places = [];
+                if (!updatedDays[dayIndex].items) {
+                    updatedDays[dayIndex].items = [];
                 }
-                updatedDays[dayIndex].places.push(place);
+
+                updatedDays[dayIndex].items.push({
+                    id: crypto.randomUUID(),
+                    placeId: place.id,
+                    startTime: '09:00',
+                    endTime: '10:00',
+                    type: 'activity'
+                });
                 return { ...trip, days: updatedDays };
             }
             return trip;
