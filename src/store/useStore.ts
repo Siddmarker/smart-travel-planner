@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { Trip, User, Place } from '@/types';
 import { validateCredentials, createUser, setAuthToken, clearAuthToken, getUserFromToken, mockGoogleLogin, findUserByEmail } from '@/lib/auth';
 
@@ -25,7 +26,7 @@ interface AppState {
     checkAuth: () => void;
 }
 
-export const useStore = create<AppState>((set) => ({
+export const useStore = create<AppState>()(persist((set) => ({
     currentUser: {
         id: 'user-1',
         name: 'Alex Johnson',
@@ -269,4 +270,14 @@ export const useStore = create<AppState>((set) => ({
             });
         }
     },
+}), {
+    name: '2wards-storage',
+    partialize: (state) => ({
+        trips: state.trips,
+        places: state.places,
+        savedPlaces: state.savedPlaces,
+        currentUser: state.currentUser,
+        isAuthenticated: state.isAuthenticated,
+        currentTrip: state.currentTrip
+    })
 }));
