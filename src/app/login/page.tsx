@@ -125,7 +125,6 @@ export default function LoginPage() {
                     </div>
 
                     <GoogleAuthButton
-                        onGoogleAuth={handleGoogleLogin}
                         isLoading={isLoading}
                         mode="signin"
                     />

@@ -11,8 +11,18 @@ interface GoogleAuthButtonProps {
 }
 
 export function GoogleAuthButton({ isLoading, mode = 'signin' }: GoogleAuthButtonProps) {
-    const handleGoogleSignIn = () => {
-        signIn('google', { callbackUrl: '/' });
+    const handleGoogleSignIn = async () => {
+        try {
+            console.log('Google sign-in button clicked');
+            console.log('Calling signIn with google provider');
+            const result = await signIn('google', {
+                callbackUrl: '/',
+                redirect: true
+            });
+            console.log('SignIn result:', result);
+        } catch (error) {
+            console.error('Error during Google sign-in:', error);
+        }
     };
 
     return (
