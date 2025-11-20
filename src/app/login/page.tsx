@@ -61,7 +61,7 @@ export default function LoginPage() {
                     </div>
                     <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
                     <CardDescription>
-                        Sign in to your Smart Travel Planner account
+                        Sign in to your 2wards account
                     </CardDescription>
                 </CardHeader>
 

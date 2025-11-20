@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Smart Travel Planner",
-  description: "Plan your perfect trip with AI-powered travel planning",
+  title: "2wards - Smart Group Travel Planner",
+  description: "Plan your perfect trip with 2wards",
 };
 
 export default function RootLayout({
