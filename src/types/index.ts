@@ -175,6 +175,7 @@ export interface Trip {
     startTime: string;
     endTime: string;
   };
+  categoryPreferences?: CategoryPreferences;
   review?: {
     rating: number; // 1-5
     comment: string;
@@ -226,4 +227,39 @@ export interface UserPreferences {
   start_location: { lat: number; lng: number };
   day_start_time: Date;
   return_to_start: boolean;
+}
+
+export type TripCategory =
+  | 'trekking'
+  | 'food'
+  | 'scenic_drives'
+  | 'cultural'
+  | 'beaches'
+  | 'adventure'
+  | 'shopping'
+  | 'nightlife'
+  | 'historical'
+  | 'wildlife'
+  | 'religious'
+  | 'markets';
+
+export interface CategoryPreferences {
+  categories: TripCategory[];
+  priorities: { [key in TripCategory]?: number }; // 1-5 priority
+}
+
+export interface TimeslotOption {
+  place: Place;
+  category: string;
+  quality_score: number;
+  trending_score?: number;
+  why_recommended: string;
+  travel_time: number | null;
+  estimated_arrival: string | null;
+}
+
+export interface DailyTimeslots {
+  morning: TimeslotOption[];
+  afternoon: TimeslotOption[];
+  evening: TimeslotOption[];
 }
