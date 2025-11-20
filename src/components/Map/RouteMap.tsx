@@ -64,7 +64,7 @@ function FitBounds({ positions }: { positions: [number, number][] }) {
 
 function AnimatedPolyline({ positions, color }: { positions: [number, number][]; color: string }) {
     const [visiblePositions, setVisiblePositions] = useState<[number, number][]>([]);
-    const animationRef = useRef<NodeJS.Timeout>();
+    const animationRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         setVisiblePositions([]);
