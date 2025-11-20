@@ -97,7 +97,7 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
             <DialogTrigger asChild>
                 {children}
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="text-2xl font-bold text-primary">Plan a New Trip</DialogTitle>
                     <DialogDescription>
@@ -186,7 +186,7 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                         <p className="text-sm text-muted-foreground mb-3">
                             Select categories that interest you to get personalized recommendations
                         </p>
-                        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                        <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border rounded-md p-2">
                             {TRIP_CATEGORIES.map((cat) => (
                                 <div
                                     key={cat.value}
