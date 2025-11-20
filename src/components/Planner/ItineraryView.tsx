@@ -19,8 +19,6 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
     const [isGenerating, setIsGenerating] = useState(false);
 
     const handleAddDay = () => {
-        // Logic to add a new day would go here
-        // For now, we'll assume days are pre-generated based on dates
         alert('Add Day functionality to be implemented');
     };
 
@@ -31,46 +29,69 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
     const handleGenerateItinerary = async () => {
         setIsGenerating(true);
         try {
-            // 1. Calculate days
             const start = new Date(trip.startDate);
             const end = new Date(trip.endDate);
             const dayCount = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-            // Import dynamically
-            const { UnifiedTravelPlanner } = await import('@/lib/unified-planner');
-            const planner = new UnifiedTravelPlanner();
+            // Import enhanced planner v2
+            const { UnifiedTravelPlannerV2 } = await import('@/lib/unified-planner-v2');
+            const planner = new UnifiedTravelPlannerV2();
 
             const userPreferences = {
                 destination: trip.destination,
-                categories: ['attraction', 'food', 'culture'], // Default categories
+                categories: trip.categoryPreferences?.categories || ['attraction', 'food', 'culture'],
                 trip_duration: dayCount,
                 trip_dates: { start: trip.startDate, end: trip.endDate },
                 start_location: trip.destination,
-                day_start_time: new Date(), // Not strictly used in this simplified flow
+                day_start_time: new Date(),
                 return_to_start: trip.preferences?.returnToStart || false
             };
 
-            const itineraryItems = planner.unifiedPlanningWorkflow(userPreferences, places);
+            // Generate enhanced itinerary with 3-option timeslots
+            const dailyTimeslots = planner.generateEnhancedItinerary(
+                userPreferences,
+                places,
+                trip.categoryPreferences
+            );
 
-            console.log('Generated itinerary items:', itineraryItems);
-            console.log('Trip start date:', trip.startDate);
-            console.log('Trip end date:', trip.endDate);
-            console.log('Day count:', dayCount);
+            console.log('Generated daily timeslots:', dailyTimeslots);
 
-            // Group items by day - simplified approach
+            // Convert timeslots to itinerary items (selecting first option for now)
             const newDays: DayPlan[] = [];
-            for (let i = 0; i < dayCount; i++) {
+            for (let day = 1; day <= dayCount; day++) {
                 const currentDate = new Date(start);
-                currentDate.setDate(start.getDate() + i);
+                currentDate.setDate(start.getDate() + (day - 1));
 
-                // Get items for this day index (simpler approach)
-                // Since the planner generates items sequentially by day
-                const itemsPerDay = Math.ceil(itineraryItems.length / dayCount);
-                const startIdx = i * itemsPerDay;
-                const endIdx = Math.min(startIdx + itemsPerDay, itineraryItems.length);
-                const dayItems = itineraryItems.slice(startIdx, endIdx);
+                const dayTimeslots = dailyTimeslots[day];
+                if (!dayTimeslots) continue;
 
-                console.log(`Day ${i + 1} (${currentDate.toISOString()}):`, dayItems.length, 'items');
+                // Select first option from each timeslot
+                const dayItems = [
+                    ...(dayTimeslots.morning[0] ? [{
+                        id: crypto.randomUUID(),
+                        placeId: dayTimeslots.morning[0].place.id,
+                        startTime: new Date(currentDate.setHours(9, 0)).toISOString(),
+                        endTime: new Date(currentDate.setHours(11, 0)).toISOString(),
+                        notes: dayTimeslots.morning[0].why_recommended,
+                        type: 'activity' as const
+                    }] : []),
+                    ...(dayTimeslots.afternoon[0] ? [{
+                        id: crypto.randomUUID(),
+                        placeId: dayTimeslots.afternoon[0].place.id,
+                        startTime: new Date(currentDate.setHours(13, 0)).toISOString(),
+                        endTime: new Date(currentDate.setHours(16, 0)).toISOString(),
+                        notes: dayTimeslots.afternoon[0].why_recommended,
+                        type: 'activity' as const
+                    }] : []),
+                    ...(dayTimeslots.evening[0] ? [{
+                        id: crypto.randomUUID(),
+                        placeId: dayTimeslots.evening[0].place.id,
+                        startTime: new Date(currentDate.setHours(18, 0)).toISOString(),
+                        endTime: new Date(currentDate.setHours(20, 0)).toISOString(),
+                        notes: dayTimeslots.evening[0].why_recommended,
+                        type: 'activity' as const
+                    }] : [])
+                ];
 
                 newDays.push({
                     id: crypto.randomUUID(),
@@ -79,14 +100,12 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
                 });
             }
 
-            console.log('New days structure:', newDays);
-
-            if (newDays.length > 0 && itineraryItems.length > 0) {
+            if (newDays.length > 0) {
                 updateTrip(trip.id, { days: newDays });
                 setSelectedDayId(newDays[0].id);
-                alert("Itinerary generated using Unified Voting Logic!");
+                alert("Enhanced itinerary generated with category preferences!");
             } else {
-                alert("No places available to generate itinerary. Try adding more places to your discovery list.");
+                alert("No places available. Try adding more places.");
             }
 
         } catch (error) {
@@ -161,7 +180,6 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
                                             item={item}
                                             place={place}
                                             onDelete={() => {
-                                                // Handle delete
                                                 console.log('Delete item', item.id);
                                             }}
                                         />

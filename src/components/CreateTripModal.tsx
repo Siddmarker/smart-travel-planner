@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useStore } from '@/store/useStore';
+import { TripCategory } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import { useRouter } from 'next/navigation';
-import { Calendar, MapPin, DollarSign, Type } from 'lucide-react';
+import { Calendar, MapPin, DollarSign, Type, Tag } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface CreateTripModalProps {
     children?: React.ReactNode;
@@ -24,9 +26,33 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
     const [returnToStart, setReturnToStart] = useState(false);
     const [startTime, setStartTime] = useState('09:00');
     const [endTime, setEndTime] = useState('20:00');
+    const [selectedCategories, setSelectedCategories] = useState<TripCategory[]>([]);
 
     const { addTrip, currentUser } = useStore();
     const router = useRouter();
+
+    const TRIP_CATEGORIES: { value: TripCategory; label: string; icon: string }[] = [
+        { value: 'trekking', label: 'Trekking/Hiking', icon: '🥾' },
+        { value: 'food', label: 'Food & Dining', icon: '🍽️' },
+        { value: 'scenic_drives', label: 'Scenic Drives', icon: '🚗' },
+        { value: 'cultural', label: 'Cultural Sites', icon: '🏛️' },
+        { value: 'beaches', label: 'Beaches', icon: '🏖️' },
+        { value: 'adventure', label: 'Adventure Sports', icon: '🪂' },
+        { value: 'shopping', label: 'Shopping', icon: '🛍️' },
+        { value: 'nightlife', label: 'Nightlife', icon: '🌃' },
+        { value: 'historical', label: 'Historical', icon: '🏰' },
+        { value: 'wildlife', label: 'Wildlife', icon: '🦁' },
+        { value: 'religious', label: 'Religious', icon: '🕌' },
+        { value: 'markets', label: 'Local Markets', icon: '🏪' },
+    ];
+
+    const toggleCategory = (category: TripCategory) => {
+        setSelectedCategories(prev =>
+            prev.includes(category)
+                ? prev.filter(c => c !== category)
+                : [...prev, category]
+        );
+    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -55,6 +81,10 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                 startTime,
                 endTime,
             },
+            categoryPreferences: selectedCategories.length > 0 ? {
+                categories: selectedCategories,
+                priorities: {} // Default priorities
+            } : undefined,
         };
 
         addTrip(newTrip);
@@ -146,6 +176,43 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                             placeholder="e.g., 1000"
                             className="h-10"
                         />
+                    </div>
+
+                    <div className="border-t pt-4 mt-2">
+                        <Label className="flex items-center gap-2 text-base mb-3">
+                            <Tag className="h-4 w-4 text-muted-foreground" />
+                            Trip Categories (Optional)
+                        </Label>
+                        <p className="text-sm text-muted-foreground mb-3">
+                            Select categories that interest you to get personalized recommendations
+                        </p>
+                        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                            {TRIP_CATEGORIES.map((cat) => (
+                                <div
+                                    key={cat.value}
+                                    className="flex items-center space-x-2 p-2 rounded hover:bg-accent cursor-pointer"
+                                    onClick={() => toggleCategory(cat.value)}
+                                >
+                                    <Checkbox
+                                        id={cat.value}
+                                        checked={selectedCategories.includes(cat.value)}
+                                        onCheckedChange={() => toggleCategory(cat.value)}
+                                    />
+                                    <label
+                                        htmlFor={cat.value}
+                                        className="text-sm cursor-pointer flex items-center gap-1"
+                                    >
+                                        <span>{cat.icon}</span>
+                                        <span>{cat.label}</span>
+                                    </label>
+                                </div>
+                            ))}
+                        </div>
+                        {selectedCategories.length > 0 && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                                Selected: {selectedCategories.length} categories
+                            </p>
+                        )}
                     </div>
 
                     <div className="border-t pt-4 mt-2">
