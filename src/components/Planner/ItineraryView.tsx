@@ -52,34 +52,36 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
 
             const itineraryItems = planner.unifiedPlanningWorkflow(userPreferences, places);
 
-            // Group items by day
+            console.log('Generated itinerary items:', itineraryItems);
+            console.log('Trip start date:', trip.startDate);
+            console.log('Trip end date:', trip.endDate);
+            console.log('Day count:', dayCount);
+
+            // Group items by day - simplified approach
             const newDays: DayPlan[] = [];
             for (let i = 0; i < dayCount; i++) {
                 const currentDate = new Date(start);
                 currentDate.setDate(start.getDate() + i);
-                const dateStr = currentDate.toISOString();
 
-                // Filter items for this day
-                // Note: The planner returns a flat list of items with timestamps. 
-                // We need to group them.
-                const dayStart = new Date(dateStr);
-                dayStart.setHours(0, 0, 0, 0);
-                const dayEnd = new Date(dateStr);
-                dayEnd.setHours(23, 59, 59, 999);
+                // Get items for this day index (simpler approach)
+                // Since the planner generates items sequentially by day
+                const itemsPerDay = Math.ceil(itineraryItems.length / dayCount);
+                const startIdx = i * itemsPerDay;
+                const endIdx = Math.min(startIdx + itemsPerDay, itineraryItems.length);
+                const dayItems = itineraryItems.slice(startIdx, endIdx);
 
-                const dayItems = itineraryItems.filter(item => {
-                    const itemTime = new Date(item.startTime);
-                    return itemTime >= dayStart && itemTime <= dayEnd;
-                });
+                console.log(`Day ${i + 1} (${currentDate.toISOString()}):`, dayItems.length, 'items');
 
                 newDays.push({
                     id: crypto.randomUUID(),
-                    date: dateStr,
+                    date: currentDate.toISOString(),
                     items: dayItems
                 });
             }
 
-            if (newDays.length > 0) {
+            console.log('New days structure:', newDays);
+
+            if (newDays.length > 0 && itineraryItems.length > 0) {
                 updateTrip(trip.id, { days: newDays });
                 setSelectedDayId(newDays[0].id);
                 alert("Itinerary generated using Unified Voting Logic!");
