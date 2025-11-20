@@ -1,0 +1,193 @@
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+}
+
+export interface UserProfile extends User {
+  personalInfo: {
+    phone?: string;
+    nationality?: string;
+    languages: string[];
+    coverPhoto?: string;
+    bio?: string;
+  };
+  travelPreferences: {
+    accommodationTypes: ('hotel' | 'hostel' | 'apartment' | 'resort' | 'bnb')[];
+    transportModes: ('flight' | 'train' | 'bus' | 'car' | 'bike')[];
+    activityLevel: 'relaxed' | 'moderate' | 'adventurous';
+    diningPreferences: string[];
+    budgetRange: 'budget' | 'moderate' | 'luxury';
+  };
+  currencySettings: {
+    primaryCurrency: string;
+    displayFormat: 'symbol' | 'code';
+    autoConvert: boolean;
+  };
+  privacySettings: {
+    profileVisibility: 'public' | 'private';
+    showTravelHistory: boolean;
+    showReviews: boolean;
+  };
+  travelStats: {
+    countriesVisited: number;
+    tripsCompleted: number;
+    totalDistance: number;
+    favoriteDestination?: string;
+  };
+}
+
+export interface Currency {
+  code: string;
+  name: string;
+  symbol: string;
+  flag: string;
+  rate: number; // Exchange rate to USD
+}
+
+
+export interface Place {
+  id: string;
+  name: string;
+  category: 'food' | 'attraction' | 'hotel' | 'activity';
+  lat: number;
+  lng: number;
+  rating: number;
+  reviews: number;
+  priceLevel: 1 | 2 | 3 | 4;
+  image?: string;
+  description?: string;
+  phoneNumber?: string;
+  website?: string;
+  openingHours?: string[];
+}
+
+export interface PlaceDetails extends Place {
+  longDescription: string;
+  operatingHours?: {
+    [day: string]: { open: string; close: string } | 'closed';
+  };
+  admissionFee?: {
+    adult: number;
+    child: number;
+    currency: string;
+  };
+  accessibility: string[];
+  recommendedDuration: number; // minutes
+  bestTimeToVisit: string;
+  tips: string[];
+  photos: string[];
+}
+
+export interface Accommodation {
+  id: string;
+  name: string;
+  type: 'hotel' | 'hostel' | 'apartment' | 'resort' | 'bnb';
+  location: {
+    address: string;
+    lat: number;
+    lng: number;
+    neighborhood: string;
+  };
+  pricing: {
+    basePrice: number;
+    currency: string;
+    taxesAndFees: number;
+    totalPrice: number;
+  };
+  images: string[];
+  rating: number;
+  reviewCount: number;
+  amenities: string[];
+  cancellationPolicy: string;
+  provider: 'booking.com' | 'expedia' | 'airbnb' | 'mock';
+  availability: boolean;
+  description: string;
+  checkInTime: string;
+  checkOutTime: string;
+}
+
+export interface Booking {
+  id: string;
+  accommodationId: string;
+  tripId: string;
+  checkIn: string; // ISO date
+  checkOut: string; // ISO date
+  guests: {
+    adults: number;
+    children: number;
+  };
+  rooms: number;
+  totalPrice: number;
+  status: 'pending' | 'confirmed' | 'cancelled';
+  confirmationCode: string;
+  guestInfo: {
+    name: string;
+    email: string;
+    phone: string;
+  };
+  createdAt: string;
+}
+
+export interface ItineraryItem {
+  id: string;
+  placeId: string;
+  startTime: string; // ISO string
+  endTime: string; // ISO string
+  notes?: string;
+  type?: 'activity' | 'return_trip';
+}
+
+export interface DayPlan {
+  id: string;
+  date: string; // ISO string
+  items: ItineraryItem[];
+}
+
+export interface Poll {
+  id: string;
+  question: string;
+  options: { id: string; text: string; votes: string[] }[]; // votes = array of userIds
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface Trip {
+  id: string;
+  name: string;
+  destination: {
+    name: string;
+    lat: number;
+    lng: number;
+  };
+  startDate: string; // ISO string
+  endDate: string; // ISO string
+  participants: User[];
+  days: DayPlan[];
+  budget: {
+    currency: string;
+    total: number;
+    spent: number;
+  };
+  preferences?: {
+    returnToStart: boolean;
+    startTime: string;
+    endTime: string;
+  };
+  review?: {
+    rating: number; // 1-5
+    comment: string;
+    date: string; // ISO string
+  };
+  polls?: Poll[];
+  messages?: ChatMessage[];
+  bookings?: Booking[];
+}
+
+export interface ChatMessage {
+  id: string;
+  userId: string;
+  content: string;
+  timestamp: string;
+}

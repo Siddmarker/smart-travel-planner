@@ -1,0 +1,265 @@
+import { create } from 'zustand';
+import { Trip, User, Place } from '@/types';
+import { validateCredentials, createUser, setAuthToken, clearAuthToken, getUserFromToken, mockGoogleLogin, findUserByEmail } from '@/lib/auth';
+
+interface AppState {
+    currentUser: User | null;
+    currentTrip: Trip | null;
+    trips: Trip[];
+    places: Place[];
+    savedPlaces: Place[];
+    isAuthenticated: boolean;
+    setCurrentUser: (user: User) => void;
+    setCurrentTrip: (trip: Trip) => void;
+    addTrip: (trip: Trip) => void;
+    updateTrip: (tripId: string, updates: Partial<Trip>) => void;
+    deleteTrip: (tripId: string) => void;
+    addPlace: (place: Place) => void;
+    savePlace: (place: Place) => void;
+    removeSavedPlace: (placeId: string) => void;
+    addPlaceToTrip: (tripId: string, place: Place, dayIndex: number) => void;
+    login: (email: string, password: string) => Promise<void>;
+    signup: (name: string, email: string, password: string) => Promise<void>;
+    loginWithGoogle: () => Promise<void>;
+    logout: () => void;
+    checkAuth: () => void;
+}
+
+export const useStore = create<AppState>((set) => ({
+    currentUser: {
+        id: 'user-1',
+        name: 'Alex Johnson',
+        email: 'alex@example.com',
+        avatar: 'https://github.com/shadcn.png',
+    },
+    currentTrip: null,
+    savedPlaces: [],
+    trips: [
+        {
+            id: 'trip-1',
+            name: 'Summer in Paris',
+            startDate: '2024-07-15',
+            endDate: '2024-07-22',
+            destination: {
+                name: 'Paris, France',
+                lat: 48.8566,
+                lng: 2.3522,
+            },
+            participants: [
+                { id: 'user-1', name: 'Alex Johnson', email: 'alex@example.com', avatar: 'https://github.com/shadcn.png' },
+                { id: 'user-2', name: 'Sarah Smith', email: 'sarah@example.com' }
+            ],
+            days: [],
+            budget: {
+                currency: 'EUR',
+                total: 2000,
+                spent: 450
+            }
+        },
+        {
+            id: 'trip-2',
+            name: 'Tokyo Adventure',
+            startDate: '2024-10-01',
+            endDate: '2024-10-10',
+            destination: {
+                name: 'Tokyo, Japan',
+                lat: 35.6762,
+                lng: 139.6503,
+            },
+            participants: [
+                { id: 'user-1', name: 'Alex Johnson', email: 'alex@example.com', avatar: 'https://github.com/shadcn.png' }
+            ],
+            days: [],
+            budget: {
+                currency: 'JPY',
+                total: 300000,
+                spent: 0
+            }
+        }
+    ],
+    places: [
+        {
+            id: 'place-1',
+            name: 'Eiffel Tower',
+            category: 'attraction',
+            lat: 48.8584,
+            lng: 2.2945,
+            rating: 4.8,
+            reviews: 12000,
+            priceLevel: 3,
+            image: 'https://images.unsplash.com/photo-1511739001486-6bfe10ce7859',
+            description: 'Iconic iron lady of Paris.'
+        },
+        {
+            id: 'place-2',
+            name: 'Louvre Museum',
+            category: 'attraction',
+            lat: 48.8606,
+            lng: 2.3376,
+            rating: 4.7,
+            reviews: 15000,
+            priceLevel: 2,
+            image: 'https://images.unsplash.com/photo-1499856871940-a09627c6dcf6',
+            description: 'World\'s largest art museum.'
+        },
+        {
+            id: 'place-3',
+            name: 'Notre-Dame Cathedral',
+            category: 'attraction',
+            lat: 48.8529,
+            lng: 2.3500,
+            rating: 4.6,
+            reviews: 8000,
+            priceLevel: 1,
+            image: 'https://images.unsplash.com/photo-1478391679964-5d53095aea85',
+            description: 'Medieval Catholic cathedral.'
+        },
+        {
+            id: 'place-4',
+            name: 'Arc de Triomphe',
+            category: 'attraction',
+            lat: 48.8738,
+            lng: 2.2950,
+            rating: 4.7,
+            reviews: 9000,
+            priceLevel: 2,
+            image: 'https://images.unsplash.com/photo-1509439581779-6298f75bf6e5',
+            description: 'Famous monument in Paris.'
+        },
+        {
+            id: 'place-5',
+            name: 'Sacre-Coeur',
+            category: 'attraction',
+            lat: 48.8867,
+            lng: 2.3431,
+            rating: 4.5,
+            reviews: 7000,
+            priceLevel: 1,
+            image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34',
+            description: 'Basilica of the Sacred Heart.'
+        }
+    ],
+    setCurrentUser: (user) => set({ currentUser: user }),
+    setCurrentTrip: (trip) => set({ currentTrip: trip }),
+    addTrip: (trip) => set((state) => ({ trips: [...state.trips, trip] })),
+    updateTrip: (tripId, updates) =>
+        set((state) => ({
+            trips: state.trips.map((t) => (t.id === tripId ? { ...t, ...updates } : t)),
+            currentTrip:
+                state.currentTrip?.id === tripId
+                    ? { ...state.currentTrip, ...updates }
+                    : state.currentTrip,
+        })),
+    deleteTrip: (tripId: string) =>
+        set((state) => ({
+            trips: state.trips.filter((t) => t.id !== tripId),
+            currentTrip: state.currentTrip?.id === tripId ? null : state.currentTrip,
+        })),
+    addPlace: (place) => set((state) => ({
+        places: [...state.places, place]
+    })),
+    savePlace: (place) => set((state) => ({
+        savedPlaces: [...state.savedPlaces, place]
+    })),
+    removeSavedPlace: (placeId) => set((state) => ({
+        savedPlaces: state.savedPlaces.filter(p => p.id !== placeId)
+    })),
+    addPlaceToTrip: (tripId, place, dayIndex) => set((state) => ({
+        trips: state.trips.map(trip => {
+            if (trip.id === tripId) {
+                const updatedDays = [...trip.days];
+                if (!updatedDays[dayIndex]) {
+                    updatedDays[dayIndex] = { date: '', places: [] };
+                }
+                if (!updatedDays[dayIndex].places) {
+                    updatedDays[dayIndex].places = [];
+                }
+                updatedDays[dayIndex].places.push(place);
+                return { ...trip, days: updatedDays };
+            }
+            return trip;
+        })
+    })),
+
+    // Authentication actions
+    isAuthenticated: false,
+
+    login: async (email: string, password: string) => {
+        const user = validateCredentials(email, password);
+        if (!user) {
+            throw new Error('Invalid email or password');
+        }
+
+        setAuthToken(user.id);
+        set({
+            currentUser: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                avatar: user.avatar,
+            },
+            isAuthenticated: true,
+        });
+    },
+
+    signup: async (name: string, email: string, password: string) => {
+        const existing = findUserByEmail(email);
+        if (existing) {
+            throw new Error('Email already registered');
+        }
+
+        const user = createUser(name, email, password);
+        setAuthToken(user.id);
+        set({
+            currentUser: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                avatar: user.avatar,
+            },
+            isAuthenticated: true,
+        });
+    },
+
+    loginWithGoogle: async () => {
+        const user = await mockGoogleLogin();
+        setAuthToken(user.id);
+        set({
+            currentUser: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                avatar: user.avatar,
+            },
+            isAuthenticated: true,
+        });
+    },
+
+    logout: () => {
+        clearAuthToken();
+        set({
+            currentUser: null,
+            isAuthenticated: false,
+        });
+    },
+
+    checkAuth: () => {
+        const user = getUserFromToken();
+        if (user) {
+            set({
+                currentUser: {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    avatar: user.avatar,
+                },
+                isAuthenticated: true,
+            });
+        } else {
+            set({
+                currentUser: null,
+                isAuthenticated: false,
+            });
+        }
+    },
+}));

@@ -1,0 +1,197 @@
+'use client';
+
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useStore } from '@/store/useStore';
+import { v4 as uuidv4 } from 'uuid';
+import { useRouter } from 'next/navigation';
+import { Calendar, MapPin, DollarSign, Type } from 'lucide-react';
+
+interface CreateTripModalProps {
+    children?: React.ReactNode;
+}
+
+export function CreateTripModal({ children }: CreateTripModalProps) {
+    const [open, setOpen] = useState(false);
+    const [name, setName] = useState('');
+    const [destination, setDestination] = useState('');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [budget, setBudget] = useState('');
+    const [returnToStart, setReturnToStart] = useState(false);
+    const [startTime, setStartTime] = useState('09:00');
+    const [endTime, setEndTime] = useState('20:00');
+
+    const { addTrip, currentUser } = useStore();
+    const router = useRouter();
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!currentUser) return;
+
+        const newTrip = {
+            id: uuidv4(),
+            name,
+            startDate,
+            endDate,
+            destination: {
+                name: destination,
+                lat: 0, // Mock lat/lng for now
+                lng: 0,
+            },
+            participants: [currentUser],
+            days: [],
+            budget: {
+                currency: 'USD',
+                total: Number(budget) || 0,
+                spent: 0,
+            },
+            preferences: {
+                returnToStart,
+                startTime,
+                endTime,
+            },
+        };
+
+        addTrip(newTrip);
+        setOpen(false);
+        router.push(`/trips/${newTrip.id}`);
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                {children}
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                    <DialogTitle className="text-2xl font-bold text-primary">Plan a New Trip</DialogTitle>
+                    <DialogDescription>
+                        Enter the details below to start planning your next adventure.
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="grid gap-6 py-4">
+                    <div className="grid gap-2">
+                        <Label htmlFor="name" className="flex items-center gap-2 text-base">
+                            <Type className="h-4 w-4 text-muted-foreground" />
+                            Trip Name
+                        </Label>
+                        <Input
+                            id="name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="e.g., Summer Vacation 2024"
+                            required
+                            className="h-10"
+                        />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="destination" className="flex items-center gap-2 text-base">
+                            <MapPin className="h-4 w-4 text-muted-foreground" />
+                            Destination
+                        </Label>
+                        <Input
+                            id="destination"
+                            value={destination}
+                            onChange={(e) => setDestination(e.target.value)}
+                            placeholder="e.g., Paris, France"
+                            required
+                            className="h-10"
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="startDate" className="flex items-center gap-2 text-base">
+                                <Calendar className="h-4 w-4 text-muted-foreground" />
+                                Start Date
+                            </Label>
+                            <Input
+                                id="startDate"
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                required
+                                className="h-10"
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="endDate" className="flex items-center gap-2 text-base">
+                                <Calendar className="h-4 w-4 text-muted-foreground" />
+                                End Date
+                            </Label>
+                            <Input
+                                id="endDate"
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                required
+                                className="h-10"
+                            />
+                        </div>
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="budget" className="flex items-center gap-2 text-base">
+                            <DollarSign className="h-4 w-4 text-muted-foreground" />
+                            Budget (USD)
+                        </Label>
+                        <Input
+                            id="budget"
+                            type="number"
+                            value={budget}
+                            onChange={(e) => setBudget(e.target.value)}
+                            placeholder="e.g., 1000"
+                            className="h-10"
+                        />
+                    </div>
+
+                    <div className="border-t pt-4 mt-2">
+                        <h4 className="font-medium mb-3">Optimization Preferences</h4>
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="startTime">Start Time</Label>
+                                <Input
+                                    id="startTime"
+                                    type="time"
+                                    value={startTime}
+                                    onChange={(e) => setStartTime(e.target.value)}
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="endTime">End Time</Label>
+                                <Input
+                                    id="endTime"
+                                    type="time"
+                                    value={endTime}
+                                    onChange={(e) => setEndTime(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                id="returnToStart"
+                                checked={returnToStart}
+                                onChange={(e) => setReturnToStart(e.target.checked)}
+                                className="h-4 w-4 rounded border-gray-300"
+                            />
+                            <Label htmlFor="returnToStart" className="font-normal cursor-pointer">
+                                Return to starting point daily
+                            </Label>
+                        </div>
+                    </div>
+
+                    <DialogFooter className="mt-4 gap-2 sm:gap-0">
+                        <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" className="w-full sm:w-auto">Create Trip</Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
