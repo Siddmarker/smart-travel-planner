@@ -1,16 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Trip, User, Place } from '@/types';
+import { Trip, User, UserProfile, Place } from '@/types';
 import { validateCredentials, createUser, setAuthToken, clearAuthToken, getUserFromToken, mockGoogleLogin, findUserByEmail } from '@/lib/auth';
 
 interface AppState {
-    currentUser: User | null;
+    currentUser: UserProfile | User | null;
     currentTrip: Trip | null;
     trips: Trip[];
     places: Place[];
     savedPlaces: Place[];
     isAuthenticated: boolean;
-    setCurrentUser: (user: User) => void;
+    setCurrentUser: (user: UserProfile | User) => void;
+    updateCurrentUser: (updates: Partial<UserProfile>) => void;
     setCurrentTrip: (trip: Trip) => void;
     addTrip: (trip: Trip) => void;
     updateTrip: (tripId: string, updates: Partial<Trip>) => void;
@@ -141,6 +142,9 @@ export const useStore = create<AppState>()(persist((set) => ({
         }
     ],
     setCurrentUser: (user) => set({ currentUser: user }),
+    updateCurrentUser: (updates) => set((state) => ({
+        currentUser: state.currentUser ? { ...state.currentUser, ...updates } as UserProfile : null
+    })),
     setCurrentTrip: (trip) => set({ currentTrip: trip }),
     addTrip: (trip) => set((state) => ({ trips: [...state.trips, trip] })),
     updateTrip: (tripId, updates) =>

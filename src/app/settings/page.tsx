@@ -18,7 +18,7 @@ import { NotificationPreferences } from '@/components/Profile/NotificationPrefer
 import { AnalyticsDashboard } from '@/components/Profile/AnalyticsDashboard';
 
 export default function SettingsPage() {
-    const { currentUser } = useStore();
+    const { currentUser, updateCurrentUser } = useStore();
     const [primaryCurrency, setPrimaryCurrency] = useState('USD');
     const [autoConvert, setAutoConvert] = useState(true);
     const [lastUpdate, setLastUpdate] = useState<string | null>(null);
@@ -26,7 +26,11 @@ export default function SettingsPage() {
 
     useEffect(() => {
         setLastUpdate(getLastUpdateTime());
-    }, []);
+        if (currentUser && 'currencySettings' in currentUser) {
+            setPrimaryCurrency(currentUser.currencySettings.primaryCurrency);
+            setAutoConvert(currentUser.currencySettings.autoConvert);
+        }
+    }, [currentUser]);
 
     const handleRefreshRates = async () => {
         setIsRefreshing(true);
@@ -250,7 +254,18 @@ export default function SettingsPage() {
                                 </div>
                             </div>
 
-                            <Button>Save Currency Settings</Button>
+                            <Button onClick={() => {
+                                if (currentUser) {
+                                    updateCurrentUser({
+                                        currencySettings: {
+                                            primaryCurrency,
+                                            autoConvert,
+                                            displayFormat: 'symbol' // Default
+                                        }
+                                    });
+                                    alert('Currency settings saved!');
+                                }
+                            }}>Save Currency Settings</Button>
                         </CardContent>
                     </Card>
                 </TabsContent>
