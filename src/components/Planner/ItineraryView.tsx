@@ -36,43 +36,53 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
             const end = new Date(trip.endDate);
             const dayCount = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
+            // Import dynamically
+            const { UnifiedTravelPlanner } = await import('@/lib/unified-planner');
+            const planner = new UnifiedTravelPlanner();
+
+            const userPreferences = {
+                destination: trip.destination,
+                categories: ['attraction', 'food', 'culture'], // Default categories
+                trip_duration: dayCount,
+                trip_dates: { start: trip.startDate, end: trip.endDate },
+                start_location: trip.destination,
+                day_start_time: new Date(), // Not strictly used in this simplified flow
+                return_to_start: trip.preferences?.returnToStart || false
+            };
+
+            const itineraryItems = planner.unifiedPlanningWorkflow(userPreferences, places);
+
+            // Group items by day
             const newDays: DayPlan[] = [];
-            let availablePlaces = [...places]; // Copy of places to consume
-
-            // Import dynamically to avoid server-side issues if any (though this is a client component)
-            const { optimizeDailyRoute } = await import('@/lib/itinerary-planner');
-
             for (let i = 0; i < dayCount; i++) {
                 const currentDate = new Date(start);
                 currentDate.setDate(start.getDate() + i);
                 const dateStr = currentDate.toISOString();
 
-                // Simple logic: distribute places across days
-                // For a real app, we'd want more sophisticated distribution
-                // Here we just take a chunk of places for each day
-                const placesForDay = availablePlaces.splice(0, 3); // Take up to 3 places per day
+                // Filter items for this day
+                // Note: The planner returns a flat list of items with timestamps. 
+                // We need to group them.
+                const dayStart = new Date(dateStr);
+                dayStart.setHours(0, 0, 0, 0);
+                const dayEnd = new Date(dateStr);
+                dayEnd.setHours(23, 59, 59, 999);
 
-                if (placesForDay.length === 0) break;
-
-                const dailyItems = optimizeDailyRoute({
-                    startLocation: trip.destination, // Start from trip destination center
-                    places: placesForDay,
-                    startTime: trip.preferences?.startTime || "09:00",
-                    endTime: trip.preferences?.endTime || "20:00",
-                    returnToStart: trip.preferences?.returnToStart || false,
-                    date: dateStr
+                const dayItems = itineraryItems.filter(item => {
+                    const itemTime = new Date(item.startTime);
+                    return itemTime >= dayStart && itemTime <= dayEnd;
                 });
 
                 newDays.push({
                     id: crypto.randomUUID(),
                     date: dateStr,
-                    items: dailyItems
+                    items: dayItems
                 });
             }
 
             if (newDays.length > 0) {
                 updateTrip(trip.id, { days: newDays });
                 setSelectedDayId(newDays[0].id);
+                alert("Itinerary generated using Unified Voting Logic!");
             } else {
                 alert("No places available to generate itinerary. Try adding more places to your discovery list.");
             }

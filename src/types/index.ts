@@ -191,3 +191,39 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
 }
+
+export type TimeSlot = 'morning' | 'afternoon' | 'evening';
+
+export interface VotingOption {
+  place: Place;
+  category: string;
+  quality_score: number;
+  why_recommended: string;
+  travel_time: null; // Intentionally null at voting stage
+  estimated_arrival: null;
+}
+
+export interface DailyVotingOptions {
+  [timeSlot: string]: VotingOption[];
+}
+
+export interface VotingInterface {
+  voting_interface: {
+    [day: number]: DailyVotingOptions;
+  };
+  metadata: {
+    total_options: number;
+    categories_covered: string[];
+    voting_deadline: string;
+  };
+}
+
+export interface UserPreferences {
+  destination: { lat: number; lng: number };
+  categories: string[];
+  trip_duration: number;
+  trip_dates: { start: string; end: string };
+  start_location: { lat: number; lng: number };
+  day_start_time: Date;
+  return_to_start: boolean;
+}
