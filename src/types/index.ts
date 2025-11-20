@@ -50,7 +50,7 @@ export interface Currency {
 export interface Place {
   id: string;
   name: string;
-  category: 'food' | 'attraction' | 'hotel' | 'activity';
+  category: 'food' | 'attraction' | 'hotel' | 'activity' | 'nature' | 'hiking' | 'shopping' | 'nightlife' | 'culture';
   lat: number;
   lng: number;
   rating: number;
