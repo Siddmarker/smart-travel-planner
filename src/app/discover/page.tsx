@@ -6,17 +6,18 @@ import { DiscoverHeader } from '@/components/Discover/DiscoverHeader';
 import { CategoryGrid } from '@/components/Discover/CategoryGrid';
 import { PlaceList } from '@/components/Discover/PlaceList';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { trendingPlaces, nearbyPlaces, hiddenGems } from '@/data/mockDiscovery';
 import { Place } from '@/types';
 import { TrendingUp, MapPin, Sparkles } from 'lucide-react';
-import { searchPlaces, searchNearbyPlaces } from '@/lib/googleMapsService';
+import { searchPlaces, searchNearbyPlaces, mapCategoryToGoogleType, searchHiddenGems } from '@/lib/googleMapsService';
 
 export default function DiscoverPage() {
     const [selectedCategory, setSelectedCategory] = useState<string>('');
     const [filteredPlaces, setFilteredPlaces] = useState<Place[]>([]);
     const [nearbyPlacesList, setNearbyPlacesList] = useState<Place[]>([]);
     const [trendingPlacesList, setTrendingPlacesList] = useState<Place[]>([]);
+    const [hiddenGemsList, setHiddenGemsList] = useState<Place[]>([]);
     const [locationCoords, setLocationCoords] = useState<{ lat: number; lng: number } | null>(null);
+    const [currentRadius, setCurrentRadius] = useState(10000); // Default 10km in meters
     const [isLoading, setIsLoading] = useState(false);
 
     // Initial load - get user location or default to Paris
@@ -25,20 +26,24 @@ export default function DiscoverPage() {
             // Default to Paris if no location
             const defaultLocation = { lat: 48.8566, lng: 2.3522 };
             setLocationCoords(defaultLocation);
-            fetchPlaces(defaultLocation);
+            fetchPlaces(defaultLocation, currentRadius);
         }
     }, []);
 
-    const fetchPlaces = async (coords: { lat: number; lng: number }) => {
+    const fetchPlaces = async (coords: { lat: number; lng: number }, radius: number) => {
         setIsLoading(true);
         try {
             // Fetch nearby places
-            const nearby = await searchNearbyPlaces(coords, 5000); // 5km radius
+            const nearby = await searchNearbyPlaces(coords, radius);
             setNearbyPlacesList(nearby);
 
             // Fetch trending (simulated by searching for "popular tourist attractions")
-            const trending = await searchPlaces('popular tourist attractions', coords);
+            const trending = await searchPlaces('popular tourist attractions', coords, radius);
             setTrendingPlacesList(trending);
+
+            // Fetch hidden gems
+            const hidden = await searchHiddenGems(coords, radius);
+            setHiddenGemsList(hidden);
 
             // Initialize filtered places with trending
             setFilteredPlaces(trending);
@@ -49,24 +54,43 @@ export default function DiscoverPage() {
         }
     };
 
-    const handleCategorySelect = (categoryId: string) => {
+    const handleCategorySelect = async (categoryId: string) => {
         setSelectedCategory(categoryId);
-        const allPlaces = [...trendingPlacesList, ...nearbyPlacesList];
 
-        if (categoryId) {
-            // If we have real data, we might want to fetch specific category data
-            // For now, filter the loaded places
-            const filtered = allPlaces.filter(p => p.category === categoryId);
-            setFilteredPlaces(filtered);
-        } else {
+        if (!categoryId) {
+            // No category selected, show all trending
             setFilteredPlaces(trendingPlacesList);
+            return;
+        }
+
+        if (!locationCoords) return;
+
+        setIsLoading(true);
+        try {
+            // Search for places of the selected category
+            const googleType = mapCategoryToGoogleType(categoryId);
+            const categoryPlaces = await searchNearbyPlaces(locationCoords, currentRadius, googleType);
+            setFilteredPlaces(categoryPlaces);
+        } catch (error) {
+            console.error('Error searching category:', error);
+            setFilteredPlaces([]);
+        } finally {
+            setIsLoading(false);
         }
     };
 
     const handleLocationChange = (location: string, coords?: { lat: number; lng: number }) => {
         if (coords) {
             setLocationCoords(coords);
-            fetchPlaces(coords);
+            fetchPlaces(coords, currentRadius);
+        }
+    };
+
+    const handleRadiusChange = (radius: number) => {
+        const radiusInMeters = radius * 1000;
+        setCurrentRadius(radiusInMeters);
+        if (locationCoords) {
+            fetchPlaces(locationCoords, radiusInMeters);
         }
     };
 
@@ -75,7 +99,7 @@ export default function DiscoverPage() {
 
         setIsLoading(true);
         try {
-            const results = await searchPlaces(query, locationCoords || undefined);
+            const results = await searchPlaces(query, locationCoords || undefined, currentRadius);
             setFilteredPlaces(results);
             setSelectedCategory(''); // Clear category selection on search
         } catch (error) {
@@ -110,6 +134,7 @@ export default function DiscoverPage() {
                 <DiscoverHeader
                     onSearch={handleSearch}
                     onLocationChange={handleLocationChange}
+                    onRadiusChange={handleRadiusChange}
                 />
             </div>
 
@@ -189,11 +214,15 @@ export default function DiscoverPage() {
                             <CardDescription>Local favorites and secret spots</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <PlaceList
-                                places={hiddenGems} // Keep mock data for hidden gems for now or implement specific logic
-                                onAddToTrip={handleAddToTrip}
-                                onSavePlace={handleSavePlace}
-                            />
+                            {isLoading ? (
+                                <div className="flex justify-center p-8">Loading...</div>
+                            ) : (
+                                <PlaceList
+                                    places={hiddenGemsList}
+                                    onAddToTrip={handleAddToTrip}
+                                    onSavePlace={handleSavePlace}
+                                />
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>

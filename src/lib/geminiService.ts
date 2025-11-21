@@ -10,21 +10,27 @@ export async function getDestinationSuggestions(preferences: UserProfile['travel
     }
 
     const prompt = `
-    Suggest 5 travel destinations based on these preferences:
+    You are a travel destination expert. Suggest 5 TRAVEL DESTINATIONS (countries, cities, or regions) based on these preferences:
     - Activity Level: ${preferences.activityLevel}
     - Budget: ${preferences.budgetRange}
     - Interests: ${preferences.accommodationTypes.join(', ')}, ${preferences.transportModes.join(', ')}
     
-    Return the response as a JSON array of objects with the following fields:
-    - name: string
-    - description: string
-    - lat: number (approximate)
-    - lng: number (approximate)
-    - category: string (one of: 'nature', 'culture', 'adventure', 'food', 'attraction')
-    - rating: number (4.0-5.0)
-    - priceLevel: number (1-4)
+    IMPORTANT RULES:
+    1. Suggest only GEOGRAPHIC DESTINATIONS like countries, cities, or tourist regions
+    2. DO NOT suggest specific hotels, restaurants, or local businesses
+    3. Focus on places people would plan a trip to (e.g., "Paris, France", "Kyoto, Japan", "Swiss Alps")
+    4. Each destination should be a place where tourists typically spend multiple days
     
-    Ensure the response is valid JSON. Do not include markdown formatting.
+    Return the response as a JSON array of objects with the following fields:
+    - name: string (must be a city, country, or region name)
+    - description: string (brief description of why this destination matches the preferences)
+    - lat: number (approximate latitude of the destination)
+    - lng: number (approximate longitude of the destination)
+    - category: string (one of: 'nature', 'culture', 'adventure', 'food', 'attraction')
+    - rating: number (4.0-5.0, general destination appeal)
+    - priceLevel: number (1-4, typical cost level for visiting this destination)
+    
+    Ensure the response is valid JSON. Do not include markdown formatting or code blocks.
   `;
 
     try {

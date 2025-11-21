@@ -154,22 +154,23 @@ export function DiscoverHeader({ onSearch, onLocationChange, onRadiusChange }: D
 
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">Within:</span>
-                    <Select value={radius.toString()} onValueChange={(val) => {
-                        const r = parseInt(val);
-                        setRadius(r);
-                        onRadiusChange?.(r);
-                    }}>
-                        <SelectTrigger className="w-[120px]">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="1">1 km</SelectItem>
-                            <SelectItem value="5">5 km</SelectItem>
-                            <SelectItem value="10">10 km</SelectItem>
-                            <SelectItem value="25">25 km</SelectItem>
-                            <SelectItem value="50">50 km</SelectItem>
-                        </SelectContent>
-                    </Select>
+                    <div className="flex items-center gap-1">
+                        <Input
+                            type="number"
+                            min="1"
+                            max="500"
+                            value={radius}
+                            onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                if (val >= 1 && val <= 500) {
+                                    setRadius(val);
+                                    onRadiusChange?.(val);
+                                }
+                            }}
+                            className="w-[90px] h-9 text-sm"
+                        />
+                        <span className="text-sm text-muted-foreground">km</span>
+                    </div>
                 </div>
 
                 {/* Quick Filters */}

@@ -80,16 +80,25 @@ export function DiscoveryWidget() {
                         />
                     </div>
 
-                    <Select value={radius.toString()} onValueChange={(val) => setRadius(parseInt(val))}>
-                        <SelectTrigger className="w-[100px]">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="5">5 km</SelectItem>
-                            <SelectItem value="10">10 km</SelectItem>
-                            <SelectItem value="25">25 km</SelectItem>
-                        </SelectContent>
-                    </Select>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Within:</span>
+                        <div className="flex items-center gap-1">
+                            <Input
+                                type="number"
+                                min="1"
+                                max="500"
+                                value={radius}
+                                onChange={(e) => {
+                                    const val = parseInt(e.target.value);
+                                    if (val >= 1 && val <= 500) {
+                                        setRadius(val);
+                                    }
+                                }}
+                                className="w-[80px] h-8 text-sm"
+                            />
+                            <span className="text-sm text-muted-foreground">km</span>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Trending Places */}

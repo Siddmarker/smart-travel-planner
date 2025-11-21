@@ -165,27 +165,105 @@ function convertGooglePlaceToPlace(googlePlace: google.maps.places.PlaceResult):
     };
 }
 
-function mapGoogleTypeToCategory(type: string): 'food' | 'attraction' | 'hotel' | 'activity' {
-    const typeMap: Record<string, 'food' | 'attraction' | 'hotel' | 'activity'> = {
+function mapGoogleTypeToCategory(type: string): 'food' | 'attraction' | 'hotel' | 'activity' | 'hiking' | 'nature' | 'shopping' | 'nightlife' | 'culture' {
+    const typeMap: Record<string, 'food' | 'attraction' | 'hotel' | 'activity' | 'hiking' | 'nature' | 'shopping' | 'nightlife' | 'culture'> = {
         restaurant: 'food',
         cafe: 'food',
         bar: 'food',
         food: 'food',
+        meal_takeaway: 'food',
+        meal_delivery: 'food',
         lodging: 'hotel',
         hotel: 'hotel',
         tourist_attraction: 'attraction',
-        museum: 'attraction',
-        park: 'attraction',
+        museum: 'culture',
+        art_gallery: 'culture',
+        park: 'nature',
+        natural_feature: 'nature',
+        campground: 'nature',
         point_of_interest: 'attraction',
         amusement_park: 'activity',
         bowling_alley: 'activity',
         gym: 'activity',
+        spa: 'activity',
+        shopping_mall: 'shopping',
+        store: 'shopping',
+        clothing_store: 'shopping',
+        night_club: 'nightlife',
+        casino: 'nightlife',
+        stadium: 'activity',
+        movie_theater: 'activity',
     };
 
     return typeMap[type] || 'attraction';
 }
 
-export async function autocompletePlace(input: string): Promise<google.maps.places.AutocompletePrediction[]> {
+// Map our category IDs to Google Places types
+export function mapCategoryToGoogleType(category: string): string {
+    const categoryMap: Record<string, string> = {
+        food: 'restaurant',
+        attraction: 'tourist_attraction',
+        hotel: 'lodging',
+        activity: 'amusement_park',
+        hiking: 'park',
+        nature: 'park',
+        shopping: 'shopping_mall',
+        nightlife: 'night_club',
+        culture: 'museum',
+    };
+
+    return categoryMap[category] || 'tourist_attraction';
+}
+
+// Search for hidden gems - lesser-known places with good ratings
+export async function searchHiddenGems(
+    location: { lat: number; lng: number },
+    radius: number = 5000
+): Promise<Place[]> {
+    try {
+        await initGoogleMaps();
+
+        if (typeof window === 'undefined' || !window.google) {
+            console.warn('Google Maps not available');
+            return [];
+        }
+
+        return new Promise((resolve) => {
+            const map = new window.google.maps.Map(document.createElement('div'));
+            const service = new window.google.maps.places.PlacesService(map);
+
+            const request: google.maps.places.PlaceSearchRequest = {
+                location: new window.google.maps.LatLng(location.lat, location.lng),
+                radius,
+                // Search for highly rated but less reviewed places
+            };
+
+            service.nearbySearch(request, (results, status) => {
+                if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
+                    // Filter for hidden gems: good rating (4.0+) but fewer reviews (< 500)
+                    const hiddenGems = results
+                        .filter(place =>
+                            (place.rating || 0) >= 4.0 &&
+                            (place.user_ratings_total || 0) < 500 &&
+                            (place.user_ratings_total || 0) > 10 // At least some reviews
+                        )
+                        .slice(0, 20)
+                        .map(convertGooglePlaceToPlace);
+
+                    resolve(hiddenGems);
+                } else {
+                    console.warn('Hidden gems search failed:', status);
+                    resolve([]);
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Error searching hidden gems:', error);
+        return [];
+    }
+}
+
+export async function autocompletePlace(input: string, types?: string[]): Promise<google.maps.places.AutocompletePrediction[]> {
     try {
         await initGoogleMaps();
 
@@ -197,7 +275,12 @@ export async function autocompletePlace(input: string): Promise<google.maps.plac
         return new Promise((resolve) => {
             const service = new window.google.maps.places.AutocompleteService();
 
-            service.getPlacePredictions({ input }, (predictions, status) => {
+            const request: google.maps.places.AutocompletionRequest = {
+                input,
+                types: types || ['(regions)', '(cities)'], // Default to geographic locations
+            };
+
+            service.getPlacePredictions(request, (predictions, status) => {
                 if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
                     resolve(predictions);
                 } else {
