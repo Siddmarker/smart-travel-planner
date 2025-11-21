@@ -29,7 +29,20 @@ export function hashPassword(password: string): string {
 export function getStoredUsers(): StoredUser[] {
     if (typeof window === 'undefined') return [];
     const users = localStorage.getItem('travel_planner_users');
-    return users ? JSON.parse(users) : [];
+    if (!users) {
+        // Seed default user
+        const defaultUser: StoredUser = {
+            id: 'user-default',
+            name: 'Test User',
+            email: 'test@example.com',
+            password: hashPassword('password123'),
+            avatar: 'https://github.com/shadcn.png',
+            createdAt: new Date().toISOString(),
+        };
+        localStorage.setItem('travel_planner_users', JSON.stringify([defaultUser]));
+        return [defaultUser];
+    }
+    return JSON.parse(users);
 }
 
 export function saveUser(user: StoredUser): void {

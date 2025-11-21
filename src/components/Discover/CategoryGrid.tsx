@@ -21,10 +21,9 @@ export function CategoryGrid({ onSelectCategory, selectedCategory }: CategoryGri
                     <div className="text-center">
                         <div className="text-3xl mb-2">{category.icon}</div>
                         <h3 className="font-medium text-sm">{category.name}</h3>
-                        <p className="text-xs text-muted-foreground mt-1">{category.count} places</p>
                     </div>
                 </Card>
             ))}
-        </div>
+        </div >
     );
 }

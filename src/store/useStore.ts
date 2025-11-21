@@ -166,7 +166,10 @@ export const useStore = create<AppState>()(persist((set) => ({
             description: 'One of India\'s oldest and most well-maintained zoos.'
         }
     ],
-    setCurrentUser: (user) => set({ currentUser: user }),
+    setCurrentUser: (user) => set({
+        currentUser: user,
+        isAuthenticated: !!user
+    }),
     updateCurrentUser: (updates) => set((state) => ({
         currentUser: state.currentUser ? { ...state.currentUser, ...updates } as UserProfile : null
     })),

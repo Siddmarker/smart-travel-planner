@@ -6,16 +6,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Compass, MapPin, Star, TrendingUp } from 'lucide-react';
+import { Compass, MapPin, Star, TrendingUp, Sparkles } from 'lucide-react';
 import { Place } from '@/types';
 import { searchNearbyPlaces } from '@/lib/googleMapsService';
+import { getDestinationSuggestions } from '@/lib/geminiService';
+import { useStore } from '@/store/useStore';
 import Link from 'next/link';
 
 export function DiscoveryWidget() {
+    const { currentUser } = useStore();
     const [location, setLocation] = useState('Paris, France');
     const [radius, setRadius] = useState(10);
     const [trendingPlaces, setTrendingPlaces] = useState<Place[]>([]);
     const [loading, setLoading] = useState(false);
+    const [aiLoading, setAiLoading] = useState(false);
 
     useEffect(() => {
         loadTrendingPlaces();
@@ -31,6 +35,21 @@ export function DiscoveryWidget() {
             console.error('Error loading places:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleAiSuggest = async () => {
+        if (!currentUser || !('travelPreferences' in currentUser)) return;
+        setAiLoading(true);
+        try {
+            const suggestions = await getDestinationSuggestions(currentUser.travelPreferences);
+            if (suggestions.length > 0) {
+                setTrendingPlaces(suggestions.slice(0, 3));
+            }
+        } catch (error) {
+            console.error('Error getting AI suggestions:', error);
+        } finally {
+            setAiLoading(false);
         }
     };
 
@@ -75,14 +94,28 @@ export function DiscoveryWidget() {
 
                 {/* Trending Places */}
                 <div>
-                    <div className="flex items-center gap-2 mb-3">
-                        <TrendingUp className="h-4 w-4 text-orange-500" />
-                        <h4 className="font-medium">Trending near you</h4>
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <TrendingUp className="h-4 w-4 text-orange-500" />
+                            <h4 className="font-medium">Trending near you</h4>
+                        </div>
+                        {currentUser && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                onClick={handleAiSuggest}
+                                disabled={aiLoading}
+                            >
+                                <Sparkles className="h-3 w-3 mr-1" />
+                                {aiLoading ? 'Thinking...' : 'Ask AI'}
+                            </Button>
+                        )}
                     </div>
 
-                    {loading ? (
+                    {loading || aiLoading ? (
                         <div className="text-center py-4 text-muted-foreground">
-                            <p>Loading places...</p>
+                            <p>{aiLoading ? 'AI is finding the best spots for you...' : 'Loading places...'}</p>
                         </div>
                     ) : (
                         <div className="space-y-2">

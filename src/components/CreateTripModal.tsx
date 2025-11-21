@@ -6,11 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useStore } from '@/store/useStore';
-import { TripCategory } from '@/types';
+import { Place, TripCategory } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import { useRouter } from 'next/navigation';
-import { Calendar, MapPin, DollarSign, Type, Tag } from 'lucide-react';
+import { Calendar, MapPin, DollarSign, Type, Tag, Sparkles } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+
+import { autocompletePlace, getPlaceDetails } from '@/lib/googleMapsService';
+import { getDestinationSuggestions } from '@/lib/geminiService';
 
 interface CreateTripModalProps {
     children?: React.ReactNode;
@@ -20,6 +23,7 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
     const [open, setOpen] = useState(false);
     const [name, setName] = useState('');
     const [destination, setDestination] = useState('');
+    const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number }>({ lat: 0, lng: 0 });
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [budget, setBudget] = useState('');
@@ -27,9 +31,56 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
     const [startTime, setStartTime] = useState('09:00');
     const [endTime, setEndTime] = useState('20:00');
     const [selectedCategories, setSelectedCategories] = useState<TripCategory[]>([]);
+    const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
+    const [showPredictions, setShowPredictions] = useState(false);
+    const [aiSuggestions, setAiSuggestions] = useState<Place[]>([]);
+    const [aiLoading, setAiLoading] = useState(false);
 
     const { addTrip, currentUser } = useStore();
     const router = useRouter();
+
+    const handleAiSuggest = async () => {
+        if (!currentUser || !('travelPreferences' in currentUser)) return;
+        setAiLoading(true);
+        try {
+            const suggestions = await getDestinationSuggestions(currentUser.travelPreferences);
+            setAiSuggestions(suggestions);
+        } catch (error) {
+            console.error('Error getting AI suggestions:', error);
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    const handleDestinationInput = async (value: string) => {
+        setDestination(value);
+        if (value.length > 2) {
+            try {
+                const results = await autocompletePlace(value);
+                setPredictions(results);
+                setShowPredictions(true);
+            } catch (error) {
+                console.error('Error fetching predictions:', error);
+            }
+        } else {
+            setPredictions([]);
+            setShowPredictions(false);
+        }
+    };
+
+    const handlePredictionSelect = async (placeId: string, description: string) => {
+        setDestination(description);
+        setShowPredictions(false);
+
+        try {
+            const placeDetails = await getPlaceDetails(placeId);
+            if (placeDetails) {
+                setDestinationCoords({ lat: placeDetails.lat, lng: placeDetails.lng });
+            }
+        } catch (error) {
+            console.error('Error getting place details:', error);
+        }
+    };
 
     const TRIP_CATEGORIES: { value: TripCategory; label: string; icon: string }[] = [
         { value: 'trekking', label: 'Trekking/Hiking', icon: '🥾' },
@@ -66,8 +117,8 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
             endDate,
             destination: {
                 name: destination,
-                lat: 0, // Mock lat/lng for now
-                lng: 0,
+                lat: destinationCoords.lat,
+                lng: destinationCoords.lng,
             },
             participants: [currentUser],
             days: [],
@@ -119,19 +170,80 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                             className="h-10"
                         />
                     </div>
-                    <div className="grid gap-2">
-                        <Label htmlFor="destination" className="flex items-center gap-2 text-base">
-                            <MapPin className="h-4 w-4 text-muted-foreground" />
-                            Destination
-                        </Label>
+                    <div className="grid gap-2 relative">
+                        <div className="flex items-center justify-between">
+                            <Label htmlFor="destination" className="flex items-center gap-2 text-base">
+                                <MapPin className="h-4 w-4 text-muted-foreground" />
+                                Destination
+                            </Label>
+                            {currentUser && 'travelPreferences' in currentUser && (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                    onClick={handleAiSuggest}
+                                    disabled={aiLoading}
+                                >
+                                    <Sparkles className="h-3 w-3 mr-1" />
+                                    {aiLoading ? 'Thinking...' : 'Ask AI'}
+                                </Button>
+                            )}
+                        </div>
                         <Input
                             id="destination"
                             value={destination}
-                            onChange={(e) => setDestination(e.target.value)}
+                            onChange={(e) => handleDestinationInput(e.target.value)}
                             placeholder="e.g., Paris, France"
                             required
                             className="h-10"
+                            onBlur={() => setTimeout(() => setShowPredictions(false), 200)}
+                            onFocus={() => destination.length > 2 && setShowPredictions(true)}
                         />
+                        {showPredictions && predictions.length > 0 && (
+                            <div className="absolute z-50 w-full top-[72px] bg-popover border rounded-md shadow-md max-h-60 overflow-auto">
+                                {predictions.map((prediction) => (
+                                    <div
+                                        key={prediction.place_id}
+                                        className="p-2 hover:bg-accent cursor-pointer text-sm"
+                                        onClick={() => handlePredictionSelect(prediction.place_id, prediction.description)}
+                                    >
+                                        {prediction.description}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {aiSuggestions.length > 0 && (
+                            <div className="mt-1 border rounded-md p-2 bg-purple-50/50">
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-xs font-medium text-purple-800">AI Suggestions for you:</p>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-4 w-4 p-0 hover:bg-transparent"
+                                        onClick={() => setAiSuggestions([])}
+                                    >
+                                        ×
+                                    </Button>
+                                </div>
+                                <div className="space-y-1">
+                                    {aiSuggestions.map(place => (
+                                        <div
+                                            key={place.id}
+                                            className="text-sm p-2 hover:bg-purple-100 cursor-pointer rounded-md flex justify-between items-center transition-colors bg-white/50"
+                                            onClick={() => {
+                                                setDestination(place.name);
+                                                setDestinationCoords({ lat: place.lat, lng: place.lng });
+                                                setAiSuggestions([]);
+                                            }}
+                                        >
+                                            <span className="font-medium">{place.name}</span>
+                                            <span className="text-xs text-muted-foreground bg-white px-1.5 py-0.5 rounded border">{place.category}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div className="grid gap-2">

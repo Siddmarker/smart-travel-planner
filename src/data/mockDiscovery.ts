@@ -4,19 +4,18 @@ export interface DiscoveryCategory {
     id: string;
     name: string;
     icon: string;
-    count: number;
 }
 
 export const discoveryCategories: DiscoveryCategory[] = [
-    { id: 'food', name: 'Food & Dining', icon: '🍽️', count: 245 },
-    { id: 'attraction', name: 'Attractions', icon: '🏛️', count: 189 },
-    { id: 'hotel', name: 'Hotels', icon: '🏨', count: 156 },
-    { id: 'activity', name: 'Activities', icon: '🎯', count: 203 },
-    { id: 'hiking', name: 'Hiking', icon: '🥾', count: 87 },
-    { id: 'nature', name: 'Nature', icon: '🌲', count: 127 },
-    { id: 'shopping', name: 'Shopping', icon: '🛍️', count: 98 },
-    { id: 'nightlife', name: 'Nightlife', icon: '🌃', count: 76 },
-    { id: 'culture', name: 'Culture', icon: '🎭', count: 134 },
+    { id: 'food', name: 'Food & Dining', icon: '🍽️' },
+    { id: 'attraction', name: 'Attractions', icon: '🏛️' },
+    { id: 'hotel', name: 'Hotels', icon: '🏨' },
+    { id: 'activity', name: 'Activities', icon: '🎯' },
+    { id: 'hiking', name: 'Hiking', icon: '🥾' },
+    { id: 'nature', name: 'Nature', icon: '🌲' },
+    { id: 'shopping', name: 'Shopping', icon: '🛍️' },
+    { id: 'nightlife', name: 'Nightlife', icon: '🌃' },
+    { id: 'culture', name: 'Culture', icon: '🎭' },
 ];
 
 export const trendingPlaces: Place[] = [

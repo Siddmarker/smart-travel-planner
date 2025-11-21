@@ -1,5 +1,7 @@
 'use client';
 
+import { autocompletePlace, getPlaceDetails } from '@/lib/googleMapsService';
+
 import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -18,14 +20,41 @@ export function DiscoverHeader({ onSearch, onLocationChange, onRadiusChange }: D
     const [location, setLocation] = useState('Paris, France');
     const [radius, setRadius] = useState(10);
     const [isGettingLocation, setIsGettingLocation] = useState(false);
+    const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
+    const [showPredictions, setShowPredictions] = useState(false);
 
     const handleSearch = () => {
         onSearch?.(searchQuery);
     };
 
-    const handleLocationChange = (value: string) => {
+    const handleLocationInput = async (value: string) => {
         setLocation(value);
-        onLocationChange?.(value);
+        if (value.length > 2) {
+            try {
+                const results = await autocompletePlace(value);
+                setPredictions(results);
+                setShowPredictions(true);
+            } catch (error) {
+                console.error('Error fetching predictions:', error);
+            }
+        } else {
+            setPredictions([]);
+            setShowPredictions(false);
+        }
+    };
+
+    const handlePredictionSelect = async (placeId: string, description: string) => {
+        setLocation(description);
+        setShowPredictions(false);
+
+        try {
+            const placeDetails = await getPlaceDetails(placeId);
+            if (placeDetails) {
+                onLocationChange?.(description, { lat: placeDetails.lat, lng: placeDetails.lng });
+            }
+        } catch (error) {
+            console.error('Error getting place details:', error);
+        }
     };
 
     const getCurrentLocation = () => {
@@ -87,14 +116,31 @@ export function DiscoverHeader({ onSearch, onLocationChange, onRadiusChange }: D
 
             {/* Location & Radius */}
             <div className="flex flex-wrap gap-3 items-center">
-                <div className="flex items-center gap-2 flex-1">
+                <div className="flex items-center gap-2 flex-1 relative">
                     <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <Input
-                        placeholder="Enter location (e.g., Paris, France)"
-                        value={location}
-                        onChange={(e) => handleLocationChange(e.target.value)}
-                        className="flex-1 min-w-[200px]"
-                    />
+                    <div className="flex-1 relative">
+                        <Input
+                            placeholder="Enter location (e.g., Paris, France)"
+                            value={location}
+                            onChange={(e) => handleLocationInput(e.target.value)}
+                            className="w-full"
+                            onBlur={() => setTimeout(() => setShowPredictions(false), 200)}
+                            onFocus={() => location.length > 2 && setShowPredictions(true)}
+                        />
+                        {showPredictions && predictions.length > 0 && (
+                            <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-60 overflow-auto">
+                                {predictions.map((prediction) => (
+                                    <div
+                                        key={prediction.place_id}
+                                        className="p-2 hover:bg-accent cursor-pointer text-sm"
+                                        onClick={() => handlePredictionSelect(prediction.place_id, prediction.description)}
+                                    >
+                                        {prediction.description}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                     <Button
                         variant="outline"
                         size="icon"
