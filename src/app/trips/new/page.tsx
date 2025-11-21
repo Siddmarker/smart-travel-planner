@@ -64,127 +64,163 @@ export default function NewTripPage() {
         setFormData({ ...formData, destination: description });
         setShowPredictions(false);
 
+        try {
+            const placeDetails = await getPlaceDetails(placeId);
+            if (placeDetails) {
+                setDestinationCoords({ lat: placeDetails.lat, lng: placeDetails.lng });
+            }
+        } catch (error) {
+            console.error('Error getting place details:', error);
+        }
+    };
 
-        return (
-            <div className="container mx-auto py-8 px-4 max-w-2xl">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Plan a New Trip</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="name">Trip Name</Label>
-                                <Input
-                                    id="name"
-                                    placeholder="e.g., Summer in Paris"
-                                    required
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                />
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!currentUser) return;
+
+        const newTrip: Trip = {
+            id: uuidv4(),
+            name: formData.name,
+            startDate: formData.startDate,
+            endDate: formData.endDate,
+            destination: {
+                name: formData.destination,
+                lat: destinationCoords.lat,
+                lng: destinationCoords.lng,
+            },
+            participants: [currentUser],
+            days: [],
+            budget: {
+                currency: 'USD',
+                total: 0,
+                spent: 0,
+            },
+        };
+
+        addTrip(newTrip);
+        router.push(`/trips/${newTrip.id}`);
+    };
+
+    return (
+        <div className="container mx-auto py-8 px-4 max-w-2xl">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Plan a New Trip</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="name">Trip Name</Label>
+                            <Input
+                                id="name"
+                                placeholder="e.g., Summer in Paris"
+                                required
+                                value={formData.name}
+                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            />
+                        </div>
+                        <div className="space-y-2 relative">
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="destination" className="flex items-center gap-2">
+                                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                                    Destination
+                                </Label>
+                                {currentUser && 'travelPreferences' in currentUser && (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                        onClick={handleAiSuggest}
+                                        disabled={aiLoading}
+                                    >
+                                        <Sparkles className="h-3 w-3 mr-1" />
+                                        {aiLoading ? 'Thinking...' : 'Ask AI'}
+                                    </Button>
+                                )}
                             </div>
-                            <div className="space-y-2 relative">
-                                <div className="flex items-center justify-between">
-                                    <Label htmlFor="destination" className="flex items-center gap-2">
-                                        <MapPin className="h-4 w-4 text-muted-foreground" />
-                                        Destination
-                                    </Label>
-                                    {currentUser && 'travelPreferences' in currentUser && (
+                            <Input
+                                id="destination"
+                                placeholder="Where are you going?"
+                                required
+                                value={formData.destination}
+                                onChange={(e) => handleDestinationInput(e.target.value)}
+                                onBlur={() => setTimeout(() => setShowPredictions(false), 200)}
+                                onFocus={() => formData.destination.length > 2 && setShowPredictions(true)}
+                            />
+                            {showPredictions && predictions.length > 0 && (
+                                <div className="absolute z-50 w-full top-[72px] bg-popover border rounded-md shadow-md max-h-60 overflow-auto">
+                                    {predictions.map((prediction) => (
+                                        <div
+                                            key={prediction.place_id}
+                                            className="p-2 hover:bg-accent cursor-pointer text-sm"
+                                            onClick={() => handlePredictionSelect(prediction.place_id, prediction.description)}
+                                        >
+                                            {prediction.description}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {aiSuggestions.length > 0 && (
+                                <div className="mt-1 border rounded-md p-2 bg-purple-50/50">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <p className="text-xs font-medium text-purple-800">AI Suggestions for you:</p>
                                         <Button
-                                            type="button"
                                             variant="ghost"
                                             size="sm"
-                                            className="h-6 text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                                            onClick={handleAiSuggest}
-                                            disabled={aiLoading}
+                                            className="h-4 w-4 p-0 hover:bg-transparent"
+                                            onClick={() => setAiSuggestions([])}
                                         >
-                                            <Sparkles className="h-3 w-3 mr-1" />
-                                            {aiLoading ? 'Thinking...' : 'Ask AI'}
+                                            ×
                                         </Button>
-                                    )}
-                                </div>
-                                <Input
-                                    id="destination"
-                                    placeholder="Where are you going?"
-                                    required
-                                    value={formData.destination}
-                                    onChange={(e) => handleDestinationInput(e.target.value)}
-                                    onBlur={() => setTimeout(() => setShowPredictions(false), 200)}
-                                    onFocus={() => formData.destination.length > 2 && setShowPredictions(true)}
-                                />
-                                {showPredictions && predictions.length > 0 && (
-                                    <div className="absolute z-50 w-full top-[72px] bg-popover border rounded-md shadow-md max-h-60 overflow-auto">
-                                        {predictions.map((prediction) => (
+                                    </div>
+                                    <div className="space-y-1">
+                                        {aiSuggestions.map(place => (
                                             <div
-                                                key={prediction.place_id}
-                                                className="p-2 hover:bg-accent cursor-pointer text-sm"
-                                                onClick={() => handlePredictionSelect(prediction.place_id, prediction.description)}
+                                                key={place.id}
+                                                className="text-sm p-2 hover:bg-purple-100 cursor-pointer rounded-md flex justify-between items-center transition-colors bg-white/50"
+                                                onClick={() => {
+                                                    setFormData({ ...formData, destination: place.name });
+                                                    setDestinationCoords({ lat: place.lat, lng: place.lng });
+                                                    setAiSuggestions([]);
+                                                }}
                                             >
-                                                {prediction.description}
+                                                <span className="font-medium">{place.name}</span>
+                                                <span className="text-xs text-muted-foreground bg-white px-1.5 py-0.5 rounded border">{place.category}</span>
                                             </div>
                                         ))}
                                     </div>
-                                )}
-                                {aiSuggestions.length > 0 && (
-                                    <div className="mt-1 border rounded-md p-2 bg-purple-50/50">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <p className="text-xs font-medium text-purple-800">AI Suggestions for you:</p>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-4 w-4 p-0 hover:bg-transparent"
-                                                onClick={() => setAiSuggestions([])}
-                                            >
-                                                ×
-                                            </Button>
-                                        </div>
-                                        <div className="space-y-1">
-                                            {aiSuggestions.map(place => (
-                                                <div
-                                                    key={place.id}
-                                                    className="text-sm p-2 hover:bg-purple-100 cursor-pointer rounded-md flex justify-between items-center transition-colors bg-white/50"
-                                                    onClick={() => {
-                                                        setFormData({ ...formData, destination: place.name });
-                                                        setDestinationCoords({ lat: place.lat, lng: place.lng });
-                                                        setAiSuggestions([]);
-                                                    }}
-                                                >
-                                                    <span className="font-medium">{place.name}</span>
-                                                    <span className="text-xs text-muted-foreground bg-white px-1.5 py-0.5 rounded border">{place.category}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="startDate">Start Date</Label>
-                                    <Input
-                                        id="startDate"
-                                        type="date"
-                                        required
-                                        value={formData.startDate}
-                                        onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                                    />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="endDate">End Date</Label>
-                                    <Input
-                                        id="endDate"
-                                        type="date"
-                                        required
-                                        value={formData.endDate}
-                                        onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                                    />
-                                </div>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="startDate">Start Date</Label>
+                                <Input
+                                    id="startDate"
+                                    type="date"
+                                    required
+                                    value={formData.startDate}
+                                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                                />
                             </div>
-                            <Button type="submit" className="w-full">
-                                Create Trip
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
+                            <div className="space-y-2">
+                                <Label htmlFor="endDate">End Date</Label>
+                                <Input
+                                    id="endDate"
+                                    type="date"
+                                    required
+                                    value={formData.endDate}
+                                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                        <Button type="submit" className="w-full">
+                            Create Trip
+                        </Button>
+                    </form>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
