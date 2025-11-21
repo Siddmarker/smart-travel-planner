@@ -1,10 +1,9 @@
-import { Loader } from '@googlemaps/js-api-loader';
 import { Place } from '@/types';
 
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
-let googleMapsLoader: Loader | null = null;
 let isGoogleMapsLoaded = false;
+let loadPromise: Promise<void> | null = null;
 
 export async function initGoogleMaps(): Promise<void> {
     if (!API_KEY) {
@@ -12,26 +11,86 @@ export async function initGoogleMaps(): Promise<void> {
         return;
     }
 
-    if (isGoogleMapsLoaded) {
+    // If already loaded and available, return immediately
+    if (isGoogleMapsLoaded && typeof window !== 'undefined' && window.google?.maps) {
         return;
     }
 
-    if (!googleMapsLoader) {
-        googleMapsLoader = new Loader({
-            apiKey: API_KEY,
-            version: 'weekly',
-            libraries: ['places', 'geometry'],
-        });
+    // If currently loading, return the existing promise
+    if (loadPromise) {
+        return loadPromise;
     }
 
-    try {
-        await (googleMapsLoader as any).importLibrary('places');
-        await (googleMapsLoader as any).importLibrary('maps');
-        isGoogleMapsLoaded = true;
-    } catch (error) {
-        console.error('Failed to load Google Maps:', error);
-        throw error;
-    }
+    loadPromise = new Promise<void>((resolve, reject) => {
+        if (typeof window === 'undefined') {
+            reject(new Error('Cannot load Google Maps in non-browser environment'));
+            return;
+        }
+
+        // Check if already loaded
+        if (window.google?.maps) {
+            isGoogleMapsLoaded = true;
+            resolve();
+            return;
+        }
+
+        // Check if script tag already exists
+        const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+        if (existingScript) {
+            // Wait for it to load
+            const checkInterval = setInterval(() => {
+                if (window.google?.maps) {
+                    clearInterval(checkInterval);
+                    isGoogleMapsLoaded = true;
+                    resolve();
+                }
+            }, 100);
+
+            // Timeout after 10 seconds
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                if (!window.google?.maps) {
+                    reject(new Error('Google Maps script timeout'));
+                }
+            }, 10000);
+            return;
+        }
+
+        // Create and load the script
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places,geometry`;
+        script.async = true;
+        script.defer = true;
+
+        script.onload = () => {
+            // Wait for window.google.maps to be available
+            const checkInterval = setInterval(() => {
+                if (window.google?.maps) {
+                    clearInterval(checkInterval);
+                    isGoogleMapsLoaded = true;
+                    resolve();
+                }
+            }, 100);
+
+            // Timeout after 5 seconds
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                if (!window.google?.maps) {
+                    loadPromise = null;
+                    reject(new Error('Google Maps API not available after script load'));
+                }
+            }, 5000);
+        };
+
+        script.onerror = () => {
+            loadPromise = null;
+            reject(new Error('Failed to load Google Maps script'));
+        };
+
+        document.head.appendChild(script);
+    });
+
+    return loadPromise;
 }
 
 export async function searchPlaces(
@@ -42,7 +101,7 @@ export async function searchPlaces(
     try {
         await initGoogleMaps();
 
-        if (typeof window === 'undefined' || !window.google) {
+        if (typeof window === 'undefined' || !window.google?.maps) {
             console.warn('Google Maps not available');
             return [];
         }
@@ -81,7 +140,7 @@ export async function searchNearbyPlaces(
     try {
         await initGoogleMaps();
 
-        if (typeof window === 'undefined' || !window.google) {
+        if (typeof window === 'undefined' || !window.google?.maps) {
             console.warn('Google Maps not available');
             return [];
         }
@@ -116,7 +175,7 @@ export async function getPlaceDetails(placeId: string): Promise<Place | null> {
     try {
         await initGoogleMaps();
 
-        if (typeof window === 'undefined' || !window.google) {
+        if (typeof window === 'undefined' || !window.google?.maps) {
             console.warn('Google Maps not available');
             return null;
         }
@@ -223,7 +282,7 @@ export async function searchHiddenGems(
     try {
         await initGoogleMaps();
 
-        if (typeof window === 'undefined' || !window.google) {
+        if (typeof window === 'undefined' || !window.google?.maps) {
             console.warn('Google Maps not available');
             return [];
         }
@@ -267,7 +326,7 @@ export async function autocompletePlace(input: string, types?: string[]): Promis
     try {
         await initGoogleMaps();
 
-        if (typeof window === 'undefined' || !window.google) {
+        if (typeof window === 'undefined' || !window.google?.maps) {
             console.warn('Google Maps not available');
             return [];
         }
