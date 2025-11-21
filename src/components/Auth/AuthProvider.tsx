@@ -22,7 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         if (session?.user && !isAuthenticated) {
             setCurrentUser({
-                id: session.user.id || 'google-user',
+                id: (session.user as any).id || 'google-user',
                 name: session.user.name || 'User',
                 email: session.user.email || '',
                 avatar: session.user.image || '',
