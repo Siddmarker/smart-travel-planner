@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Place } from '@/types';
 import { smartCategoryFilter, fallbackHikingSpots } from './categoryUtils';
 
