@@ -26,23 +26,20 @@ export function hashPassword(password: string): string {
     return simpleHash(password + 'salt_key_2024');
 }
 
-import fs from 'fs';
-import path from 'path';
-
-const DB_PATH = path.join(process.cwd(), 'data', 'users.json');
-
-// Ensure data directory exists
-if (typeof window === 'undefined') {
-    const dir = path.dirname(DB_PATH);
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-    }
-}
-
 export function getStoredUsers(): StoredUser[] {
     if (typeof window === 'undefined') {
-        // Server-side: Use file system
+        // Server-side: Use file system (dynamic import to avoid client-side bundling)
         try {
+            const fs = require('fs');
+            const path = require('path');
+            const DB_PATH = path.join(process.cwd(), 'data', 'users.json');
+
+            // Ensure data directory exists
+            const dir = path.dirname(DB_PATH);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+
             if (!fs.existsSync(DB_PATH)) return [];
             const data = fs.readFileSync(DB_PATH, 'utf-8');
             return JSON.parse(data);
@@ -83,6 +80,9 @@ export function saveUser(user: StoredUser): void {
     if (typeof window === 'undefined') {
         // Server-side
         try {
+            const fs = require('fs');
+            const path = require('path');
+            const DB_PATH = path.join(process.cwd(), 'data', 'users.json');
             fs.writeFileSync(DB_PATH, JSON.stringify(users, null, 2));
         } catch (error) {
             console.error('Error writing users file:', error);
