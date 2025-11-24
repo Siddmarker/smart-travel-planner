@@ -61,6 +61,9 @@ export interface Place {
   phoneNumber?: string;
   website?: string;
   openingHours?: string[];
+  opensAt?: string; // "09:00"
+  closesAt?: string; // "17:00"
+  visitDuration?: number; // minutes
 }
 
 export interface PlaceDetails extends Place {
@@ -136,7 +139,7 @@ export interface ItineraryItem {
   startTime: string; // ISO string
   endTime: string; // ISO string
   notes?: string;
-  type?: 'activity' | 'return_trip';
+  type?: 'activity' | 'return_trip' | 'attraction';
 }
 
 export interface DayPlan {

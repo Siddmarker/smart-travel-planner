@@ -1,10 +1,6 @@
 import { Place, ItineraryItem } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import {
-    createDistanceMatrix,
-    createTimeMatrix,
-    calculateRouteDistance,
-    calculateRouteTime,
     calculateDistance,
     estimateTravelTime,
 } from './distance-matrix';
@@ -15,6 +11,10 @@ export interface RouteSegment {
     distance: number; // km
     duration: number; // minutes
     mode: 'driving' | 'walking' | 'transit';
+    arrival?: string; // HH:MM
+    departure?: string; // HH:MM
+    type?: 'attraction' | 'return_trip';
+    note?: string;
 }
 
 export interface OptimizedRoute {
@@ -24,6 +24,7 @@ export interface OptimizedRoute {
     optimizationScore: number; // 0-100
     originalOrder: string[]; // place IDs
     optimizedOrder: string[]; // place IDs
+    returnTripIncluded: boolean;
 }
 
 export interface RoutePreferences {
@@ -32,215 +33,233 @@ export interface RoutePreferences {
     returnToStart: boolean;
     startTime: string; // "09:00"
     endTime: string; // "20:00"
-    visitDuration: number; // minutes per place
+    visitDuration: number; // minutes per place (default fallback)
+}
+
+// Helper to convert "HH:MM" to minutes from midnight
+function timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+}
+
+// Helper to convert minutes from midnight to "HH:MM"
+function minutesToTime(minutes: number): string {
+    const h = Math.floor(minutes / 60);
+    const m = Math.floor(minutes % 60);
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 
 /**
- * Optimize route using Nearest Neighbor algorithm with 2-opt improvements
+ * Main Optimization Function
  */
 export function optimizeRoute(
     startLocation: { lat: number; lng: number },
     places: Place[],
     preferences: RoutePreferences
 ): OptimizedRoute {
-    if (places.length === 0) {
-        return {
-            segments: [],
-            totalDistance: 0,
-            totalDuration: 0,
-            optimizationScore: 100,
-            originalOrder: [],
-            optimizedOrder: [],
-        };
-    }
+    const startMinutes = timeToMinutes(preferences.startTime);
+    const endMinutes = timeToMinutes(preferences.endTime);
 
+    // Create a pseudo-place for start location
+    const startPlace: Place = {
+        id: 'start-location',
+        name: 'Start Location',
+        lat: startLocation.lat,
+        lng: startLocation.lng,
+        category: 'activity', // dummy
+        rating: 0,
+        reviews: 0,
+        priceLevel: 1,
+        openingHours: [],
+        opensAt: '00:00',
+        closesAt: '23:59',
+        visitDuration: 0
+    };
+
+    let currentTime = startMinutes;
+    let currentLocation = startPlace;
+    const finalSegments: RouteSegment[] = [];
+    const visitedPlaceIds: string[] = [];
+
+    // Clone places to modify list
+    const remainingPlaces = [...places];
     const originalOrder = places.map(p => p.id);
 
-    // Phase 1: Nearest Neighbor
-    const nnRoute = nearestNeighborRoute(startLocation, places, preferences.transportMode);
+    // Phase 1: Visit all places
+    while (currentTime < endMinutes && remainingPlaces.length > 0) {
+        const nextStep = findNextOptimalPlace(
+            currentLocation,
+            remainingPlaces,
+            currentTime,
+            endMinutes,
+            preferences
+        );
 
-    // Phase 2: 2-opt improvement
-    const improvedRoute = twoOptImprovement(nnRoute, places, preferences.transportMode);
+        if (!nextStep) {
+            break;
+        }
 
-    // Phase 3: Add return trip if needed
-    const finalRoute = preferences.returnToStart
-        ? [...improvedRoute, 0] // 0 represents start location
-        : improvedRoute;
+        const { place, travelTime, arrivalTime, departureTime } = nextStep;
 
-    // Calculate segments
-    const segments = createRouteSegments(
-        startLocation,
-        places,
-        finalRoute,
-        preferences.transportMode
-    );
+        finalSegments.push({
+            from: currentLocation,
+            to: place,
+            distance: calculateDistance(currentLocation, place),
+            duration: travelTime,
+            mode: preferences.transportMode,
+            arrival: minutesToTime(arrivalTime),
+            departure: minutesToTime(departureTime),
+            type: 'attraction'
+        });
 
-    const totalDistance = segments.reduce((sum, seg) => sum + seg.distance, 0);
-    const totalDuration = segments.reduce((sum, seg) => sum + seg.duration, 0);
+        visitedPlaceIds.push(place.id);
+        currentLocation = place;
+        currentTime = departureTime;
 
-    // Calculate optimization score (compare to naive sequential route)
-    const naiveDistance = calculateNaiveRouteDistance(startLocation, places, preferences.transportMode);
-    const optimizationScore = Math.min(100, Math.round((naiveDistance / totalDistance) * 100));
+        // Remove visited place
+        const idx = remainingPlaces.findIndex(p => p.id === place.id);
+        if (idx !== -1) {
+            remainingPlaces.splice(idx, 1);
+        }
+    }
+
+    // Phase 2: Handle return trip if requested
+    let returnTripIncluded = false;
+    if (preferences.returnToStart && finalSegments.length > 0) {
+        const returnTrip = calculateReturnTrip(
+            currentLocation,
+            startPlace,
+            currentTime,
+            endMinutes,
+            preferences
+        );
+
+        if (returnTrip.feasible) {
+            finalSegments.push({
+                from: currentLocation,
+                to: startPlace,
+                distance: calculateDistance(currentLocation, startPlace),
+                duration: returnTrip.travelTime,
+                mode: preferences.transportMode,
+                arrival: minutesToTime(returnTrip.arrivalTime),
+                departure: minutesToTime(returnTrip.arrivalTime), // No stay
+                type: 'return_trip',
+                note: 'Back to your starting location'
+            });
+            returnTripIncluded = true;
+        }
+    }
+
+    // Calculate totals
+    const totalDistance = finalSegments.reduce((sum, seg) => sum + seg.distance, 0);
+    const totalDuration = finalSegments.reduce((sum, seg) => sum + seg.duration, 0); // This is just travel time? Or travel + visit?
+    // The user's output "total_travel_time" usually implies just travel, but for a daily plan, maybe total duration?
+    // Let's stick to travel duration for now, or maybe sum of (arrival - departure of prev) + travel?
+    // Actually, let's just sum the travel durations recorded in segments.
+
+    // Calculate efficiency score (simple heuristic: % of places visited)
+    const efficiencyScore = places.length > 0
+        ? Math.round((visitedPlaceIds.length / places.length) * 100)
+        : 100;
 
     return {
-        segments,
+        segments: finalSegments,
         totalDistance,
         totalDuration,
-        optimizationScore,
+        optimizationScore: efficiencyScore,
         originalOrder,
-        optimizedOrder: finalRoute.map(idx => places[idx - 1]?.id).filter(Boolean),
+        optimizedOrder: visitedPlaceIds,
+        returnTripIncluded
     };
 }
 
 /**
- * Nearest Neighbor algorithm: Start from beginning, always visit closest unvisited place
+ * Enhanced Place Selection (Considers Return Time)
  */
-function nearestNeighborRoute(
-    startLocation: { lat: number; lng: number },
+function findNextOptimalPlace(
+    currentLocation: Place,
     places: Place[],
-    mode: 'driving' | 'walking' | 'transit'
-): number[] {
-    const n = places.length;
-    const visited = new Array(n).fill(false);
-    const route: number[] = [];
-    let currentLocation = startLocation;
-
-    for (let i = 0; i < n; i++) {
-        let nearestIdx = -1;
-        let minDistance = Infinity;
-
-        for (let j = 0; j < n; j++) {
-            if (!visited[j]) {
-                const distance = calculateDistance(
-                    currentLocation,
-                    { lat: places[j].lat, lng: places[j].lng }
-                );
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    nearestIdx = j;
-                }
-            }
-        }
-
-        if (nearestIdx !== -1) {
-            visited[nearestIdx] = true;
-            route.push(nearestIdx + 1); // 1-indexed (0 is start location)
-            currentLocation = { lat: places[nearestIdx].lat, lng: places[nearestIdx].lng };
-        }
-    }
-
-    return route;
-}
-
-/**
- * 2-opt improvement: Try swapping edges to reduce total distance
- */
-function twoOptImprovement(
-    route: number[],
-    places: Place[],
-    mode: 'driving' | 'walking' | 'transit'
-): number[] {
-    const distanceMatrix = createDistanceMatrix(places);
-    let improved = true;
-    let bestRoute = [...route];
-
-    while (improved) {
-        improved = false;
-        const currentDistance = calculateRouteDistance(bestRoute, distanceMatrix);
-
-        for (let i = 0; i < bestRoute.length - 1; i++) {
-            for (let j = i + 2; j < bestRoute.length; j++) {
-                // Try reversing segment between i and j
-                const newRoute = twoOptSwap(bestRoute, i, j);
-                const newDistance = calculateRouteDistance(newRoute, distanceMatrix);
-
-                if (newDistance < currentDistance) {
-                    bestRoute = newRoute;
-                    improved = true;
-                    break;
-                }
-            }
-            if (improved) break;
-        }
-    }
-
-    return bestRoute;
-}
-
-/**
- * Perform 2-opt swap: reverse segment between i and j
- */
-function twoOptSwap(route: number[], i: number, j: number): number[] {
-    const newRoute = [...route];
-    const segment = newRoute.slice(i, j + 1).reverse();
-    newRoute.splice(i, j - i + 1, ...segment);
-    return newRoute;
-}
-
-/**
- * Create route segments with detailed information
- */
-function createRouteSegments(
-    startLocation: { lat: number; lng: number },
-    places: Place[],
-    route: number[],
-    mode: 'driving' | 'walking' | 'transit'
-): RouteSegment[] {
-    const segments: RouteSegment[] = [];
-    let currentLocation = startLocation;
-
-    for (const placeIdx of route) {
-        if (placeIdx === 0) {
-            // Return to start
-            const distance = calculateDistance(currentLocation, startLocation);
-            const duration = estimateTravelTime(distance, mode);
-            segments.push({
-                from: places[places.length - 1], // Last place
-                to: { ...places[0], name: 'Start Location' } as Place, // Fake place for start
-                distance,
-                duration,
-                mode,
-            });
-        } else {
-            const place = places[placeIdx - 1];
-            const distance = calculateDistance(currentLocation, { lat: place.lat, lng: place.lng });
-            const duration = estimateTravelTime(distance, mode);
-
-            segments.push({
-                from: segments.length === 0
-                    ? ({ name: 'Start Location', lat: startLocation.lat, lng: startLocation.lng } as Place)
-                    : segments[segments.length - 1].to,
-                to: place,
-                distance,
-                duration,
-                mode,
-            });
-
-            currentLocation = { lat: place.lat, lng: place.lng };
-        }
-    }
-
-    return segments;
-}
-
-/**
- * Calculate naive route distance (sequential order)
- */
-function calculateNaiveRouteDistance(
-    startLocation: { lat: number; lng: number },
-    places: Place[],
-    mode: 'driving' | 'walking' | 'transit'
-): number {
-    let totalDistance = 0;
-    let currentLocation = startLocation;
+    currentTime: number,
+    endTime: number,
+    preferences: RoutePreferences
+): { place: Place; travelTime: number; arrivalTime: number; departureTime: number } | null {
+    const candidates = [];
 
     for (const place of places) {
-        const distance = calculateDistance(currentLocation, { lat: place.lat, lng: place.lng });
-        totalDistance += distance;
-        currentLocation = { lat: place.lat, lng: place.lng };
+        // Calculate travel and visit times
+        const dist = calculateDistance(currentLocation, place);
+        const travelTime = estimateTravelTime(dist, preferences.transportMode);
+        const arrivalTime = currentTime + travelTime;
+
+        // Use place's visit duration or fallback
+        const visitDuration = place.visitDuration || preferences.visitDuration || 60;
+        const departureTime = arrivalTime + visitDuration;
+
+        // Parse opening hours
+        const placeOpensAt = place.opensAt ? timeToMinutes(place.opensAt) : 0; // Default 00:00
+        const placeClosesAt = place.closesAt ? timeToMinutes(place.closesAt) : 1440; // Default 24:00
+
+        // Check feasibility
+        // 1. Must arrive after opening (or wait, but let's assume we don't want to wait too long? 
+        //    Actually, if we arrive early, we just wait. So arrivalTime could be effectively max(arrivalTime, placeOpensAt))
+        //    Let's stick to strict "arrival >= opens" for simplicity or allow waiting.
+        //    User logic: if (arrival_time >= place.opens_at ...
+
+        const effectiveArrivalTime = Math.max(arrivalTime, placeOpensAt);
+        const effectiveDepartureTime = effectiveArrivalTime + visitDuration;
+
+        if (
+            effectiveDepartureTime <= placeClosesAt &&
+            effectiveDepartureTime <= endTime
+        ) {
+            candidates.push({
+                place,
+                travelTime, // Note: this is pure travel time. Waiting time is effectiveArrivalTime - arrivalTime
+                arrivalTime: effectiveArrivalTime,
+                departureTime: effectiveDepartureTime,
+                score: calculateScore(dist, place) // We can add scoring logic here
+            });
+        }
     }
 
-    return totalDistance;
+    if (candidates.length === 0) {
+        return null;
+    }
+
+    // Select best next place (currently just closest/lowest travel time)
+    // We could add more complex scoring based on rating, etc.
+    candidates.sort((a, b) => a.travelTime - b.travelTime);
+
+    return candidates[0];
+}
+
+function calculateScore(distance: number, place: Place): number {
+    // Simple score: lower distance is better, higher rating is better
+    // This is a heuristic.
+    let score = 1000 - distance; // Prefer closer
+    if (place.rating) score += place.rating * 10;
+    return score;
+}
+
+/**
+ * Return Trip Calculation
+ */
+function calculateReturnTrip(
+    currentLocation: Place,
+    startLocation: Place,
+    currentTime: number,
+    endTime: number,
+    preferences: RoutePreferences
+): { feasible: boolean; travelTime: number; arrivalTime: number } {
+    const dist = calculateDistance(currentLocation, startLocation);
+    const travelTime = estimateTravelTime(dist, preferences.transportMode);
+    const arrivalTime = currentTime + travelTime;
+
+    return {
+        feasible: arrivalTime <= endTime,
+        travelTime,
+        arrivalTime
+    };
 }
 
 /**
@@ -252,27 +271,27 @@ export function routeToItinerary(
     preferences: RoutePreferences
 ): ItineraryItem[] {
     const items: ItineraryItem[] = [];
-    const [startHour, startMinute] = preferences.startTime.split(':').map(Number);
-    let currentTime = new Date(date);
-    currentTime.setHours(startHour, startMinute, 0, 0);
+    // We already calculated times in the optimization phase, so we can just use them.
+    // However, the segments store "arrival" and "departure" strings.
+    // We need to construct ISO strings for the ItineraryItem.
+
+    const dateObj = new Date(date);
+    const dateStr = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD
 
     for (const segment of route.segments) {
-        // Add travel time
-        currentTime = new Date(currentTime.getTime() + segment.duration * 60000);
+        if (!segment.arrival || !segment.departure) continue;
 
-        const arrivalTime = new Date(currentTime);
-        const departureTime = new Date(currentTime.getTime() + preferences.visitDuration * 60000);
+        const startTime = `${dateStr}T${segment.arrival}:00`;
+        const endTime = `${dateStr}T${segment.departure}:00`;
 
         items.push({
             id: uuidv4(),
             placeId: segment.to.id,
-            startTime: arrivalTime.toISOString(),
-            endTime: departureTime.toISOString(),
-            notes: `${segment.distance.toFixed(1)}km, ${segment.duration}min by ${segment.mode}`,
-            type: segment.to.name === 'Start Location' ? 'return_trip' : 'activity',
+            startTime: startTime, // This might need timezone handling but let's assume local/ISO
+            endTime: endTime,
+            notes: segment.note || `${segment.distance.toFixed(1)}km, ${segment.duration}min by ${segment.mode}`,
+            type: segment.type || 'activity',
         });
-
-        currentTime = departureTime;
     }
 
     return items;

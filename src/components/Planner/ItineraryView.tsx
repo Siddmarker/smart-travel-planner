@@ -33,9 +33,9 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
             const end = new Date(trip.endDate);
             const dayCount = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-            // Import enhanced planner v2
-            const { UnifiedTravelPlannerV2 } = await import('@/lib/unified-planner-v2');
-            const planner = new UnifiedTravelPlannerV2();
+            // Import enhanced planner
+            const { UnifiedTravelPlanner } = await import('@/lib/unified-planner');
+            const planner = new UnifiedTravelPlanner();
 
             const userPreferences = {
                 destination: trip.destination,
@@ -47,51 +47,22 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
                 return_to_start: trip.preferences?.returnToStart || false
             };
 
-            // Generate enhanced itinerary with 3-option timeslots
-            const dailyTimeslots = planner.generateEnhancedItinerary(
+            // Execute unified workflow
+            const optimizedItinerary = planner.unified_planning_workflow(
                 userPreferences,
                 places,
                 trip.categoryPreferences
             );
 
-            console.log('Generated daily timeslots:', dailyTimeslots);
+            console.log('Generated optimized itinerary:', optimizedItinerary);
 
-            // Convert timeslots to itinerary items (selecting first option for now)
+            // Convert to DayPlan format
             const newDays: DayPlan[] = [];
             for (let day = 1; day <= dayCount; day++) {
                 const currentDate = new Date(start);
                 currentDate.setDate(start.getDate() + (day - 1));
 
-                const dayTimeslots = dailyTimeslots[day];
-                if (!dayTimeslots) continue;
-
-                // Select first option from each timeslot
-                const dayItems = [
-                    ...(dayTimeslots.morning[0] ? [{
-                        id: crypto.randomUUID(),
-                        placeId: dayTimeslots.morning[0].place.id,
-                        startTime: new Date(currentDate.setHours(9, 0)).toISOString(),
-                        endTime: new Date(currentDate.setHours(11, 0)).toISOString(),
-                        notes: dayTimeslots.morning[0].why_recommended,
-                        type: 'activity' as const
-                    }] : []),
-                    ...(dayTimeslots.afternoon[0] ? [{
-                        id: crypto.randomUUID(),
-                        placeId: dayTimeslots.afternoon[0].place.id,
-                        startTime: new Date(currentDate.setHours(13, 0)).toISOString(),
-                        endTime: new Date(currentDate.setHours(16, 0)).toISOString(),
-                        notes: dayTimeslots.afternoon[0].why_recommended,
-                        type: 'activity' as const
-                    }] : []),
-                    ...(dayTimeslots.evening[0] ? [{
-                        id: crypto.randomUUID(),
-                        placeId: dayTimeslots.evening[0].place.id,
-                        startTime: new Date(currentDate.setHours(18, 0)).toISOString(),
-                        endTime: new Date(currentDate.setHours(20, 0)).toISOString(),
-                        notes: dayTimeslots.evening[0].why_recommended,
-                        type: 'activity' as const
-                    }] : [])
-                ];
+                const dayItems = optimizedItinerary[day] || [];
 
                 newDays.push({
                     id: crypto.randomUUID(),
@@ -103,7 +74,7 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
             if (newDays.length > 0) {
                 updateTrip(trip.id, { days: newDays });
                 setSelectedDayId(newDays[0].id);
-                alert("Enhanced itinerary generated with category preferences!");
+                alert("Unified itinerary generated with voting-first logic!");
             } else {
                 alert("No places available. Try adding more places.");
             }

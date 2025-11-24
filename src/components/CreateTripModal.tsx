@@ -349,17 +349,24 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                                 />
                             </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                id="returnToStart"
-                                checked={returnToStart}
-                                onChange={(e) => setReturnToStart(e.target.checked)}
-                                className="h-4 w-4 rounded border-gray-300"
-                            />
-                            <Label htmlFor="returnToStart" className="font-normal cursor-pointer">
-                                Return to starting point daily
-                            </Label>
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="returnToStart"
+                                    checked={returnToStart}
+                                    onChange={(e) => setReturnToStart(e.target.checked)}
+                                    className="h-4 w-4 rounded border-gray-300"
+                                />
+                                <Label htmlFor="returnToStart" className="font-normal cursor-pointer">
+                                    Return to starting point after the trip
+                                </Label>
+                            </div>
+                            {returnToStart && (
+                                <p className="text-xs text-muted-foreground ml-6">
+                                    ⓘ We'll calculate the best route back to your origin
+                                </p>
+                            )}
                         </div>
                     </div>
 
