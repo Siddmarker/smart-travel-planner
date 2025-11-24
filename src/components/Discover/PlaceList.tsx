@@ -18,6 +18,28 @@ export function PlaceList({ places, onAddToTrip, onSavePlace, viewMode = 'grid' 
         return '$'.repeat(level);
     };
 
+    const handleGetDirections = (place: Place) => {
+        const destLat = place.lat;
+        const destLng = place.lng;
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const userLat = position.coords.latitude;
+                    const userLng = position.coords.longitude;
+                    window.open(`https://www.google.com/maps/dir/${userLat},${userLng}/${destLat},${destLng}`, '_blank');
+                },
+                () => {
+                    // Fallback if geolocation fails or is denied
+                    window.open(`https://www.google.com/maps/dir//${destLat},${destLng}`, '_blank');
+                }
+            );
+        } else {
+            // Fallback if geolocation is not supported
+            window.open(`https://www.google.com/maps/dir//${destLat},${destLng}`, '_blank');
+        }
+    };
+
     return (
         <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : 'space-y-4'}>
             {places.map((place) => (
@@ -69,10 +91,17 @@ export function PlaceList({ places, onAddToTrip, onSavePlace, viewMode = 'grid' 
                             {place.description}
                         </p>
 
-                        {/* Distance (mock) */}
+                        {/* Distance */}
                         <div className="flex items-center text-sm text-muted-foreground mb-3">
                             <MapPin className="h-3 w-3 mr-1" />
-                            2.3 km away
+                            {place.distance ? (
+                                <>
+                                    {place.distance.text} away
+                                    {place.distance.duration && ` • ${place.distance.duration}`}
+                                </>
+                            ) : (
+                                'Distance unavailable'
+                            )}
                         </div>
 
                         {/* Actions */}
@@ -83,6 +112,14 @@ export function PlaceList({ places, onAddToTrip, onSavePlace, viewMode = 'grid' 
                             >
                                 <Plus className="h-4 w-4 mr-2" />
                                 Add to Trip
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() => handleGetDirections(place)}
+                            >
+                                <MapPin className="h-4 w-4 mr-2" />
+                                Directions
                             </Button>
                             <Button variant="outline" size="icon">
                                 <Share2 className="h-4 w-4" />

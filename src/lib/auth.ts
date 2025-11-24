@@ -26,29 +26,71 @@ export function hashPassword(password: string): string {
     return simpleHash(password + 'salt_key_2024');
 }
 
-export function getStoredUsers(): StoredUser[] {
-    if (typeof window === 'undefined') return [];
-    const users = localStorage.getItem('travel_planner_users');
-    if (!users) {
-        // Seed default user
-        const defaultUser: StoredUser = {
-            id: 'user-default',
-            name: 'Test User',
-            email: 'test@example.com',
-            password: hashPassword('password123'),
-            avatar: 'https://github.com/shadcn.png',
-            createdAt: new Date().toISOString(),
-        };
-        localStorage.setItem('travel_planner_users', JSON.stringify([defaultUser]));
-        return [defaultUser];
+import fs from 'fs';
+import path from 'path';
+
+const DB_PATH = path.join(process.cwd(), 'data', 'users.json');
+
+// Ensure data directory exists
+if (typeof window === 'undefined') {
+    const dir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
     }
-    return JSON.parse(users);
+}
+
+export function getStoredUsers(): StoredUser[] {
+    if (typeof window === 'undefined') {
+        // Server-side: Use file system
+        try {
+            if (!fs.existsSync(DB_PATH)) return [];
+            const data = fs.readFileSync(DB_PATH, 'utf-8');
+            return JSON.parse(data);
+        } catch (error) {
+            console.error('Error reading users file:', error);
+            return [];
+        }
+    } else {
+        // Client-side: Use localStorage
+        const users = localStorage.getItem('travel_planner_users');
+        if (!users) {
+            // Seed default user
+            const defaultUser: StoredUser = {
+                id: 'user-default',
+                name: 'Test User',
+                email: 'test@example.com',
+                password: hashPassword('password123'),
+                avatar: 'https://github.com/shadcn.png',
+                createdAt: new Date().toISOString(),
+            };
+            localStorage.setItem('travel_planner_users', JSON.stringify([defaultUser]));
+            return [defaultUser];
+        }
+        return JSON.parse(users);
+    }
 }
 
 export function saveUser(user: StoredUser): void {
     const users = getStoredUsers();
-    users.push(user);
-    localStorage.setItem('travel_planner_users', JSON.stringify(users));
+    // Check if user exists to avoid duplicates (simple check)
+    const existingIndex = users.findIndex(u => u.id === user.id);
+    if (existingIndex >= 0) {
+        users[existingIndex] = user;
+    } else {
+        users.push(user);
+    }
+
+    if (typeof window === 'undefined') {
+        // Server-side
+        try {
+            fs.writeFileSync(DB_PATH, JSON.stringify(users, null, 2));
+        } catch (error) {
+            console.error('Error writing users file:', error);
+        }
+    } else {
+        // Client-side
+        localStorage.setItem('travel_planner_users', JSON.stringify(users));
+    }
 }
 
 export function findUserByEmail(email: string): StoredUser | null {

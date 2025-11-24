@@ -64,6 +64,11 @@ export interface Place {
   opensAt?: string; // "09:00"
   closesAt?: string; // "17:00"
   visitDuration?: number; // minutes
+  distance?: {
+    text: string;
+    value: number;
+    duration?: string;
+  };
 }
 
 export interface PlaceDetails extends Place {
@@ -230,6 +235,11 @@ export interface UserPreferences {
   start_location: { lat: number; lng: number };
   day_start_time: Date;
   return_to_start: boolean;
+  // Enhanced preferences
+  budget?: 'low' | 'medium' | 'high';
+  minRating?: number;
+  dietary?: string[];
+  difficulty?: 'easy' | 'moderate' | 'hard';
 }
 
 export type TripCategory =

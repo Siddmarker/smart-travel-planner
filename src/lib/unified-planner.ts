@@ -3,6 +3,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { calculateDistance, estimateTravelTime } from './route-optimizer/distance-matrix';
 import { scoreAndRankPlaces } from './category-scorer';
 import { calculateTrendingScore } from './trending-service';
+import {
+    searchPlaces,
+    enhancePlacesWithPhotosAndDistance,
+    mapCategoryToGoogleType,
+    calculateRealDistances
+} from './googleMapsService';
 
 /**
  * FINAL MERGED SYSTEM: Voting → Places → Maps in perfect harmony
@@ -12,13 +18,13 @@ export class UnifiedTravelPlanner {
     /**
      * Complete workflow that respects the voting-first approach
      */
-    public unified_planning_workflow(
+    public async unified_planning_workflow(
         userPreferences: UserPreferences,
-        availablePlaces: Place[],
+        availablePlaces: Place[], // Can be empty if we fetch dynamically
         categoryPreferences?: { categories: TripCategory[]; priorities?: { [key in TripCategory]?: number } }
-    ): { [day: number]: ItineraryItem[] } {
+    ): Promise<{ [day: number]: ItineraryItem[] }> {
         // PHASE 1: PLACE DISCOVERY & VOTING
-        const votingInterface = this.discover_and_prepare_voting(
+        const votingInterface = await this.discover_and_prepare_voting(
             userPreferences,
             availablePlaces,
             categoryPreferences
@@ -30,7 +36,7 @@ export class UnifiedTravelPlanner {
         const votedPlan = this.simulate_voting_resolution(votingInterface, userPreferences);
 
         // PHASE 3: POST-VOTING MAP OPTIMIZATION
-        const optimizedItinerary = this.optimize_post_voting_routing(votedPlan, userPreferences);
+        const optimizedItinerary = await this.optimize_post_voting_routing(votedPlan, userPreferences);
 
         return optimizedItinerary;
     }
@@ -38,41 +44,50 @@ export class UnifiedTravelPlanner {
     /**
      * STEP 1: Find places and prepare voting interface - NO ROUTING YET
      */
-    private discover_and_prepare_voting(
+    public async discover_and_prepare_voting(
         userPreferences: UserPreferences,
         availablePlaces: Place[],
         categoryPreferences?: { categories: TripCategory[]; priorities?: { [key in TripCategory]?: number } }
-    ): any {
-        // Discover places without any routing bias
-        const rawPlaces = this.discover_places_independent(
-            availablePlaces,
+    ): Promise<any> {
+        // Discover places with advanced filtering
+        const rawPlaces = await this.discoverPlacesWithFilters(
             userPreferences,
-            categoryPreferences,
-            20 // More options for voting
+            availablePlaces
+        );
+
+        // Enhance with real data (distance from start location)
+        const enhancedPlaces = await enhancePlacesWithPhotosAndDistance(
+            userPreferences.start_location,
+            rawPlaces
         );
 
         // Group by days but DON'T optimize routes yet
         const dailyVotingOptions: any = {};
+        const usedPlaceIds = new Set<string>();
 
         for (let day = 1; day <= userPreferences.trip_duration; day++) {
             const dayOptions: any = {};
 
             for (const timeSlot of ['morning', 'afternoon', 'evening']) {
-                // Get 3 options per time slot, purely based on quality/relevance
-                const slotOptions = this.get_time_appropriate_places(
-                    rawPlaces,
+                // Get 3 options per time slot, ensuring diversity and time appropriateness
+                const slotOptions = this.getTimeAppropriatePlaces(
+                    enhancedPlaces,
                     timeSlot,
-                    userPreferences.categories,
-                    3
+                    3,
+                    usedPlaceIds
                 );
+
+                // Mark selected places as used
+                slotOptions.forEach(p => usedPlaceIds.add(p.id));
 
                 dayOptions[timeSlot] = slotOptions.map(place => ({
                     place: place,
                     category: place.category,
-                    quality_score: this.calculateRelevanceScore(place, userPreferences.categories), // simplified
+                    quality_score: this.calculateRelevanceScore(place, userPreferences.categories),
                     why_recommended: this.generate_voting_recommendation(place, timeSlot),
                     // CRITICAL: No routing info at voting stage
-                    travel_time: null, // Will calculate AFTER voting
+                    travel_time: place.distance?.duration || null,
+                    distance_text: place.distance?.text || null,
                     estimated_arrival: null
                 }));
             }
@@ -91,9 +106,63 @@ export class UnifiedTravelPlanner {
     }
 
     /**
+     * ENHANCED DISCOVERY: Fetch places using Google Maps API with advanced filters
+     */
+    private async discoverPlacesWithFilters(
+        userPreferences: UserPreferences,
+        existingPlaces: Place[]
+    ): Promise<Place[]> {
+        let allPlaces: Place[] = [...existingPlaces];
+
+        // If we don't have enough places, fetch from API
+        if (allPlaces.length < 20 && userPreferences.categories.length > 0) {
+            const destinationName = "Destination"; // Ideally passed in preferences, but we have coords
+            // We can reverse geocode or just use the coords for search
+
+            for (const category of userPreferences.categories) {
+                const googleType = mapCategoryToGoogleType(category);
+                const results = await searchPlaces(
+                    category, // Query
+                    userPreferences.destination,
+                    5000, // Radius
+                    googleType
+                );
+                allPlaces = [...allPlaces, ...results];
+            }
+        }
+
+        // Remove duplicates
+        allPlaces = Array.from(new Map(allPlaces.map(item => [item.id, item])).values());
+
+        // APPLY ADVANCED FILTERS
+        return allPlaces.filter(place => {
+            // 1. Budget Filter
+            if (userPreferences.budget && place.priceLevel) {
+                const budgetMap = { 'low': 1, 'medium': 2, 'high': 3 };
+                if (place.priceLevel > budgetMap[userPreferences.budget]) return false;
+            }
+
+            // 2. Rating Filter
+            if (userPreferences.minRating && place.rating < userPreferences.minRating) return false;
+
+            // 3. Category Specific Filters
+            if (place.category === 'food' && userPreferences.dietary && userPreferences.dietary.length > 0) {
+                // This is hard to check without detailed tags, but we can check name/types
+                // For now, let's assume if it matches the query it's fine, or skip strict check
+            }
+
+            if (place.category === 'hiking' && userPreferences.difficulty) {
+                // Again, hard to check difficulty without specific data
+            }
+
+            return true;
+        });
+    }
+
+    /**
      * STEP 2: Resolve voting (in real app, this comes from user votes)
      */
-    private simulate_voting_resolution(votingInterface: any, userPreferences: UserPreferences): any {
+    public simulate_voting_resolution(votingInterface: any, userPreferences: UserPreferences): any {
         const votedPlan: any = {};
 
         for (const [day, timeSlots] of Object.entries(votingInterface.voting_interface)) {
@@ -117,7 +186,7 @@ export class UnifiedTravelPlanner {
     /**
      * STEP 3: AFTER VOTING - Apply map routing optimization to voted places
      */
-    private optimize_post_voting_routing(votedPlan: any, userPreferences: UserPreferences): { [day: number]: ItineraryItem[] } {
+    public async optimize_post_voting_routing(votedPlan: any, userPreferences: UserPreferences): Promise<{ [day: number]: ItineraryItem[] }> {
         const optimizedItinerary: { [day: number]: ItineraryItem[] } = {};
         let currentLocation = { ...userPreferences.start_location, id: 'start', name: 'Start' } as Place; // Mock start place
 
@@ -137,7 +206,7 @@ export class UnifiedTravelPlanner {
             }
 
             // NOW apply routing optimization to the VOTED places
-            const dayItinerary = this.optimize_day_routing_post_vote(
+            const dayItinerary = await this.optimize_day_routing_post_vote(
                 currentLocation,
                 votedPlaces,
                 userPreferences,
@@ -149,9 +218,6 @@ export class UnifiedTravelPlanner {
             // Update location for next day (last place visited)
             if (dayItinerary.length > 0) {
                 const lastItem = dayItinerary[dayItinerary.length - 1];
-                // Find the place object for the last item
-                // This is a bit tricky since ItineraryItem only has placeId. 
-                // But we have the place object in votedPlaces.
                 const lastPlace = votedPlaces.find(vp => vp.place.id === lastItem.placeId)?.place;
                 if (lastPlace) {
                     currentLocation = lastPlace;
@@ -164,11 +230,10 @@ export class UnifiedTravelPlanner {
             const lastDay = userPreferences.trip_duration;
             if (optimizedItinerary[lastDay] && optimizedItinerary[lastDay].length > 0) {
                 const lastItem = optimizedItinerary[lastDay][optimizedItinerary[lastDay].length - 1];
-                // We need the place object again...
-                // Let's just assume we can calculate from the last known location
 
-                const returnDist = calculateDistance(currentLocation, userPreferences.start_location);
-                const returnDuration = estimateTravelTime(returnDist, 'driving');
+                // Calculate return trip using REAL distance
+                const returnDistInfo = (await calculateRealDistances(currentLocation, [{ ...userPreferences.start_location, id: 'end', name: 'End' } as Place]))[0];
+                const returnDuration = returnDistInfo.distance?.duration ? parseInt(returnDistInfo.distance.duration) : 30; // fallback
 
                 // Calculate start time for return trip based on last item's end time
                 const lastEndTime = new Date(lastItem.endTime);
@@ -180,7 +245,7 @@ export class UnifiedTravelPlanner {
                     placeId: 'return_trip', // Special ID
                     startTime: returnStartTime.toISOString(),
                     endTime: returnEndTime.toISOString(),
-                    notes: `Return to start: ${returnDist.toFixed(1)}km, ${returnDuration}min`,
+                    notes: `Return to start: ${returnDistInfo.distance?.text || 'Calculating...'}`,
                     type: 'return_trip'
                 });
             }
@@ -193,12 +258,12 @@ export class UnifiedTravelPlanner {
      * CRITICAL: Map optimization AFTER voting is complete
      * Respects time slots but optimizes order within constraints
      */
-    private optimize_day_routing_post_vote(
+    private async optimize_day_routing_post_vote(
         startLocation: Place,
         votedPlaces: any[],
         userPreferences: UserPreferences,
         dayNumber: number
-    ): ItineraryItem[] {
+    ): Promise<ItineraryItem[]> {
         if (!votedPlaces || votedPlaces.length === 0) return [];
 
         // Convert to routing format
@@ -233,8 +298,13 @@ export class UnifiedTravelPlanner {
         const finalItinerary: ItineraryItem[] = [];
 
         for (const place of optimizedOrder) {
-            // Calculate travel time
-            const travelTime = estimateTravelTime(calculateDistance(currentLocation, place), 'driving');
+            // Calculate REAL travel time
+            const placeWithDist = (await calculateRealDistances(currentLocation, [place]))[0];
+            // Parse duration string "15 mins" -> 15
+            let travelTime = 15; // default
+            if (placeWithDist.distance?.duration) {
+                travelTime = parseInt(placeWithDist.distance.duration);
+            }
 
             // Apply time slot constraints
             const timeSlotConstraint = timeConstraints[place.id];
@@ -254,7 +324,7 @@ export class UnifiedTravelPlanner {
                 placeId: place.id,
                 startTime: arrivalTime.toISOString(),
                 endTime: departureTime.toISOString(),
-                notes: `Travel: ${travelTime} min. Recommended for ${timeSlotConstraint.preferred_slot}`,
+                notes: `Travel: ${placeWithDist.distance?.text || '...'}. Recommended for ${timeSlotConstraint.preferred_slot}`,
                 type: 'activity'
             });
 
@@ -290,11 +360,6 @@ export class UnifiedTravelPlanner {
         const eveningPlaces = places.filter(p => timeConstraints[p.id]?.preferred_slot === 'evening');
 
         // Ideally we want M -> A -> E
-        // Since we have exactly 3 places and we filtered them into slots, 
-        // if each slot has 1 place, we just return them in order.
-        // If there are conflicts (e.g. 2 morning, 1 evening), we might need to shift one.
-
-        // Simple heuristic: Concatenate lists
         const ordered = [...morningPlaces, ...afternoonPlaces, ...eveningPlaces];
 
         // If any places were missed (e.g. no preferred slot?), add them
@@ -313,11 +378,8 @@ export class UnifiedTravelPlanner {
         const morningStart = new Date(`${dateStr}T09:00:00`);
         const afternoonStart = new Date(`${dateStr}T12:00:00`);
         const eveningStart = new Date(`${dateStr}T17:00:00`);
-        const eveningEnd = new Date(`${dateStr}T21:00:00`);
 
         if (preferredSlot === 'morning') {
-            // If too early, wait. If too late... well, we can't go back in time easily in this linear flow without backtracking.
-            // Just ensure it's at least 9am
             if (proposedArrival < morningStart) return morningStart;
         } else if (preferredSlot === 'afternoon') {
             if (proposedArrival < afternoonStart) return afternoonStart;
@@ -328,52 +390,63 @@ export class UnifiedTravelPlanner {
         return proposedArrival;
     }
 
-    private discover_places_independent(
-        availablePlaces: Place[],
-        userPreferences: UserPreferences,
-        categoryPreferences: any,
-        count: number
-    ): Place[] {
-        // Filter by categories
-        let filtered = availablePlaces;
-        if (userPreferences.categories && userPreferences.categories.length > 0) {
-            filtered = availablePlaces.filter(p =>
-                userPreferences.categories.some(cat => p.category === cat)
-            );
-        }
-
-        // Score and rank
-        const scored = scoreAndRankPlaces(filtered, userPreferences.categories as TripCategory[], categoryPreferences?.priorities);
-
-        // Return top N
-        return scored.map(s => s.place).slice(0, count);
-    }
-
-    private get_time_appropriate_places(places: Place[], timeSlot: string, categories: string[], count: number): Place[] {
-        const appropriate = places.filter(p => this.is_time_appropriate(p, timeSlot));
-        return appropriate.slice(0, count);
-    }
-
-    private is_time_appropriate(place: Place, timeSlot: string): boolean {
+    private getTimeAppropriatePlaces(places: Place[], timeSlot: string, count: number, usedPlaceIds: Set<string>): Place[] {
         const timeAppropriateness: any = {
-            'morning': ['breakfast', 'hiking', 'nature', 'museum', 'park', 'religious'],
-            'afternoon': ['lunch', 'shopping', 'cultural', 'adventure', 'historical'],
-            'evening': ['dinner', 'nightlife', 'sunset', 'entertainment', 'bar']
+            'morning': {
+                categories: ['park', 'hiking', 'museum', 'garden', 'religious', 'breakfast', 'nature'],
+                keywords: ['morning', 'sunrise', 'breakfast', 'walk', 'hike', 'museum', 'temple', 'church', 'park'],
+                exclude: ['nightclub', 'bar', 'casino', 'adult', 'pub', 'lounge']
+            },
+            'afternoon': {
+                categories: ['restaurant', 'shopping_mall', 'tourist_attraction', 'cafe', 'art_gallery', 'zoo', 'aquarium', 'shopping'],
+                keywords: ['lunch', 'shopping', 'tour', 'exhibition', 'cultural', 'mall', 'market'],
+                exclude: ['breakfast', 'sunrise', 'nightclub']
+            },
+            'evening': {
+                categories: ['restaurant', 'nightclub', 'bar', 'viewpoint', 'theater', 'nightlife', 'dinner'],
+                keywords: ['dinner', 'sunset', 'night', 'show', 'concert', 'bar', 'pub', 'club'],
+                exclude: ['breakfast', 'morning', 'hiking', 'zoo']
+            }
         };
 
-        // Check if place category matches time slot
-        // This is a simple check. Real logic might be more complex.
-        const appropriateCategories = timeAppropriateness[timeSlot] || [];
-        // Also check place.category
-        if (appropriateCategories.includes(place.category)) return true;
+        const config = timeAppropriateness[timeSlot];
 
-        // Fallback: if category not strictly mapped, maybe allow it?
-        // Let's be strict for now to show the logic working
-        return false;
+        // Filter places for time appropriateness
+        const appropriatePlaces = places.filter(place => {
+            // Skip if already used
+            if (usedPlaceIds.has(place.id)) return false;
+
+            // Check categories match
+            // We check against our internal category AND Google types if available
+            const categoryMatch = config.categories.includes(place.category);
+
+            // Check keywords in name
+            const keywordMatch = config.keywords.some((keyword: string) =>
+                place.name.toLowerCase().includes(keyword)
+            );
+
+            // Check exclusions (strict)
+            const exclusionMatch = config.exclude.some((exclude: string) =>
+                place.category === exclude || place.name.toLowerCase().includes(exclude)
+            );
+
+            return (categoryMatch || keywordMatch) && !exclusionMatch;
+        });
+
+        // Sort by relevance (rating * reviews) and return top N
+        return appropriatePlaces
+            .sort((a, b) => (b.rating * (Math.log10(b.reviews || 1))) - (a.rating * (Math.log10(a.reviews || 1))))
+            .slice(0, count);
     }
 
     private generate_voting_recommendation(place: Place, timeSlot: string): string {
-        return `Great for ${timeSlot} because it is a ${place.category} spot.`;
+        const reasons: any = {
+            'morning': ['Perfect for a morning start', 'Great breakfast spot', 'Beautiful morning views', 'Peaceful morning atmosphere'],
+            'afternoon': ['Ideal for afternoon exploration', 'Great lunch options nearby', 'Perfect for shopping', 'Cultural experience'],
+            'evening': ['Amazing sunset views', 'Great dinner atmosphere', 'Vibrant nightlife', 'Perfect way to end the day']
+        };
+        const randomReason = reasons[timeSlot][Math.floor(Math.random() * reasons[timeSlot].length)];
+        return `${randomReason}. Rated ${place.rating} stars.`;
     }
 
     private get_time_constraints(timeSlot: string): any {
@@ -385,12 +458,10 @@ export class UnifiedTravelPlanner {
     private select_voting_winner(options: any[], timeSlot: string): any {
         if (options.length === 0) return null;
         // Simulate voting: just pick the one with highest quality score
-        // Add some random factor
         return options.sort((a, b) => b.quality_score - a.quality_score)[0];
     }
 
     private calculateRelevanceScore(place: Place, categories: string[]): number {
-        // Simple score
         let score = place.rating * 20; // 0-100
         if (categories.includes(place.category)) score += 10;
         return Math.min(100, score);

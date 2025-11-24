@@ -1,4 +1,5 @@
 import { Place } from '@/types';
+import { smartCategoryFilter, fallbackHikingSpots } from './categoryUtils';
 
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -96,7 +97,8 @@ export async function initGoogleMaps(): Promise<void> {
 export async function searchPlaces(
     query: string,
     location?: { lat: number; lng: number },
-    radius: number = 5000
+    radius: number = 5000,
+    type?: string // Add type parameter
 ): Promise<Place[]> {
     try {
         await initGoogleMaps();
@@ -114,6 +116,7 @@ export async function searchPlaces(
                 query,
                 location: location ? new window.google.maps.LatLng(location.lat, location.lng) : undefined,
                 radius,
+                type: type as any, // Pass type to request
             };
 
             service.textSearch(request, (results, status) => {
@@ -336,7 +339,7 @@ export async function autocompletePlace(input: string, types?: string[]): Promis
 
             const request: google.maps.places.AutocompletionRequest = {
                 input,
-                types: types || ['(regions)', '(cities)'], // Default to geographic locations
+                types: types || ['(cities)'], // Default to cities to avoid "(regions) cannot be mixed" error
             };
 
             service.getPlacePredictions(request, (predictions, status) => {
@@ -352,4 +355,168 @@ export async function autocompletePlace(input: string, types?: string[]): Promis
         console.error('Error with autocomplete:', error);
         return [];
     }
+}
+
+export async function searchHikingPlaces(
+    locationName: string,
+    coords?: { lat: number; lng: number },
+    radius: number = 5000
+): Promise<Place[]> {
+    try {
+        const queries = [
+            `hiking trails near ${locationName}`,
+            `nature walks near ${locationName}`,
+            `trekking places near ${locationName}`,
+            `forest trails near ${locationName}`,
+            `mountain hiking near ${locationName}`
+        ];
+
+        // Run queries in parallel
+        const promises = queries.map(query =>
+            searchPlaces(query, coords, radius, 'park')
+        );
+
+        const results = await Promise.all(promises);
+
+        let allPlaces: Place[] = [];
+        results.forEach(places => {
+            allPlaces = [...allPlaces, ...places];
+        });
+
+        // Remove duplicates based on ID or Name
+        const uniquePlaces = Array.from(new Map(allPlaces.map(item => [item.name + item.lat, item])).values());
+
+        // Apply strict filtering using the smart filter we updated
+        const filtered = smartCategoryFilter(uniquePlaces, 'hiking');
+
+        if (filtered.length === 0) {
+            console.log('No hiking places found via API, trying fallback...');
+            const cityKey = locationName.toLowerCase();
+            // Check if any key in fallbackHikingSpots is contained in locationName
+            const fallbackKey = Object.keys(fallbackHikingSpots).find(key => cityKey.includes(key));
+
+            if (fallbackKey) {
+                const fallbackNames = fallbackHikingSpots[fallbackKey];
+                console.log(`Found fallback spots for ${fallbackKey}:`, fallbackNames);
+
+                const fallbackPromises = fallbackNames.map(name => searchPlaces(name, coords, radius));
+                const fallbackResults = await Promise.all(fallbackPromises);
+
+                let fallbackPlaces: Place[] = [];
+                fallbackResults.forEach(places => {
+                    if (places.length > 0) {
+                        fallbackPlaces.push(places[0]); // Take the best match
+                    }
+                });
+
+                return fallbackPlaces;
+            }
+        }
+
+        return filtered;
+    } catch (error) {
+        console.error('Error searching hiking places:', error);
+        return [];
+    }
+}
+
+// Haversine formula for straight-line distance
+function calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+// FALLBACK: Straight-line distance calculation
+function calculateStraightLineDistance(userLocation: { lat: number; lng: number }, places: Place[]): Place[] {
+    return places.map(place => {
+        const distanceKm = calculateHaversineDistance(
+            userLocation.lat, userLocation.lng, place.lat, place.lng
+        );
+
+        return {
+            ...place,
+            distance: {
+                text: `${distanceKm.toFixed(1)} km`,
+                value: distanceKm * 1000, // meters
+                duration: undefined
+            }
+        };
+    });
+}
+
+// REAL-TIME DISTANCE CALCULATION
+export async function calculateRealDistances(userLocation: { lat: number; lng: number }, places: Place[]): Promise<Place[]> {
+    if (!userLocation || !places.length) return places;
+
+    try {
+        await initGoogleMaps();
+        if (typeof window === 'undefined' || !window.google?.maps) return calculateStraightLineDistance(userLocation, places);
+
+        const distanceService = new window.google.maps.DistanceMatrixService();
+
+        const origins = [new window.google.maps.LatLng(userLocation.lat, userLocation.lng)];
+        const destinations = places.map(place =>
+            new window.google.maps.LatLng(place.lat, place.lng)
+        );
+
+        // Google Maps Distance Matrix API has limits (25 destinations per request usually)
+        // We slice to ensure we don't exceed if list is long, though usually it's 20.
+        const limitedDestinations = destinations.slice(0, 25);
+
+        const response = await new Promise<google.maps.DistanceMatrixResponse>((resolve, reject) => {
+            distanceService.getDistanceMatrix({
+                origins: origins,
+                destinations: limitedDestinations,
+                travelMode: window.google.maps.TravelMode.DRIVING,
+                unitSystem: window.google.maps.UnitSystem.METRIC
+            }, (response, status) => {
+                if (status === window.google.maps.DistanceMatrixStatus.OK && response) {
+                    resolve(response);
+                } else {
+                    reject(status);
+                }
+            });
+        });
+
+        return places.map((place, index) => {
+            if (index >= 25) return place; // Skip if beyond limit
+            const element = response.rows[0].elements[index];
+            if (element && element.status === 'OK') {
+                return {
+                    ...place,
+                    distance: {
+                        text: element.distance.text,
+                        value: element.distance.value,
+                        duration: element.duration.text
+                    }
+                };
+            }
+            return place;
+        });
+
+    } catch (error) {
+        console.error('Distance calculation failed:', error);
+        return calculateStraightLineDistance(userLocation, places);
+    }
+}
+
+export async function enhancePlacesWithPhotosAndDistance(
+    userLocation: { lat: number; lng: number },
+    places: Place[]
+): Promise<Place[]> {
+    // 1. Calculate distances
+    const placesWithDistance = await calculateRealDistances(userLocation, places);
+
+    // 2. Photos are already handled in convertGooglePlaceToPlace.
+    // If we needed to fetch them explicitly, we would need the PlaceResult object which we don't have here.
+    // We rely on the initial search to populate the image URL.
+
+    return placesWithDistance;
 }

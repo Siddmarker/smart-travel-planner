@@ -8,6 +8,7 @@ import { ActivityCard } from './ActivityCard';
 import { useStore } from '@/store/useStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { RouteMap } from '../Map/RouteMap';
 
 interface ItineraryViewProps {
     trip: Trip;
@@ -48,7 +49,7 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
             };
 
             // Execute unified workflow
-            const optimizedItinerary = planner.unified_planning_workflow(
+            const optimizedItinerary = await planner.unified_planning_workflow(
                 userPreferences,
                 places,
                 trip.categoryPreferences
@@ -106,9 +107,43 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
         );
     }
 
+    // Helper to construct route segments for the map
+    const getDaySegments = (dayItems: any[]): any[] => {
+        if (!dayItems || dayItems.length === 0) return [];
+
+        const segments: any[] = [];
+        let currentLocation = trip.destination; // Start from trip destination (or hotel if we had one)
+
+        dayItems.forEach((item) => {
+            const place = places.find((p) => p.id === item.placeId);
+            if (place) {
+                // Try to parse distance/duration from notes if available, otherwise mock
+                // Notes format: "Travel: 5.2 km. Recommended..."
+                let distance = 0;
+                let duration = 0;
+
+                if (item.notes) {
+                    const distMatch = item.notes.match(/Travel: ([\d.]+) km/);
+                    if (distMatch) distance = parseFloat(distMatch[1]);
+                }
+
+                segments.push({
+                    from: currentLocation,
+                    to: place,
+                    distance: distance,
+                    duration: duration,
+                    mode: 'driving'
+                });
+                currentLocation = place;
+            }
+        });
+
+        return segments;
+    };
+
     return (
         <div className="h-full flex flex-col">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-4 px-4 pt-4">
                 <h2 className="text-2xl font-bold">Itinerary</h2>
                 <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={handleGenerateItinerary} disabled={isGenerating}>
@@ -121,43 +156,65 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
                 </div>
             </div>
 
-            <Tabs value={selectedDayId} onValueChange={setSelectedDayId} className="flex-1 flex flex-col">
-                <ScrollArea className="w-full whitespace-nowrap pb-2">
-                    <TabsList className="w-full justify-start">
-                        {trip.days.map((day, index) => (
-                            <TabsTrigger key={day.id} value={day.id} className="min-w-[100px]">
-                                Day {index + 1}
-                                <span className="ml-2 text-xs text-muted-foreground">
-                                    {new Date(day.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                </span>
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-                </ScrollArea>
+            <Tabs value={selectedDayId} onValueChange={setSelectedDayId} className="flex-1 flex flex-col overflow-hidden">
+                <div className="px-4">
+                    <ScrollArea className="w-full whitespace-nowrap pb-2">
+                        <TabsList className="w-full justify-start">
+                            {trip.days.map((day, index) => (
+                                <TabsTrigger key={day.id} value={day.id} className="min-w-[100px]">
+                                    Day {index + 1}
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                        {new Date(day.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                    </span>
+                                </TabsTrigger>
+                            ))}
+                        </TabsList>
+                    </ScrollArea>
+                </div>
 
                 {trip.days.map((day) => (
-                    <TabsContent key={day.id} value={day.id} className="flex-1 mt-4">
-                        <ScrollArea className="h-[calc(100vh-300px)] pr-4">
-                            {day.items.length === 0 ? (
-                                <div className="text-center py-8 text-muted-foreground">
-                                    No activities for this day.
-                                </div>
-                            ) : (
-                                day.items.map((item) => {
-                                    const place = places.find((p) => p.id === item.placeId);
-                                    return (
-                                        <ActivityCard
-                                            key={item.id}
-                                            item={item}
-                                            place={place}
-                                            onDelete={() => {
-                                                console.log('Delete item', item.id);
-                                            }}
-                                        />
-                                    );
-                                })
-                            )}
-                        </ScrollArea>
+                    <TabsContent key={day.id} value={day.id} className="flex-1 mt-0 overflow-hidden">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full p-4 pt-0">
+                            {/* Left: Activity List */}
+                            <ScrollArea className="h-full pr-4">
+                                {day.items.length === 0 ? (
+                                    <div className="text-center py-8 text-muted-foreground">
+                                        No activities for this day.
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {day.items.map((item) => {
+                                            const place = places.find((p) => p.id === item.placeId);
+                                            return (
+                                                <ActivityCard
+                                                    key={item.id}
+                                                    item={item}
+                                                    place={place}
+                                                    onDelete={() => {
+                                                        console.log('Delete item', item.id);
+                                                    }}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </ScrollArea>
+
+                            {/* Right: Map */}
+                            <div className="hidden lg:block h-full rounded-lg overflow-hidden border bg-muted relative">
+                                {day.items.length > 0 ? (
+                                    <RouteMap
+                                        startLocation={trip.destination}
+                                        segments={getDaySegments(day.items)}
+                                        animate={false}
+                                    />
+                                ) : (
+                                    <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                                        Add activities to see the route map
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </TabsContent>
                 ))}
             </Tabs>
