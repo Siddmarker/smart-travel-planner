@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Script from 'next/script';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -21,9 +21,36 @@ declare global {
 export function GoogleAuthButton({ isLoading, mode = 'signin' }: GoogleAuthButtonProps) {
     const buttonRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
+    const [debugInfo, setDebugInfo] = useState<string>('');
+    const [clientId, setClientId] = useState<string>('');
+
+    useEffect(() => {
+        // Get client ID from environment
+        const envClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
+        console.log('🔍 Google OAuth Debug Info:');
+        console.log('1. Client ID exists:', !!envClientId);
+        console.log('2. Client ID value:', envClientId?.substring(0, 30) + '...');
+        console.log('3. Client ID length:', envClientId?.length);
+        console.log('4. NODE_ENV:', process.env.NODE_ENV);
+
+        if (!envClientId) {
+            const errorMsg = '❌ NEXT_PUBLIC_GOOGLE_CLIENT_ID is not set in environment variables';
+            console.error(errorMsg);
+            setDebugInfo(errorMsg);
+        } else {
+            setClientId(envClientId);
+            setDebugInfo('✅ Client ID loaded');
+        }
+    }, []);
 
     const handleCredentialResponse = async (response: any) => {
-        console.log('Google Auth Response:', response);
+        console.log('🔐 Google Auth Response:', {
+            hasCredential: !!response.credential,
+            credentialLength: response.credential?.length,
+            clientId: response.clientId,
+            select_by: response.select_by
+        });
 
         try {
             const res = await fetch('/api/auth/google', {
@@ -42,29 +69,48 @@ export function GoogleAuthButton({ isLoading, mode = 'signin' }: GoogleAuthButto
                 throw new Error(data.error || 'Authentication failed');
             }
 
-            console.log('Auth success:', data);
+            console.log('✅ Auth success:', data);
 
             // Store basic user info in localStorage for easy access (optional, as cookie handles auth)
             localStorage.setItem('user_info', JSON.stringify(data.user));
 
             // Redirect
-            router.push('/discover'); // Or dashboard
+            router.push('/discover');
             router.refresh();
 
         } catch (error) {
-            console.error('Google auth failed:', error);
+            console.error('❌ Google auth failed:', error);
             alert('Login failed. Please try again.');
         }
     };
 
     const initializeGoogleSignIn = () => {
-        if (window.google?.accounts?.id) {
+        console.log('🚀 Initializing Google Sign-In...');
+
+        if (!clientId) {
+            console.error('❌ Cannot initialize: Client ID is missing');
+            setDebugInfo('❌ Client ID is missing. Check environment variables.');
+            return;
+        }
+
+        if (!window.google?.accounts?.id) {
+            console.error('❌ Google SDK not loaded');
+            setDebugInfo('❌ Google SDK not loaded');
+            return;
+        }
+
+        try {
+            console.log('✅ Initializing with client_id:', clientId.substring(0, 30) + '...');
+
             window.google.accounts.id.initialize({
-                client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '', // Ensure this env var is exposed
+                client_id: clientId,
                 callback: handleCredentialResponse,
                 auto_select: false,
-                cancel_on_tap_outside: true
+                cancel_on_tap_outside: true,
+                context: 'signin'
             });
+
+            console.log('✅ Google OAuth initialized successfully');
 
             if (buttonRef.current) {
                 window.google.accounts.id.renderButton(
@@ -74,10 +120,15 @@ export function GoogleAuthButton({ isLoading, mode = 'signin' }: GoogleAuthButto
                         size: 'large',
                         type: 'standard',
                         text: mode === 'signin' ? 'signin_with' : 'signup_with',
-                        width: '100%'
+                        width: buttonRef.current.offsetWidth || 300
                     }
                 );
+                console.log('✅ Google button rendered');
+                setDebugInfo('✅ Google Sign-In ready');
             }
+        } catch (error) {
+            console.error('❌ Failed to initialize Google Sign-In:', error);
+            setDebugInfo('❌ Initialization failed: ' + (error as Error).message);
         }
     };
 
@@ -86,16 +137,35 @@ export function GoogleAuthButton({ isLoading, mode = 'signin' }: GoogleAuthButto
             <Script
                 src="https://accounts.google.com/gsi/client"
                 strategy="afterInteractive"
-                onLoad={initializeGoogleSignIn}
+                onLoad={() => {
+                    console.log('✅ Google SDK script loaded');
+                    initializeGoogleSignIn();
+                }}
+                onError={() => {
+                    console.error('❌ Failed to load Google SDK script');
+                    setDebugInfo('❌ Failed to load Google SDK');
+                }}
             />
-            <div className="w-full">
+            <div className="w-full space-y-2">
                 {/* Native Google Button Container */}
-                <div ref={buttonRef} className="w-full flex justify-center" />
+                <div ref={buttonRef} className="w-full flex justify-center min-h-[44px]" />
 
-                {/* Fallback or loading state if needed */}
-                {!buttonRef.current && (
-                    <div className="text-center text-sm text-muted-foreground mt-2">
-                        Loading Google Sign-In...
+                {/* Debug info in development */}
+                {process.env.NODE_ENV === 'development' && debugInfo && (
+                    <div className="text-xs text-center text-muted-foreground">
+                        {debugInfo}
+                    </div>
+                )}
+
+                {/* Fallback button if Google button doesn't render */}
+                {!clientId && (
+                    <div className="text-center p-4 border border-destructive rounded-md bg-destructive/10">
+                        <p className="text-sm text-destructive font-medium">
+                            Google Sign-In Configuration Error
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Please contact support or try again later.
+                        </p>
                     </div>
                 )}
             </div>
