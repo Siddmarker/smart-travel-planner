@@ -35,19 +35,24 @@ export interface TripPreferences {
 }
 
 const AVAILABLE_CATEGORIES: { id: TripCategory; label: string; icon: string }[] = [
-    { id: 'hiking', label: 'Hiking', icon: '🥾' },
+    { id: 'trekking', label: 'Trekking', icon: '🥾' },
     { id: 'food', label: 'Food', icon: '🍕' },
-    { id: 'culture', label: 'Culture', icon: '🏛️' },
+    { id: 'cultural', label: 'Culture', icon: '🏛️' },
     { id: 'shopping', label: 'Shopping', icon: '🛍️' },
-    { id: 'nature', label: 'Nature', icon: '🌳' },
+    { id: 'scenic_drives', label: 'Scenic Drives', icon: '🌳' },
     { id: 'adventure', label: 'Adventure', icon: '🧗' },
-    { id: 'relaxation', label: 'Relaxation', icon: '🧘' },
+    { id: 'beaches', label: 'Beaches', icon: '🏖️' },
+    { id: 'nightlife', label: 'Nightlife', icon: '🎉' },
+    { id: 'historical', label: 'Historical', icon: '🏰' },
+    { id: 'wildlife', label: 'Wildlife', icon: '🦁' },
+    { id: 'religious', label: 'Religious', icon: '🕌' },
+    { id: 'markets', label: 'Markets', icon: '🛒' },
 ];
 
 export function PreferencesModal({ isOpen, onOpenChange, onSubmit, initialPreferences }: PreferencesModalProps) {
     const [budget, setBudget] = useState<'low' | 'medium' | 'high'>('medium');
     const [minRating, setMinRating] = useState<string>('4');
-    const [selectedCategories, setSelectedCategories] = useState<TripCategory[]>(['food', 'culture', 'nature']);
+    const [selectedCategories, setSelectedCategories] = useState<TripCategory[]>(['food', 'cultural', 'scenic_drives']);
     const [dietary, setDietary] = useState<string[]>([]);
     const [difficulty, setDifficulty] = useState<'easy' | 'moderate' | 'hard'>('moderate');
 
@@ -83,7 +88,7 @@ export function PreferencesModal({ isOpen, onOpenChange, onSubmit, initialPrefer
             minRating: Number(minRating),
             categories: selectedCategories,
             dietary: selectedCategories.includes('food') ? dietary : undefined,
-            difficulty: selectedCategories.includes('hiking') ? difficulty : undefined,
+            difficulty: selectedCategories.includes('trekking') ? difficulty : undefined,
         });
         onOpenChange(false);
     };
@@ -167,10 +172,10 @@ export function PreferencesModal({ isOpen, onOpenChange, onSubmit, initialPrefer
                         </div>
                     )}
 
-                    {/* Dynamic Filters: Hiking */}
-                    {selectedCategories.includes('hiking') && (
+                    {/* Dynamic Filters: Trekking */}
+                    {selectedCategories.includes('trekking') && (
                         <div className="space-y-2 border-t pt-4">
-                            <Label>🥾 Hiking Difficulty</Label>
+                            <Label>🥾 Trekking Difficulty</Label>
                             <Select value={difficulty} onValueChange={(v: any) => setDifficulty(v)}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select difficulty" />
