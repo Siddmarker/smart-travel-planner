@@ -68,20 +68,63 @@ export function GoogleAuthButton({
     };
 
     useEffect(() => {
-        if (window.google) {
+        // Check if Google Identity Services is already loaded
+        if (window.google?.accounts?.id) {
+            console.log('✅ Google Identity Services already loaded');
             setIsGoogleLoaded(true);
-        } else {
-            const script = document.createElement('script');
-            script.src = 'https://accounts.google.com/gsi/client';
-            script.async = true;
-            script.defer = true;
-            script.onload = () => setIsGoogleLoaded(true);
-            document.head.appendChild(script);
+            return;
         }
+
+        const apiKey = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+        if (!apiKey) {
+            console.error('Google Client ID is missing');
+            return;
+        }
+
+        console.log('🔄 Loading Google Identity Services...');
+
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+
+        script.onload = () => {
+            console.log('✅ Google Identity Services script loaded');
+            // Add a small delay to ensure everything is initialized
+            setTimeout(() => {
+                if (window.google?.accounts?.id) {
+                    console.log('✅ Google accounts.id is now available');
+                    setIsGoogleLoaded(true);
+                } else {
+                    console.error('❌ Google accounts.id still not available after load');
+                }
+            }, 100);
+        };
+
+        script.onerror = (error) => {
+            console.error('❌ Failed to load Google Identity Services:', error);
+        };
+
+        document.head.appendChild(script);
+
+        return () => {
+            // Cleanup
+            if (script.parentNode) {
+                script.parentNode.removeChild(script);
+            }
+        };
     }, []);
 
     useEffect(() => {
-        if (isGoogleLoaded && clientId && window.google) {
+        if (isGoogleLoaded && clientId) {
+            console.log('🔄 Initializing Google button...');
+
+            // Double-check that google.accounts.id exists
+            if (!window.google?.accounts?.id) {
+                console.error('❌ Google accounts.id is not available for initialization');
+                return;
+            }
+
             try {
                 window.google.accounts.id.initialize({
                     client_id: clientId,
@@ -100,13 +143,18 @@ export function GoogleAuthButton({
                         }
                     );
                 }
+
+                console.log('✅ Google button initialized successfully');
             } catch (error) {
-                console.error('Google button initialization failed:', error);
+                console.error('❌ Google button initialization failed:', error);
             }
         }
     }, [isGoogleLoaded, clientId, mode]);
 
-    if (!clientId) return null;
+    if (!clientId) {
+        console.warn('Google Client ID is missing');
+        return null;
+    }
 
     return (
         <div className="w-full flex flex-col items-center justify-center space-y-2">
@@ -116,6 +164,13 @@ export function GoogleAuthButton({
                 </div>
             )}
             <div id="googleSignInContainer" className="min-h-[50px]"></div>
+
+            {/* Debug info - remove in production */}
+            {process.env.NODE_ENV === 'development' && (
+                <div style={{ fontSize: '12px', color: '#666', marginTop: '10px' }}>
+                    Google Loaded: {isGoogleLoaded ? '✅' : '❌'}
+                </div>
+            )}
         </div>
     );
 }
