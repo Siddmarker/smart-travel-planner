@@ -59,97 +59,107 @@ export function DiscoveryWidget() {
     };
 
     return (
-        <Card className="w-full">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Compass className="h-5 w-5" />
-                    Discover New Places
-                </CardTitle>
-                <CardDescription>Explore amazing destinations around you</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {/* Location & Radius */}
-                <div className="flex gap-2">
-                    <div className="flex items-center gap-2 flex-1">
-                        <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        <Input
-                            placeholder="Enter location"
-                            value={location}
-                            onChange={(e) => setLocation(e.target.value)}
-                            className="flex-1"
-                        />
+        <Card className="w-full border-none shadow-none bg-transparent">
+            <div className="search-hero mb-8 relative overflow-hidden">
+                <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1200&q=80')] bg-cover bg-center opacity-10 mix-blend-overlay"></div>
+                <div className="relative z-10">
+                    <div className="mb-6 text-white">
+                        <h2 className="text-3xl font-bold mb-2">Discover Your Next Adventure</h2>
+                        <p className="text-blue-50 text-lg">Explore amazing destinations around you</p>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Within:</span>
-                        <div className="flex items-center gap-1">
-                            <Input
+                    <div className="bg-white/20 backdrop-blur-md p-2 rounded-2xl border border-white/30 flex flex-col md:flex-row gap-2">
+                        <div className="flex-1 relative">
+                            <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+                            <input
+                                placeholder="Where do you want to go?"
+                                value={location}
+                                onChange={(e) => setLocation(e.target.value)}
+                                className="w-full pl-12 pr-4 py-4 bg-white rounded-xl border-none focus:ring-2 focus:ring-blue-400 text-slate-900 placeholder:text-slate-400 text-lg shadow-sm transition-all"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 bg-white rounded-xl px-4 py-2 min-w-[140px]">
+                            <span className="text-sm text-slate-500 whitespace-nowrap">Radius:</span>
+                            <input
                                 type="number"
                                 min="1"
                                 max="500"
                                 value={radius}
                                 onChange={(e) => {
                                     const val = parseInt(e.target.value);
-                                    if (val >= 1 && val <= 500) {
-                                        setRadius(val);
-                                    }
+                                    if (val >= 1 && val <= 500) setRadius(val);
                                 }}
-                                className="w-[80px] h-8 text-sm"
+                                className="w-full bg-transparent border-none focus:ring-0 text-slate-900 font-medium"
                             />
-                            <span className="text-sm text-muted-foreground">km</span>
+                            <span className="text-sm text-slate-500">km</span>
                         </div>
+                        <Button size="lg" className="h-auto py-3 px-8 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-lg shadow-blue-900/20 transition-all hover:scale-105">
+                            Search
+                        </Button>
                     </div>
                 </div>
+            </div>
 
+            <CardContent className="space-y-6 p-0">
                 {/* Trending Places */}
                 <div>
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-4 px-1">
                         <div className="flex items-center gap-2">
-                            <TrendingUp className="h-4 w-4 text-orange-500" />
-                            <h4 className="font-medium">Trending near you</h4>
+                            <div className="p-1.5 bg-orange-100 text-orange-600 rounded-lg">
+                                <TrendingUp className="h-5 w-5" />
+                            </div>
+                            <h4 className="font-bold text-xl text-slate-800 dark:text-white">Trending near you</h4>
                         </div>
                         {currentUser && (
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-8 text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20"
                                 onClick={handleAiSuggest}
                                 disabled={aiLoading}
                             >
-                                <Sparkles className="h-3 w-3 mr-1" />
+                                <Sparkles className="h-4 w-4 mr-2" />
                                 {aiLoading ? 'Thinking...' : 'Ask AI'}
                             </Button>
                         )}
                     </div>
 
                     {loading || aiLoading ? (
-                        <div className="text-center py-4 text-muted-foreground">
+                        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                            <Sparkles className="h-8 w-8 mb-3 animate-pulse text-blue-400" />
                             <p>{aiLoading ? 'AI is finding the best spots for you...' : 'Loading places...'}</p>
                         </div>
                     ) : (
-                        <div className="space-y-2">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {trendingPlaces.map((place) => (
                                 <div
                                     key={place.id}
-                                    className="flex items-center justify-between p-2 rounded-lg hover:bg-accent cursor-pointer transition-colors"
+                                    className="group bg-white dark:bg-slate-800 rounded-2xl p-3 border border-slate-100 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-800 hover:shadow-xl hover:shadow-blue-900/5 transition-all duration-300 cursor-pointer"
                                 >
-                                    <div className="flex-1">
-                                        <p className="font-medium text-sm">{place.name}</p>
-                                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                                            <div className="flex items-center gap-1">
-                                                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                                                <span>{place.rating}</span>
+                                    <div className="h-32 rounded-xl bg-slate-100 dark:bg-slate-700 mb-3 overflow-hidden relative">
+                                        {place.image ? (
+                                            <img src={place.image} alt={place.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                                <MapPin className="h-8 w-8" />
                                             </div>
-                                            <span>•</span>
-                                            <div className="flex items-center gap-1">
+                                        )}
+                                        <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-xs font-bold text-slate-700 shadow-sm">
+                                            {place.rating} ★
+                                        </div>
+                                    </div>
+                                    <div className="px-1">
+                                        <h5 className="font-bold text-slate-900 dark:text-white truncate mb-1">{place.name}</h5>
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                                                 <MapPin className="h-3 w-3" />
                                                 <span>{calculateDistance(place.lat, place.lng)} km</span>
                                             </div>
+                                            <Badge variant="secondary" className="text-[10px] px-2 h-5 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 border-none">
+                                                {place.category}
+                                            </Badge>
                                         </div>
                                     </div>
-                                    <Badge variant="outline" className="text-xs">
-                                        {place.category}
-                                    </Badge>
                                 </div>
                             ))}
                         </div>
@@ -157,9 +167,9 @@ export function DiscoveryWidget() {
                 </div>
 
                 {/* CTA */}
-                <Link href="/discover">
-                    <Button className="w-full" variant="default">
-                        <Compass className="h-4 w-4 mr-2" />
+                <Link href="/discover" className="block">
+                    <Button className="w-full py-6 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-medium shadow-lg transition-all hover:translate-y-[-2px]">
+                        <Compass className="h-5 w-5 mr-2" />
                         Explore All Nearby Places
                     </Button>
                 </Link>

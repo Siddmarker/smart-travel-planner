@@ -121,6 +121,7 @@ export async function searchPlaces(
             };
 
             service.textSearch(request, (results, status) => {
+                console.log(`[GoogleMaps] Search query: "${query}", Status: ${status}, Results: ${results?.length}`);
                 if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
                     const places = results.slice(0, 20).map(convertGooglePlaceToPlace);
                     resolve(places);

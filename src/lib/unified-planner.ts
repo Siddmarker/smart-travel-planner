@@ -1,4 +1,5 @@
-import { Place, UserPreferences, TripCategory, ItineraryItem } from '@/types';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { Place, UserPreferences, TripCategory, ItineraryItem, VotingOption, VotingInterface, DailyVotingOptions } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import { calculateDistance, estimateTravelTime } from './route-optimizer/distance-matrix';
 import { scoreAndRankPlaces } from './category-scorer';
@@ -35,7 +36,7 @@ export class UnifiedTravelPlanner {
         // PHASE 2: WAIT FOR USER VOTING (External Process)
         // In your app, this is where users actually vote
         // For simulation, we'll auto-resolve votes
-        const votedPlan = this.simulate_voting_resolution(votingInterface, userPreferences);
+        const votedPlan = this.simulate_voting_resolution(votingInterface);
 
         // PHASE 3: POST-VOTING MAP OPTIMIZATION
         const optimizedItinerary = await this.optimize_post_voting_routing(votedPlan, userPreferences);
@@ -50,7 +51,7 @@ export class UnifiedTravelPlanner {
         userPreferences: UserPreferences,
         availablePlaces: Place[],
         categoryPreferences?: { categories: TripCategory[]; priorities?: { [key in TripCategory]?: number } }
-    ): Promise<any> {
+    ): Promise<VotingInterface> {
         // Discover places with advanced filtering
         const rawPlaces = await this.discoverPlacesWithFilters(
             userPreferences,
@@ -62,8 +63,8 @@ export class UnifiedTravelPlanner {
         const durationAdjustment = adjustTripDurationBasedOnPlaces(
             rawPlaces,
             userPreferences.trip_duration,
-            // Assuming destination name is available or we use a generic one
-            "the destination"
+            // Use actual destination name
+            userPreferences.destination.name || "the destination"
         );
 
         // Update preferences with adjusted duration for the rest of the flow
@@ -79,11 +80,11 @@ export class UnifiedTravelPlanner {
         );
 
         // Group by days but DON'T optimize routes yet
-        const dailyVotingOptions: any = {};
+        const dailyVotingOptions: { [day: number]: DailyVotingOptions } = {};
         const usedPlaceIds = new Set<string>();
 
         for (let day = 1; day <= adjustedPreferences.trip_duration; day++) {
-            const dayOptions: any = {};
+            const dayOptions: DailyVotingOptions = {};
 
             for (const timeSlot of ['morning', 'afternoon', 'evening']) {
                 // Get 3 options per time slot, ensuring diversity and time appropriateness
@@ -103,7 +104,7 @@ export class UnifiedTravelPlanner {
                     quality_score: this.calculateRelevanceScore(place, userPreferences.categories),
                     why_recommended: this.generate_voting_recommendation(place, timeSlot),
                     // CRITICAL: No routing info at voting stage
-                    travel_time: place.distance?.duration || null,
+                    travel_time: null,
                     distance_text: place.distance?.text || null,
                     estimated_arrival: null
                 }));
@@ -115,8 +116,8 @@ export class UnifiedTravelPlanner {
             voting_interface: dailyVotingOptions,
             duration_adjustment: durationAdjustment, // Pass this back to UI
             metadata: {
-                total_options: Object.values(dailyVotingOptions).reduce((acc: number, day: any) =>
-                    acc + Object.values(day).reduce((dAcc: number, slot: any) => dAcc + slot.length, 0), 0),
+                total_options: (Object.values(dailyVotingOptions) as DailyVotingOptions[]).reduce((acc: number, day: DailyVotingOptions) =>
+                    acc + Object.values(day).reduce((dAcc: number, slot: VotingOption[]) => dAcc + slot.length, 0), 0),
                 categories_covered: userPreferences.categories,
                 voting_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // Fake deadline
             }
@@ -156,9 +157,11 @@ export class UnifiedTravelPlanner {
         // APPLY ENHANCED FILTERS
 
         // 1. Strict Filtration (Local/Irrelevant removal)
-        // We pass "Destination" as placeholder since we don't have the string name here easily
-        // In a real app, UserPreferences should have destinationName
-        let filteredPlaces = applyEnhancedStrictFiltration(allPlaces, "Destination");
+        // Use actual destination name if available, otherwise fallback to "Destination"
+        const destinationName = userPreferences.destination.name || "Destination";
+        console.log(`[UnifiedPlanner] Filtering ${allPlaces.length} places for destination: "${destinationName}"`);
+        let filteredPlaces = applyEnhancedStrictFiltration(allPlaces, destinationName);
+        console.log(`[UnifiedPlanner] After strict filtration: ${filteredPlaces.length} places`);
 
         // 2. Food Filtration
         const foodPlaces = filteredPlaces.filter(p => p.category === 'food');
@@ -186,20 +189,18 @@ export class UnifiedTravelPlanner {
     /**
      * STEP 2: Resolve voting (in real app, this comes from user votes)
      */
-    public simulate_voting_resolution(votingInterface: any, userPreferences: UserPreferences): any {
+    public simulate_voting_resolution(votingInterface: VotingInterface): any {
         const votedPlan: any = {};
 
         for (const [day, timeSlots] of Object.entries(votingInterface.voting_interface)) {
             const dayPlan: any = {};
-            // @ts-ignore
-            for (const [timeSlot, options] of Object.entries(timeSlots)) {
-                // @ts-ignore
+            const slots = timeSlots as DailyVotingOptions;
+            for (const [timeSlot, options] of Object.entries(slots)) {
                 if (!options || options.length === 0) continue;
 
                 // In real app: Use actual user votes
                 // For simulation: Use quality score + diversity
-                // @ts-ignore
-                const winner = this.select_voting_winner(options, timeSlot);
+                const winner = this.select_voting_winner(options);
                 dayPlan[timeSlot] = winner;
             }
             votedPlan[day] = dayPlan;
@@ -378,7 +379,7 @@ export class UnifiedTravelPlanner {
         return places;
     }
 
-    private optimize_three_place_route(startLocation: Place, places: Place[], timeConstraints: any): Place[] {
+    private optimize_three_place_route(startLocation: Place, places: Place[], timeConstraints: { [key: string]: { preferred_slot: string } }): Place[] {
         const morningPlaces = places.filter(p => timeConstraints[p.id]?.preferred_slot === 'morning');
         const afternoonPlaces = places.filter(p => timeConstraints[p.id]?.preferred_slot === 'afternoon');
         const eveningPlaces = places.filter(p => timeConstraints[p.id]?.preferred_slot === 'evening');
@@ -393,7 +394,7 @@ export class UnifiedTravelPlanner {
         return [...ordered, ...remaining];
     }
 
-    private calculate_constrained_arrival(proposedArrival: Date, timeConstraints: any): Date {
+    private calculate_constrained_arrival(proposedArrival: Date, timeConstraints: { preferred_slot: string }): Date {
         if (!timeConstraints) return proposedArrival;
 
         const preferredSlot = timeConstraints.preferred_slot;
@@ -415,7 +416,7 @@ export class UnifiedTravelPlanner {
     }
 
     private getTimeAppropriatePlaces(places: Place[], timeSlot: string, count: number, usedPlaceIds: Set<string>): Place[] {
-        const timeAppropriateness: any = {
+        const timeAppropriateness: Record<string, { categories: string[], keywords: string[], exclude: string[] }> = {
             'morning': {
                 categories: ['park', 'hiking', 'museum', 'garden', 'religious', 'breakfast', 'nature'],
                 keywords: ['morning', 'sunrise', 'breakfast', 'walk', 'hike', 'museum', 'temple', 'church', 'park'],
@@ -464,7 +465,7 @@ export class UnifiedTravelPlanner {
     }
 
     private generate_voting_recommendation(place: Place, timeSlot: string): string {
-        const reasons: any = {
+        const reasons: Record<string, string[]> = {
             'morning': ['Perfect for a morning start', 'Great breakfast spot', 'Beautiful morning views', 'Peaceful morning atmosphere'],
             'afternoon': ['Ideal for afternoon exploration', 'Great lunch options nearby', 'Perfect for shopping', 'Cultural experience'],
             'evening': ['Amazing sunset views', 'Great dinner atmosphere', 'Vibrant nightlife', 'Perfect way to end the day']
@@ -473,13 +474,13 @@ export class UnifiedTravelPlanner {
         return `${randomReason}. Rated ${place.rating} stars.`;
     }
 
-    private get_time_constraints(timeSlot: string): any {
+    private get_time_constraints(timeSlot: string): { preferred_slot: string } {
         return {
             preferred_slot: timeSlot
         };
     }
 
-    private select_voting_winner(options: any[], timeSlot: string): any {
+    private select_voting_winner(options: VotingOption[]): VotingOption | null {
         if (options.length === 0) return null;
         // Simulate voting: just pick the one with highest quality score
         return options.sort((a, b) => b.quality_score - a.quality_score)[0];

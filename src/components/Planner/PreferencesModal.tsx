@@ -7,14 +7,6 @@ import {
     DialogTitle,
     DialogFooter,
 } from '@/components/ui/dialog';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { TripCategory } from '@/types';
@@ -95,59 +87,61 @@ export function PreferencesModal({ isOpen, onOpenChange, onSubmit, initialPrefer
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>🎯 Customize Your Trip</DialogTitle>
-                    <DialogDescription>
+            <DialogContent className="preferences-modal sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-0 border-none">
+                <div className="modal-header">
+                    <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                        🎯 Customize Your Trip
+                    </DialogTitle>
+                    <DialogDescription className="text-blue-100 mt-2 text-base">
                         Tell us what you like so we can find the best places for you.
                     </DialogDescription>
-                </DialogHeader>
+                </div>
 
-                <div className="grid gap-6 py-4">
+                <div className="p-6 grid gap-8">
                     {/* Budget */}
-                    <div className="space-y-2">
-                        <Label>💰 Budget Level</Label>
-                        <Select value={budget} onValueChange={(v: any) => setBudget(v)}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select budget" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="low">Budget Friendly ($)</SelectItem>
-                                <SelectItem value="medium">Moderate ($$)</SelectItem>
-                                <SelectItem value="high">Luxury ($$$)</SelectItem>
-                            </SelectContent>
-                        </Select>
+                    <div className="space-y-3">
+                        <Label className="text-lg font-semibold text-slate-800">💰 Budget Level</Label>
+                        <div className="grid grid-cols-3 gap-3">
+                            {['low', 'medium', 'high'].map((b) => (
+                                <div
+                                    key={b}
+                                    className={`preference-chip text-center ${budget === b ? 'selected' : ''}`}
+                                    onClick={() => setBudget(b as any)}
+                                >
+                                    {b === 'low' ? 'Budget ($)' : b === 'medium' ? 'Moderate ($$)' : 'Luxury ($$$)'}
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
                     {/* Rating */}
-                    <div className="space-y-2">
-                        <Label>⭐ Minimum Rating</Label>
-                        <Select value={minRating} onValueChange={setMinRating}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select rating" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="3">3+ Stars (Good)</SelectItem>
-                                <SelectItem value="4">4+ Stars (Very Good)</SelectItem>
-                                <SelectItem value="4.5">4.5+ Stars (Excellent)</SelectItem>
-                            </SelectContent>
-                        </Select>
+                    <div className="space-y-3">
+                        <Label className="text-lg font-semibold text-slate-800">⭐ Minimum Rating</Label>
+                        <div className="grid grid-cols-3 gap-3">
+                            {['3', '4', '4.5'].map((r) => (
+                                <div
+                                    key={r}
+                                    className={`preference-chip text-center ${minRating === r ? 'selected' : ''}`}
+                                    onClick={() => setMinRating(r)}
+                                >
+                                    {r}+ Stars
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
                     {/* Categories */}
-                    <div className="space-y-2">
-                        <Label>🎯 Preferred Activities</Label>
-                        <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-3">
+                        <Label className="text-lg font-semibold text-slate-800">🎯 Preferred Activities</Label>
+                        <div className="flex flex-wrap gap-2">
                             {AVAILABLE_CATEGORIES.map(cat => (
-                                <div key={cat.id} className="flex items-center space-x-2">
-                                    <Checkbox
-                                        id={`cat-${cat.id}`}
-                                        checked={selectedCategories.includes(cat.id)}
-                                        onCheckedChange={() => handleCategoryToggle(cat.id)}
-                                    />
-                                    <Label htmlFor={`cat-${cat.id}`} className="cursor-pointer">
-                                        {cat.icon} {cat.label}
-                                    </Label>
+                                <div
+                                    key={cat.id}
+                                    className={`preference-chip flex items-center gap-2 ${selectedCategories.includes(cat.id) ? 'selected' : ''}`}
+                                    onClick={() => handleCategoryToggle(cat.id)}
+                                >
+                                    <span>{cat.icon}</span>
+                                    <span>{cat.label}</span>
                                 </div>
                             ))}
                         </div>
@@ -155,17 +149,16 @@ export function PreferencesModal({ isOpen, onOpenChange, onSubmit, initialPrefer
 
                     {/* Dynamic Filters: Food */}
                     {selectedCategories.includes('food') && (
-                        <div className="space-y-2 border-t pt-4">
-                            <Label>🥗 Dietary Preferences</Label>
+                        <div className="space-y-3 border-t pt-6 slide-in">
+                            <Label className="text-lg font-semibold text-slate-800">🥗 Dietary Preferences</Label>
                             <div className="flex flex-wrap gap-2">
                                 {['Vegetarian', 'Vegan', 'Halal', 'Gluten-Free'].map(opt => (
-                                    <div key={opt} className="flex items-center space-x-2">
-                                        <Checkbox
-                                            id={`diet-${opt}`}
-                                            checked={dietary.includes(opt)}
-                                            onCheckedChange={() => handleDietaryToggle(opt)}
-                                        />
-                                        <Label htmlFor={`diet-${opt}`}>{opt}</Label>
+                                    <div
+                                        key={opt}
+                                        className={`preference-chip ${dietary.includes(opt) ? 'selected' : ''}`}
+                                        onClick={() => handleDietaryToggle(opt)}
+                                    >
+                                        {opt}
                                     </div>
                                 ))}
                             </div>
@@ -174,25 +167,26 @@ export function PreferencesModal({ isOpen, onOpenChange, onSubmit, initialPrefer
 
                     {/* Dynamic Filters: Trekking */}
                     {selectedCategories.includes('trekking') && (
-                        <div className="space-y-2 border-t pt-4">
-                            <Label>🥾 Trekking Difficulty</Label>
-                            <Select value={difficulty} onValueChange={(v: any) => setDifficulty(v)}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select difficulty" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="easy">Easy (Walk in the park)</SelectItem>
-                                    <SelectItem value="moderate">Moderate (Some hills)</SelectItem>
-                                    <SelectItem value="hard">Hard (Challenging terrain)</SelectItem>
-                                </SelectContent>
-                            </Select>
+                        <div className="space-y-3 border-t pt-6 slide-in">
+                            <Label className="text-lg font-semibold text-slate-800">🥾 Trekking Difficulty</Label>
+                            <div className="grid grid-cols-3 gap-3">
+                                {['easy', 'moderate', 'hard'].map((d) => (
+                                    <div
+                                        key={d}
+                                        className={`preference-chip text-center ${difficulty === d ? 'selected' : ''}`}
+                                        onClick={() => setDifficulty(d as any)}
+                                    >
+                                        {d.charAt(0).toUpperCase() + d.slice(1)}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
 
-                <DialogFooter>
-                    <Button onClick={handleSubmit} className="w-full">
-                        Find Places & Start Voting
+                <DialogFooter className="p-6 pt-0">
+                    <Button onClick={handleSubmit} className="w-full py-6 text-lg font-semibold bg-slate-900 hover:bg-blue-600 rounded-xl shadow-lg transition-all hover:scale-[1.02]">
+                        Find Places & Start Voting 🚀
                     </Button>
                 </DialogFooter>
             </DialogContent>

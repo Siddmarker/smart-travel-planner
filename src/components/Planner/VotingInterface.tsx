@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { Place } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MapPin, Star, Clock, ThumbsUp, Check } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { MapPin, Star, ThumbsUp, Check } from 'lucide-react';
 
 export interface VotingOption {
     place: Place;
@@ -77,7 +75,7 @@ export function VotingInterface({ votingData, onVoteComplete, totalDays }: Votin
                             <div
                                 key={i}
                                 className={`h-2 w-8 rounded-full ${i + 1 === currentDay ? 'bg-primary' :
-                                        i + 1 < currentDay ? 'bg-primary/50' : 'bg-muted'
+                                    i + 1 < currentDay ? 'bg-primary/50' : 'bg-muted'
                                     }`}
                             />
                         ))}
@@ -104,13 +102,13 @@ export function VotingInterface({ votingData, onVoteComplete, totalDays }: Votin
                                         const isSelected = selectedOption?.place.id === option.place.id;
 
                                         return (
-                                            <Card
+                                            <div
                                                 key={option.place.id}
-                                                className={`relative overflow-hidden transition-all hover:shadow-md ${isSelected ? 'ring-2 ring-primary border-primary' : ''
-                                                    }`}
+                                                className={`voting-option flex flex-col h-full ${isSelected ? 'selected' : ''}`}
+                                                onClick={() => handleVote(currentDay, slot, option)}
                                             >
                                                 {/* Image Header */}
-                                                <div className="h-32 w-full bg-muted relative">
+                                                <div className="h-40 w-full rounded-xl overflow-hidden mb-4 relative">
                                                     {option.place.image ? (
                                                         <img
                                                             src={option.place.image}
@@ -118,24 +116,24 @@ export function VotingInterface({ votingData, onVoteComplete, totalDays }: Votin
                                                             className="w-full h-full object-cover"
                                                         />
                                                     ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-4xl">
+                                                        <div className="w-full h-full bg-slate-100 flex items-center justify-center text-4xl">
                                                             🏞️
                                                         </div>
                                                     )}
                                                     {option.place.rating && (
-                                                        <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-full text-xs font-bold flex items-center shadow-sm">
+                                                        <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-xs font-bold flex items-center shadow-sm">
                                                             <Star className="w-3 h-3 text-yellow-500 mr-1 fill-yellow-500" />
                                                             {option.place.rating}
                                                         </div>
                                                     )}
                                                 </div>
 
-                                                <CardContent className="p-4">
+                                                <div className="flex-1">
                                                     <div className="mb-2">
-                                                        <h4 className="font-bold line-clamp-1" title={option.place.name}>
+                                                        <h4 className="font-bold text-lg text-slate-800 line-clamp-1" title={option.place.name}>
                                                             {option.place.name}
                                                         </h4>
-                                                        <div className="flex items-center text-xs text-muted-foreground mt-1">
+                                                        <div className="flex items-center text-xs text-slate-500 mt-1">
                                                             <MapPin className="w-3 h-3 mr-1" />
                                                             {option.distance_text ? (
                                                                 <span>{option.distance_text} • {option.travel_time}</span>
@@ -145,35 +143,36 @@ export function VotingInterface({ votingData, onVoteComplete, totalDays }: Votin
                                                         </div>
                                                     </div>
 
-                                                    <div className="text-xs text-muted-foreground mb-3 line-clamp-2 bg-muted/50 p-2 rounded">
-                                                        💡 {option.why_recommended}
+                                                    <div className="text-sm text-slate-600 mb-4 line-clamp-3 bg-slate-50 p-3 rounded-xl italic">
+                                                        "{option.why_recommended}"
                                                     </div>
+                                                </div>
 
-                                                    <div className="flex justify-between items-center mt-4">
-                                                        {option.place.priceLevel !== undefined && (
-                                                            <div className="text-xs font-medium text-muted-foreground">
-                                                                {'💰'.repeat(option.place.priceLevel)}
-                                                            </div>
+                                                <div className="flex justify-between items-center mt-auto pt-4 border-t border-slate-100">
+                                                    {option.place.priceLevel !== undefined && (
+                                                        <div className="text-sm font-medium text-slate-600">
+                                                            {'💰'.repeat(option.place.priceLevel)}
+                                                        </div>
+                                                    )}
+                                                    <button
+                                                        className={`vote-button flex items-center gap-2 ${isSelected ? 'bg-green-500 hover:bg-green-600 shadow-green-500/30' : ''}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleVote(currentDay, slot, option);
+                                                        }}
+                                                    >
+                                                        {isSelected ? (
+                                                            <>
+                                                                <Check className="w-4 h-4" /> Voted
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <ThumbsUp className="w-4 h-4" /> Vote
+                                                            </>
                                                         )}
-                                                        <Button
-                                                            size="sm"
-                                                            variant={isSelected ? "default" : "outline"}
-                                                            className="w-full ml-2"
-                                                            onClick={() => handleVote(currentDay, slot, option)}
-                                                        >
-                                                            {isSelected ? (
-                                                                <>
-                                                                    <Check className="w-4 h-4 mr-1" /> Voted
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <ThumbsUp className="w-4 h-4 mr-1" /> Vote
-                                                                </>
-                                                            )}
-                                                        </Button>
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
+                                                    </button>
+                                                </div>
+                                            </div>
                                         );
                                     })}
                                 </div>

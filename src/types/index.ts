@@ -225,10 +225,17 @@ export interface VotingInterface {
     categories_covered: string[];
     voting_deadline: string;
   };
+  duration_adjustment?: {
+    originalDuration: number;
+    adjustedDuration: number;
+    adjustmentReason: string;
+    totalPlacesFound: number;
+    canExtend: boolean;
+  };
 }
 
 export interface UserPreferences {
-  destination: { lat: number; lng: number };
+  destination: { lat: number; lng: number; name?: string };
   categories: string[];
   trip_duration: number;
   trip_dates: { start: string; end: string };

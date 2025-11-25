@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, CardContent } from '@/components/ui/card';
+import { CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Star, MapPin, Users, Wifi, Coffee } from 'lucide-react';
@@ -27,24 +27,24 @@ export function AccommodationCard({ accommodation, onSelect, viewMode = 'grid' }
     };
 
     return (
-        <Card className={`overflow-hidden hover:shadow-lg transition-shadow cursor-pointer ${isListView ? 'flex' : ''}`}
+        <div className={`place-card cursor-pointer ${isListView ? 'flex' : ''}`}
             onClick={() => onSelect?.(accommodation)}
         >
             {/* Image */}
-            <div className={`relative ${isListView ? 'w-64 h-48' : 'h-48'} bg-gray-200`}>
+            <div className={`card-image ${isListView ? 'w-64 h-full' : ''}`}>
                 <img
                     src={accommodation.images[0]}
                     alt={accommodation.name}
                     className="w-full h-full object-cover"
                 />
                 <div className="absolute top-2 right-2">
-                    <Badge className="bg-white text-black">
+                    <div className="card-badge">
                         {getTypeIcon(accommodation.type)} {accommodation.type}
-                    </Badge>
+                    </div>
                 </div>
                 {accommodation.rating >= 4.5 && (
                     <div className="absolute top-2 left-2">
-                        <Badge className="bg-yellow-500 text-white">
+                        <Badge className="bg-yellow-500 text-white border-none shadow-md">
                             ⭐ Top Rated
                         </Badge>
                     </div>
@@ -52,11 +52,11 @@ export function AccommodationCard({ accommodation, onSelect, viewMode = 'grid' }
             </div>
 
             {/* Content */}
-            <CardContent className={`p-4 ${isListView ? 'flex-1' : ''}`}>
+            <CardContent className={`p-5 ${isListView ? 'flex-1' : ''}`}>
                 <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
-                        <h3 className="font-semibold text-lg line-clamp-1">{accommodation.name}</h3>
-                        <div className="flex items-center text-sm text-muted-foreground mt-1">
+                        <h3 className="font-bold text-xl text-slate-800 dark:text-white line-clamp-1">{accommodation.name}</h3>
+                        <div className="flex items-center text-sm text-slate-500 dark:text-slate-400 mt-1">
                             <MapPin className="h-3 w-3 mr-1" />
                             {accommodation.location.neighborhood}
                         </div>
@@ -64,25 +64,25 @@ export function AccommodationCard({ accommodation, onSelect, viewMode = 'grid' }
                 </div>
 
                 {/* Rating */}
-                <div className="flex items-center gap-2 mb-3">
-                    <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2 mb-4">
+                    <div className="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded-lg">
                         <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                        <span className="font-medium">{accommodation.rating}</span>
+                        <span className="font-bold text-slate-700">{accommodation.rating}</span>
                     </div>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-sm text-slate-400">
                         ({accommodation.reviewCount} reviews)
                     </span>
                 </div>
 
                 {/* Amenities */}
-                <div className="flex flex-wrap gap-1 mb-3">
+                <div className="flex flex-wrap gap-2 mb-4">
                     {accommodation.amenities.slice(0, 3).map((amenity, idx) => (
-                        <Badge key={idx} variant="secondary" className="text-xs">
+                        <Badge key={idx} variant="secondary" className="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 border-none px-2 py-1">
                             {amenity}
                         </Badge>
                     ))}
                     {accommodation.amenities.length > 3 && (
-                        <Badge variant="secondary" className="text-xs">
+                        <Badge variant="secondary" className="text-xs bg-slate-50 text-slate-500 border-none">
                             +{accommodation.amenities.length - 3} more
                         </Badge>
                     )}
@@ -90,33 +90,36 @@ export function AccommodationCard({ accommodation, onSelect, viewMode = 'grid' }
 
                 {/* Description */}
                 {isListView && (
-                    <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+                    <p className="text-sm text-slate-500 line-clamp-2 mb-4">
                         {accommodation.description}
                     </p>
                 )}
 
                 {/* Price and CTA */}
-                <div className="flex items-center justify-between pt-3 border-t">
+                <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
                     <div>
-                        <div className="text-2xl font-bold">
+                        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                             {accommodation.pricing.currency === 'EUR' ? '€' : '$'}
                             {accommodation.pricing.totalPrice}
                         </div>
-                        <div className="text-xs text-muted-foreground">per night</div>
+                        <div className="text-xs text-slate-400">per night</div>
                     </div>
-                    <Button onClick={(e) => {
-                        e.stopPropagation();
-                        onSelect?.(accommodation);
-                    }}>
+                    <Button
+                        className="bg-slate-900 hover:bg-blue-600 text-white rounded-xl shadow-md transition-all hover:scale-105"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onSelect?.(accommodation);
+                        }}>
                         View Details
                     </Button>
                 </div>
 
                 {/* Cancellation Policy */}
-                <div className="mt-2 text-xs text-green-600">
-                    ✓ {accommodation.cancellationPolicy}
+                <div className="mt-3 text-xs text-green-600 font-medium flex items-center">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 mr-2" />
+                    {accommodation.cancellationPolicy}
                 </div>
             </CardContent>
-        </Card>
+        </div>
     );
 }

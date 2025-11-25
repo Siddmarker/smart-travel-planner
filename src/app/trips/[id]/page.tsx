@@ -16,15 +16,8 @@ import { InviteLink } from '@/components/InviteLink';
 export default function TripPage() {
     const params = useParams();
     const { trips } = useStore();
-    const [trip, setTrip] = useState<Trip | null>(null);
+    const trip = trips.find((t) => t.id === params.id) || null;
     const [places, setPlaces] = useState<Place[]>([]);
-
-    useEffect(() => {
-        if (params.id) {
-            const foundTrip = trips.find((t) => t.id === params.id);
-            setTrip(foundTrip || null);
-        }
-    }, [params.id, trips]);
 
     if (!trip) {
         return <div>Trip not found</div>;
