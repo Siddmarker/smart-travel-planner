@@ -285,3 +285,23 @@ export interface DailyTimeslots {
   afternoon: TimeslotOption[];
   evening: TimeslotOption[];
 }
+
+export interface VotedPlan {
+  [day: number]: {
+    [timeSlot: string]: VotingOption;
+  };
+}
+
+export interface VotedPlaceItem {
+  place: Place;
+  preferred_time_slot: string;
+  time_constraints: {
+    preferred_slot: string;
+  };
+}
+
+export interface TimeConstraints {
+  [placeId: string]: {
+    preferred_slot: string;
+  };
+}
