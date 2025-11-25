@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function LoginPage() {
     const router = useRouter();
-    const { login, loginWithGoogle } = useStore();
+    const { login } = useStore();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -36,36 +36,22 @@ export default function LoginPage() {
         }
     };
 
-    const handleGoogleLogin = async () => {
-        setError('');
-        setIsLoading(true);
-
-        try {
-            await loginWithGoogle();
-            router.push('/');
-        } catch (err: any) {
-            setError(err.message || 'Google login failed');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 p-4">
-            <Card className="w-full max-w-md">
-                <CardHeader className="space-y-1 text-center">
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+            <Card className="w-full max-w-md shadow-lg border-0">
+                <CardHeader className="space-y-1 text-center pb-8">
                     <div className="flex justify-center mb-4">
-                        <div className="h-12 w-12 bg-primary rounded-full flex items-center justify-center">
-                            <Plane className="h-6 w-6 text-primary-foreground" />
+                        <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center">
+                            <Plane className="h-6 w-6 text-primary" />
                         </div>
                     </div>
-                    <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
+                    <CardTitle className="text-2xl font-bold tracking-tight">Welcome Back</CardTitle>
                     <CardDescription>
                         Sign in to your 2wards account
                     </CardDescription>
                 </CardHeader>
 
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-6">
                     {error && (
                         <Alert variant="destructive">
                             <AlertCircle className="h-4 w-4" />
@@ -113,7 +99,7 @@ export default function LoginPage() {
                         </Button>
                     </form>
 
-                    <div className="relative">
+                    <div className="relative my-6">
                         <div className="absolute inset-0 flex items-center">
                             <span className="w-full border-t" />
                         </div>
@@ -124,13 +110,12 @@ export default function LoginPage() {
                         </div>
                     </div>
 
-                    <GoogleAuthButton
-                        isLoading={isLoading}
-                        mode="signin"
-                    />
+                    <div className="flex justify-center">
+                        <GoogleAuthButton />
+                    </div>
                 </CardContent>
 
-                <CardFooter className="flex flex-col space-y-2">
+                <CardFooter className="flex flex-col space-y-4 pt-6">
                     <div className="text-sm text-center text-muted-foreground">
                         Don't have an account?{' '}
                         <Link href="/signup" className="text-primary hover:underline font-medium">

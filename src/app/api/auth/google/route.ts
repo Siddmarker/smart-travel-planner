@@ -1,95 +1,59 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { OAuth2Client } from 'google-auth-library';
-import { SignJWT } from 'jose';
-import { cookies } from 'next/headers';
-import { findUserByEmail, createUser, saveUser } from '@/lib/auth';
 
-const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const JWT_SECRET = new TextEncoder().encode(process.env.NEXTAUTH_SECRET || 'fallback_secret_do_not_use_in_production');
+const client = new OAuth2Client(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 
-const client = new OAuth2Client(CLIENT_ID);
-
-export async function POST(req: NextRequest) {
+export async function POST(request: Request) {
     try {
-        const { credential } = await req.json();
+        const body = await request.json();
+        const { credential } = body;
 
         if (!credential) {
-            return NextResponse.json({ error: 'No credential provided' }, { status: 400 });
+            return NextResponse.json(
+                { error: 'No credential provided' },
+                { status: 400 }
+            );
         }
 
-        // Verify the Google token
+        // Verify the token
         const ticket = await client.verifyIdToken({
             idToken: credential,
-            audience: CLIENT_ID,
+            audience: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
         });
 
         const payload = ticket.getPayload();
 
-        if (!payload || !payload.email_verified || !payload.email) {
-            return NextResponse.json({ error: 'Invalid token or email not verified' }, { status: 401 });
+        if (!payload) {
+            throw new Error('Invalid token payload');
         }
 
-        // Check if user exists
-        let user = findUserByEmail(payload.email);
+        // Extract user info from the verified payload
+        const user = {
+            id: payload.sub,
+            email: payload.email,
+            name: payload.name,
+            picture: payload.picture,
+            email_verified: payload.email_verified
+        };
 
-        if (!user) {
-            // Create new user
-            user = createUser(
-                payload.name || 'Google User',
-                payload.email,
-                '' // No password for OAuth
-            );
-            // Update avatar from Google
-            if (payload.picture) {
-                user.avatar = payload.picture;
-                saveUser(user); // Update stored user with avatar
-            }
-        } else {
-            // Update avatar if changed
-            if (payload.picture && user.avatar !== payload.picture) {
-                user.avatar = payload.picture;
-                saveUser(user);
-            }
-        }
-
-        // Generate JWT
-        const token = await new SignJWT({
-            sub: user.id,
-            email: user.email,
-            name: user.name,
-            picture: user.avatar
-        })
-            .setProtectedHeader({ alg: 'HS256' })
-            .setIssuedAt()
-            .setExpirationTime('24h')
-            .sign(JWT_SECRET);
-
-        // Set cookie
-        const cookieStore = await cookies();
-        cookieStore.set('auth_token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            maxAge: 60 * 60 * 24, // 24 hours
-            path: '/',
-            sameSite: 'lax'
-        });
+        // Generate a session token (in a real app, sign a JWT here)
+        const token = `auth-${user.id}-${Date.now()}`;
 
         return NextResponse.json({
             success: true,
-            user: {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                avatar: user.avatar
-            }
+            token: token,
+            user: user,
+            redirectTo: '/dashboard'
         });
 
     } catch (error: any) {
-        console.error('Google auth error:', error);
-        return NextResponse.json({
-            error: 'Authentication failed',
-            details: error.message
-        }, { status: 500 });
+        console.error('Authentication error:', error);
+        return NextResponse.json(
+            {
+                error: 'Authentication failed',
+                details: error.message
+            },
+            { status: 401 }
+        );
     }
 }

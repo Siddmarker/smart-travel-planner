@@ -2,7 +2,6 @@
 
 import { usePathname } from 'next/navigation';
 import { Sidebar } from '@/components/Sidebar';
-import { AuthProvider } from '@/components/Auth/AuthProvider';
 
 const publicRoutes = ['/login', '/signup'];
 
@@ -11,7 +10,7 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
     const isPublicRoute = publicRoutes.includes(pathname);
 
     return (
-        <AuthProvider>
+        <>
             {isPublicRoute ? (
                 // Public routes (login/signup) - no sidebar
                 <div className="h-screen overflow-y-auto bg-background">
@@ -28,6 +27,6 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
                     </main>
                 </div>
             )}
-        </AuthProvider>
+        </>
     );
 }
