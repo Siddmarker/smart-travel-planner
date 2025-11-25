@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useStore } from '@/store/useStore';
+import { setAuthToken } from '@/lib/auth';
 
 declare global {
     interface Window {
@@ -22,6 +24,7 @@ export function GoogleAuthButton({
     const [isGoogleLoaded, setIsGoogleLoaded] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const { login } = useAuth();
+    const { setCurrentUser } = useStore();
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
     const handleCredentialResponse = async (response: any) => {
@@ -36,7 +39,18 @@ export function GoogleAuthButton({
             const data = await authResult.json();
 
             if (data.success) {
+                // Update AuthContext (Legacy/Context)
                 login(data.user, data.token);
+
+                // Update Zustand Store (Main State)
+                setAuthToken(data.user.id);
+                setCurrentUser({
+                    id: data.user.id,
+                    name: data.user.name,
+                    email: data.user.email,
+                    avatar: data.user.picture || data.user.avatar || '',
+                    // Add other required fields if necessary, or cast
+                } as any);
 
                 if (onSuccess) {
                     onSuccess(data.user);
