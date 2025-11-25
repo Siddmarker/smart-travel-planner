@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select as SelectUI, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStore } from '@/store/useStore';
 import { Place, TripCategory } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
@@ -35,6 +36,11 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
     const [showPredictions, setShowPredictions] = useState(false);
     const [aiSuggestions, setAiSuggestions] = useState<Place[]>([]);
     const [aiLoading, setAiLoading] = useState(false);
+
+    // Enhanced Food Preferences
+    const [foodVariety, setFoodVariety] = useState<'high' | 'medium' | 'low'>('medium');
+    const [dietaryOptions, setDietaryOptions] = useState<string[]>(['Non-Vegetarian', 'Egg', 'Vegetarian']);
+    const [selectedCuisines, setSelectedCuisines] = useState<string[]>(['Indian', 'Chinese']);
 
     const { addTrip, currentUser } = useStore();
     const router = useRouter();
@@ -131,6 +137,10 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                 returnToStart,
                 startTime,
                 endTime,
+                // Enhanced preferences
+                foodVariety,
+                dietary: dietaryOptions,
+                cuisines: selectedCuisines
             },
             categoryPreferences: selectedCategories.length > 0 ? {
                 categories: selectedCategories,
@@ -370,6 +380,81 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                         </div>
                     </div>
 
+                    {/* FOOD PREFERENCES SECTION */}
+                    <div className="border-t pt-4 mt-2">
+                        <h4 className="font-medium mb-3 flex items-center gap-2">
+                            <span>🍽️</span> Food Preferences (Multi-day trips)
+                        </h4>
+
+                        {/* Variety Preference */}
+                        <div className="grid gap-2 mb-4">
+                            <Label htmlFor="foodVariety">Food Variety Across Days</Label>
+                            <SelectUI
+                                value={foodVariety}
+                                onValueChange={(val: 'high' | 'medium' | 'low') => setFoodVariety(val)}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select variety preference" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="high">High Variety (Different cuisines each day)</SelectItem>
+                                    <SelectItem value="medium">Medium Variety</SelectItem>
+                                    <SelectItem value="low">Same preferences daily</SelectItem>
+                                </SelectContent>
+                            </SelectUI>
+                        </div>
+
+                        {/* Dietary Options */}
+                        <div className="mb-4">
+                            <Label className="mb-2 block">Dietary Options to Include</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {['Non-Vegetarian', 'Egg', 'Vegetarian', 'Vegan'].map((option) => (
+                                    <div key={option} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`diet-${option}`}
+                                            checked={dietaryOptions.includes(option)}
+                                            onCheckedChange={(checked) => {
+                                                if (checked) {
+                                                    setDietaryOptions([...dietaryOptions, option]);
+                                                } else {
+                                                    setDietaryOptions(dietaryOptions.filter(d => d !== option));
+                                                }
+                                            }}
+                                        />
+                                        <Label htmlFor={`diet-${option}`} className="font-normal cursor-pointer">
+                                            {option}
+                                        </Label>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Cuisines */}
+                        <div>
+                            <Label className="mb-2 block">Preferred Cuisines</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {['Indian', 'Chinese', 'Italian', 'Mexican', 'Continental', 'Thai'].map((cuisine) => (
+                                    <div key={cuisine} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`cuisine-${cuisine}`}
+                                            checked={selectedCuisines.includes(cuisine)}
+                                            onCheckedChange={(checked) => {
+                                                if (checked) {
+                                                    setSelectedCuisines([...selectedCuisines, cuisine]);
+                                                } else {
+                                                    setSelectedCuisines(selectedCuisines.filter(c => c !== cuisine));
+                                                }
+                                            }}
+                                        />
+                                        <Label htmlFor={`cuisine-${cuisine}`} className="font-normal cursor-pointer">
+                                            {cuisine}
+                                        </Label>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
                     <DialogFooter className="mt-4 gap-2 sm:gap-0">
                         <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                             Cancel
@@ -377,7 +462,7 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                         <Button type="submit" className="w-full sm:w-auto">Create Trip</Button>
                     </DialogFooter>
                 </form>
-            </DialogContent>
-        </Dialog>
+            </DialogContent >
+        </Dialog >
     );
 }

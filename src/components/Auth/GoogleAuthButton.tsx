@@ -145,8 +145,12 @@ export function GoogleAuthButton({
                 }
 
                 console.log('✅ Google button initialized successfully');
-            } catch (error) {
+            } catch (error: any) {
                 console.error('❌ Google button initialization failed:', error);
+                // Check for common initialization errors
+                if (error?.message?.includes('origin_mismatch')) {
+                    console.error('⚠️ Origin Mismatch Error: The current domain is not listed in the Google Cloud Console "Authorized JavaScript Origins".');
+                }
             }
         }
     }, [isGoogleLoaded, clientId, mode]);

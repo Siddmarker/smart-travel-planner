@@ -240,6 +240,8 @@ export interface UserPreferences {
   minRating?: number;
   dietary?: string[];
   difficulty?: 'easy' | 'moderate' | 'hard';
+  foodVariety?: 'high' | 'medium' | 'low';
+  cuisines?: string[];
 }
 
 export type TripCategory =

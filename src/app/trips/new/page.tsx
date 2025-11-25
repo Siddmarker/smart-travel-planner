@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Trip, Place } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
-import { Sparkles, MapPin } from 'lucide-react';
+import { Sparkles, MapPin, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 import { autocompletePlace, getPlaceDetails } from '@/lib/googleMapsService';
 import { getDestinationSuggestions } from '@/lib/geminiService';
@@ -30,15 +31,18 @@ export default function NewTripPage() {
     const [showPredictions, setShowPredictions] = useState(false);
     const [aiSuggestions, setAiSuggestions] = useState<Place[]>([]);
     const [aiLoading, setAiLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const handleAiSuggest = async () => {
         if (!currentUser || !('travelPreferences' in currentUser)) return;
         setAiLoading(true);
+        setError(null);
         try {
             const suggestions = await getDestinationSuggestions(currentUser.travelPreferences);
             setAiSuggestions(suggestions);
         } catch (error) {
             console.error('Error getting AI suggestions:', error);
+            setError('Failed to get AI suggestions. Please try again.');
         } finally {
             setAiLoading(false);
         }
@@ -71,34 +75,52 @@ export default function NewTripPage() {
             }
         } catch (error) {
             console.error('Error getting place details:', error);
+            setError('Failed to get place details. Please try selecting the destination again.');
         }
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!currentUser) return;
+        setError(null);
 
-        const newTrip: Trip = {
-            id: uuidv4(),
-            name: formData.name,
-            startDate: formData.startDate,
-            endDate: formData.endDate,
-            destination: {
-                name: formData.destination,
-                lat: destinationCoords.lat,
-                lng: destinationCoords.lng,
-            },
-            participants: [currentUser],
-            days: [],
-            budget: {
-                currency: 'USD',
-                total: 0,
-                spent: 0,
-            },
-        };
+        if (!currentUser) {
+            setError('You must be logged in to create a trip.');
+            return;
+        }
 
-        addTrip(newTrip);
-        router.push(`/trips/${newTrip.id}`);
+        if (!formData.name || !formData.destination || !formData.startDate || !formData.endDate) {
+            setError('Please fill in all fields.');
+            return;
+        }
+
+        try {
+            const newTrip: Trip = {
+                id: uuidv4(),
+                name: formData.name,
+                startDate: formData.startDate,
+                endDate: formData.endDate,
+                destination: {
+                    name: formData.destination,
+                    lat: destinationCoords.lat,
+                    lng: destinationCoords.lng,
+                },
+                participants: [currentUser],
+                days: [],
+                budget: {
+                    currency: 'USD',
+                    total: 0,
+                    spent: 0,
+                },
+            };
+
+            console.log('Creating trip:', newTrip);
+            addTrip(newTrip);
+            console.log('Trip created, navigating...');
+            router.push(`/trips/${newTrip.id}`);
+        } catch (err: any) {
+            console.error('Error creating trip:', err);
+            setError(err.message || 'Failed to create trip. Please try again.');
+        }
     };
 
     return (
@@ -108,6 +130,12 @@ export default function NewTripPage() {
                     <CardTitle>Plan a New Trip</CardTitle>
                 </CardHeader>
                 <CardContent>
+                    {error && (
+                        <Alert variant="destructive" className="mb-4">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    )}
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="name">Trip Name</Label>

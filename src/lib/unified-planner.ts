@@ -9,6 +9,8 @@ import {
     mapCategoryToGoogleType,
     calculateRealDistances
 } from './googleMapsService';
+import { applyEnhancedStrictFiltration, applyEnhancedFoodFiltration } from './place-filtration';
+import { adjustTripDurationBasedOnPlaces } from './smart-duration';
 
 /**
  * FINAL MERGED SYSTEM: Voting → Places → Maps in perfect harmony
@@ -55,6 +57,21 @@ export class UnifiedTravelPlanner {
             availablePlaces
         );
 
+        // SMART DURATION ADJUSTMENT
+        // We use the raw filtered places to determine if the duration is sustainable
+        const durationAdjustment = adjustTripDurationBasedOnPlaces(
+            rawPlaces,
+            userPreferences.trip_duration,
+            // Assuming destination name is available or we use a generic one
+            "the destination"
+        );
+
+        // Update preferences with adjusted duration for the rest of the flow
+        const adjustedPreferences = {
+            ...userPreferences,
+            trip_duration: durationAdjustment.adjustedDuration
+        };
+
         // Enhance with real data (distance from start location)
         const enhancedPlaces = await enhancePlacesWithPhotosAndDistance(
             userPreferences.start_location,
@@ -65,7 +82,7 @@ export class UnifiedTravelPlanner {
         const dailyVotingOptions: any = {};
         const usedPlaceIds = new Set<string>();
 
-        for (let day = 1; day <= userPreferences.trip_duration; day++) {
+        for (let day = 1; day <= adjustedPreferences.trip_duration; day++) {
             const dayOptions: any = {};
 
             for (const timeSlot of ['morning', 'afternoon', 'evening']) {
@@ -96,6 +113,7 @@ export class UnifiedTravelPlanner {
 
         return {
             voting_interface: dailyVotingOptions,
+            duration_adjustment: durationAdjustment, // Pass this back to UI
             metadata: {
                 total_options: Object.values(dailyVotingOptions).reduce((acc: number, day: any) =>
                     acc + Object.values(day).reduce((dAcc: number, slot: any) => dAcc + slot.length, 0), 0),
@@ -116,14 +134,15 @@ export class UnifiedTravelPlanner {
 
         // If we don't have enough places, fetch from API
         if (allPlaces.length < 20 && userPreferences.categories.length > 0) {
-            const destinationName = "Destination"; // Ideally passed in preferences, but we have coords
             // We can reverse geocode or just use the coords for search
+            // For better results, we should ideally use the destination name if available
+            // but we'll stick to category search around the start location/destination
 
             for (const category of userPreferences.categories) {
                 const googleType = mapCategoryToGoogleType(category);
                 const results = await searchPlaces(
                     category, // Query
-                    userPreferences.destination,
+                    userPreferences.start_location, // Use start location as center
                     5000, // Radius
                     googleType
                 );
@@ -134,26 +153,31 @@ export class UnifiedTravelPlanner {
         // Remove duplicates
         allPlaces = Array.from(new Map(allPlaces.map(item => [item.id, item])).values());
 
-        // APPLY ADVANCED FILTERS
-        return allPlaces.filter(place => {
-            // 1. Budget Filter
+        // APPLY ENHANCED FILTERS
+
+        // 1. Strict Filtration (Local/Irrelevant removal)
+        // We pass "Destination" as placeholder since we don't have the string name here easily
+        // In a real app, UserPreferences should have destinationName
+        let filteredPlaces = applyEnhancedStrictFiltration(allPlaces, "Destination");
+
+        // 2. Food Filtration
+        const foodPlaces = filteredPlaces.filter(p => p.category === 'food');
+        const nonFoodPlaces = filteredPlaces.filter(p => p.category !== 'food');
+
+        const enhancedFoodPlaces = applyEnhancedFoodFiltration(foodPlaces, userPreferences);
+
+        filteredPlaces = [...nonFoodPlaces, ...enhancedFoodPlaces];
+
+        // 3. Basic User Preference Filters (Budget, Rating)
+        return filteredPlaces.filter(place => {
+            // Budget Filter
             if (userPreferences.budget && place.priceLevel) {
                 const budgetMap = { 'low': 1, 'medium': 2, 'high': 3 };
                 if (place.priceLevel > budgetMap[userPreferences.budget]) return false;
             }
 
-            // 2. Rating Filter
+            // Rating Filter (Already partially handled by enhanced filters, but keep for custom user pref)
             if (userPreferences.minRating && place.rating < userPreferences.minRating) return false;
-
-            // 3. Category Specific Filters
-            if (place.category === 'food' && userPreferences.dietary && userPreferences.dietary.length > 0) {
-                // This is hard to check without detailed tags, but we can check name/types
-                // For now, let's assume if it matches the query it's fine, or skip strict check
-            }
-
-            if (place.category === 'hiking' && userPreferences.difficulty) {
-                // Again, hard to check difficulty without specific data
-            }
 
             return true;
         });
