@@ -8,7 +8,17 @@ declare global {
     }
 }
 
-export function GoogleAuthButton() {
+interface GoogleAuthButtonProps {
+    mode?: 'signin' | 'signup';
+    onSuccess?: (user: any) => void;
+    onError?: (error: any) => void;
+}
+
+export function GoogleAuthButton({
+    mode = 'signin',
+    onSuccess,
+    onError
+}: GoogleAuthButtonProps) {
     const [isGoogleLoaded, setIsGoogleLoaded] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const { login } = useAuth();
@@ -27,14 +37,31 @@ export function GoogleAuthButton() {
 
             if (data.success) {
                 login(data.user, data.token);
-                window.location.href = data.redirectTo || '/dashboard';
+
+                if (onSuccess) {
+                    onSuccess(data.user);
+                } else {
+                    window.location.href = data.redirectTo || '/dashboard';
+                }
             } else {
-                console.error('Authentication failed:', data.error);
-                alert('Login failed: ' + (data.details || data.error));
+                const errorMsg = data.details || data.error || 'Login failed';
+                console.error('Authentication failed:', errorMsg);
+
+                if (onError) {
+                    onError(errorMsg);
+                } else {
+                    alert('Login failed: ' + errorMsg);
+                }
             }
         } catch (error: any) {
             console.error('Network error:', error);
-            alert('Login failed. Please try again.');
+            const errorMsg = 'Login failed. Please try again.';
+
+            if (onError) {
+                onError(errorMsg);
+            } else {
+                alert(errorMsg);
+            }
         } finally {
             setIsLoading(false);
         }
@@ -65,14 +92,19 @@ export function GoogleAuthButton() {
                 if (container) {
                     window.google.accounts.id.renderButton(
                         container,
-                        { theme: 'outline', size: 'large', text: 'continue_with', width: 300 }
+                        {
+                            theme: 'outline',
+                            size: 'large',
+                            text: mode === 'signup' ? 'signup_with' : 'continue_with',
+                            width: 300
+                        }
                     );
                 }
             } catch (error) {
                 console.error('Google button initialization failed:', error);
             }
         }
-    }, [isGoogleLoaded, clientId]);
+    }, [isGoogleLoaded, clientId, mode]);
 
     if (!clientId) return null;
 
@@ -80,7 +112,7 @@ export function GoogleAuthButton() {
         <div className="w-full flex flex-col items-center justify-center space-y-2">
             {isLoading && (
                 <div className="text-sm text-muted-foreground animate-pulse">
-                    Signing you in...
+                    {mode === 'signup' ? 'Creating your account...' : 'Signing you in...'}
                 </div>
             )}
             <div id="googleSignInContainer" className="min-h-[50px]"></div>

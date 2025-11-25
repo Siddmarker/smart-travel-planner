@@ -157,14 +157,14 @@ export default function SignupPage() {
                                             <div
                                                 key={level}
                                                 className={`h-1 flex-1 rounded ${level <= passwordStrength
-                                                        ? passwordStrength === 1
-                                                            ? 'bg-red-500'
-                                                            : passwordStrength === 2
-                                                                ? 'bg-yellow-500'
-                                                                : passwordStrength === 3
-                                                                    ? 'bg-blue-500'
-                                                                    : 'bg-green-500'
-                                                        : 'bg-gray-200'
+                                                    ? passwordStrength === 1
+                                                        ? 'bg-red-500'
+                                                        : passwordStrength === 2
+                                                            ? 'bg-yellow-500'
+                                                            : passwordStrength === 3
+                                                                ? 'bg-blue-500'
+                                                                : 'bg-green-500'
+                                                    : 'bg-gray-200'
                                                     }`}
                                             />
                                         ))}
@@ -222,8 +222,7 @@ export default function SignupPage() {
                     </div>
 
                     <GoogleAuthButton
-                        onGoogleAuth={handleGoogleSignup}
-                        isLoading={isLoading}
+                        onSuccess={handleGoogleSignup}
                         mode="signup"
                     />
                 </CardContent>
