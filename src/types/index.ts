@@ -69,6 +69,11 @@ export interface Place {
     value: number;
     duration?: string;
   };
+  rawTypes?: string[]; // Raw Google Place types
+  vicinity?: string; // Address/vicinity from Google
+  credibilityScore?: CredibilityScore;
+  photos?: string[];
+  categoryTags?: string[];
 }
 
 export interface PlaceDetails extends Place {
@@ -86,6 +91,43 @@ export interface PlaceDetails extends Place {
   bestTimeToVisit: string;
   tips: string[];
   photos: string[];
+}
+
+export interface FilteredEntity {
+  name: string;
+  filterReason: string;
+  filterLayer: string;
+  credibilityScore?: number;
+}
+
+export interface CredibilityScore {
+  total: number;
+  breakdown: {
+    rating: number;
+    reviewCount: number;
+    typeSpecificity: number;
+    priceLevel: number;
+    photoAvailability: number;
+    nameQuality: number;
+  };
+}
+
+export interface FiltrationMetadata {
+  originalCount: number;
+  filteredCount: number;
+  fakeEntities: FilteredEntity[];
+  filtrationRate: number;
+  layerResults: {
+    basicValidation: number;
+    fakeEntityDetection: number;
+    credibilityScoring: number;
+    categoryValidation: number;
+    destinationRelevance: number;
+  };
+}
+
+export interface DiscoveryFiltrationMetadata extends FiltrationMetadata {
+  // Can add discovery specific fields here if needed
 }
 
 export interface Accommodation {
@@ -300,8 +342,64 @@ export interface VotedPlaceItem {
   };
 }
 
-export interface TimeConstraints {
-  [placeId: string]: {
-    preferred_slot: string;
+[placeId: string]: {
+  preferred_slot: string;
+};
+}
+
+// ==========================================
+// USER SUBMISSION TYPES
+// ==========================================
+
+export type SubmissionStatus = 'pending' | 'approved' | 'rejected' | 'changes_requested';
+
+export interface UserSubmission {
+  id: string;
+  basicInfo: {
+    name: string;
+    category: string;
+    description: string;
+    tags: string[];
   };
+  location: {
+    address: string;
+    city: string;
+    state: string;
+    coordinates: {
+      lat: number;
+      lng: number;
+    };
+  };
+  details: {
+    priceRange: number;
+    dietaryOptions: string[];
+    bestTime: string[];
+    userRating: number;
+  };
+  media: {
+    photos: string[]; // URLs
+    hasPhotos: boolean;
+  };
+  personal: {
+    tip: string;
+    visitDate: string | null;
+    submittedBy: {
+      id: string;
+      name: string;
+      email: string;
+    };
+    submittedAt: string;
+  };
+  status: SubmissionStatus;
+  qualityScore?: number;
+  moderationNotes?: string[];
+}
+
+export interface CommunityPlace extends Place {
+  source: 'community';
+  submittedBy: string;
+  submittedAt: string;
+  upvotes: number;
+  verified: boolean;
+  tags: string[];
 }

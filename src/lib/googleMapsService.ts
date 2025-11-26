@@ -191,7 +191,7 @@ export async function getPlaceDetails(placeId: string): Promise<Place | null> {
 
             const request = {
                 placeId,
-                fields: ['name', 'rating', 'formatted_address', 'geometry', 'photos', 'types', 'price_level', 'user_ratings_total', 'formatted_phone_number', 'website', 'opening_hours'],
+                fields: ['name', 'rating', 'formatted_address', 'geometry', 'photos', 'types', 'price_level', 'user_ratings_total', 'formatted_phone_number', 'website', 'opening_hours', 'vicinity'],
             };
 
             service.getDetails(request, (place, status) => {
@@ -226,6 +226,8 @@ function convertGooglePlaceToPlace(googlePlace: google.maps.places.PlaceResult):
         phoneNumber: googlePlace.formatted_phone_number,
         website: googlePlace.website,
         openingHours: googlePlace.opening_hours?.weekday_text,
+        rawTypes: googlePlace.types || [],
+        vicinity: googlePlace.vicinity || googlePlace.formatted_address || '',
     };
 }
 

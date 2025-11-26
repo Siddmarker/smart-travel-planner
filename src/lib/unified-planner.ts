@@ -10,7 +10,7 @@ import {
     mapCategoryToGoogleType,
     calculateRealDistances
 } from './googleMapsService';
-import { applyEnhancedStrictFiltration, applyEnhancedFoodFiltration } from './place-filtration';
+import { applyAdvancedFakeEntityFiltration, applyEnhancedFoodFiltration } from './place-filtration';
 import { adjustTripDurationBasedOnPlaces } from './smart-duration';
 
 /**
@@ -53,7 +53,7 @@ export class UnifiedTravelPlanner {
         categoryPreferences?: { categories: TripCategory[]; priorities?: { [key in TripCategory]?: number } }
     ): Promise<VotingInterface> {
         // Discover places with advanced filtering
-        const rawPlaces = await this.discoverPlacesWithFilters(
+        const { places: rawPlaces, filtrationMetadata } = await this.discoverPlacesWithFilters(
             userPreferences,
             availablePlaces
         );
@@ -64,7 +64,8 @@ export class UnifiedTravelPlanner {
             rawPlaces,
             userPreferences.trip_duration,
             // Use actual destination name
-            userPreferences.destination.name || "the destination"
+            userPreferences.destination.name || "the destination",
+            filtrationMetadata
         );
 
         // Update preferences with adjusted duration for the rest of the flow
@@ -130,7 +131,7 @@ export class UnifiedTravelPlanner {
     private async discoverPlacesWithFilters(
         userPreferences: UserPreferences,
         existingPlaces: Place[]
-    ): Promise<Place[]> {
+    ): Promise<{ places: Place[], filtrationMetadata: any }> {
         let allPlaces: Place[] = [...existingPlaces];
 
         // If we don't have enough places, fetch from API
@@ -160,19 +161,21 @@ export class UnifiedTravelPlanner {
         // Use actual destination name if available, otherwise fallback to "Destination"
         const destinationName = userPreferences.destination.name || "Destination";
         console.log(`[UnifiedPlanner] Filtering ${allPlaces.length} places for destination: "${destinationName}"`);
-        let filteredPlaces = applyEnhancedStrictFiltration(allPlaces, destinationName);
-        console.log(`[UnifiedPlanner] After strict filtration: ${filteredPlaces.length} places`);
+
+        const { filteredPlaces: strictFilteredPlaces, metadata } = applyAdvancedFakeEntityFiltration(allPlaces, destinationName);
+        console.log(`[UnifiedPlanner] After strict filtration: ${strictFilteredPlaces.length} places`);
+        console.log(`[UnifiedPlanner] Filtration stats:`, metadata);
 
         // 2. Food Filtration
-        const foodPlaces = filteredPlaces.filter(p => p.category === 'food');
-        const nonFoodPlaces = filteredPlaces.filter(p => p.category !== 'food');
+        const foodPlaces = strictFilteredPlaces.filter(p => p.category === 'food');
+        const nonFoodPlaces = strictFilteredPlaces.filter(p => p.category !== 'food');
 
-        const enhancedFoodPlaces = applyEnhancedFoodFiltration(foodPlaces, userPreferences);
+        const { filteredPlaces: enhancedFoodPlaces } = applyEnhancedFoodFiltration(foodPlaces, userPreferences);
 
-        filteredPlaces = [...nonFoodPlaces, ...enhancedFoodPlaces];
+        let filteredPlaces = [...nonFoodPlaces, ...enhancedFoodPlaces];
 
         // 3. Basic User Preference Filters (Budget, Rating)
-        return filteredPlaces.filter(place => {
+        filteredPlaces = filteredPlaces.filter(place => {
             // Budget Filter
             if (userPreferences.budget && place.priceLevel) {
                 const budgetMap = { 'low': 1, 'medium': 2, 'high': 3 };
@@ -184,6 +187,8 @@ export class UnifiedTravelPlanner {
 
             return true;
         });
+
+        return { places: filteredPlaces, filtrationMetadata: metadata };
     }
 
     /**

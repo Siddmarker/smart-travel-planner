@@ -6,11 +6,17 @@ import { DiscoverHeader } from '@/components/Discover/DiscoverHeader';
 import { CategoryGrid } from '@/components/Discover/CategoryGrid';
 import { PlaceList } from '@/components/Discover/PlaceList';
 import { AdvancedFilters } from '@/components/Discover/AdvancedFilters';
+import { FiltrationAnalytics } from '@/components/Discover/FiltrationAnalytics';
+import { CommunityPlaceCard } from '@/components/Discover/CommunityPlaceCard';
+import { PlaceSubmissionModal } from '@/components/Submission/PlaceSubmissionModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Place } from '@/types';
-import { TrendingUp, MapPin, Sparkles } from 'lucide-react';
+import { Place, DiscoveryFiltrationMetadata, CommunityPlace } from '@/types';
+import { TrendingUp, MapPin, Sparkles, PlusCircle } from 'lucide-react';
 import { searchPlaces, searchNearbyPlaces, mapCategoryToGoogleType, searchHiddenGems, searchHikingPlaces, enhancePlacesWithPhotosAndDistance } from '@/lib/googleMapsService';
+import { applyDiscoveryFiltrationPipeline, enhanceDiscoveryPlaces } from '@/lib/discovery-filtration';
 import { smartCategoryFilter } from '@/lib/categoryUtils';
+import { SubmissionService } from '@/lib/submission-service';
+import { Button } from '@/components/ui/button';
 
 export default function DiscoverPage() {
     const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -18,6 +24,9 @@ export default function DiscoverPage() {
     const [nearbyPlacesList, setNearbyPlacesList] = useState<Place[]>([]);
     const [trendingPlacesList, setTrendingPlacesList] = useState<Place[]>([]);
     const [hiddenGemsList, setHiddenGemsList] = useState<Place[]>([]);
+
+    // Community Places State
+    const [communityPlaces, setCommunityPlaces] = useState<CommunityPlace[]>([]);
 
     // Store original generic lists to restore when category is cleared
     const [originalNearby, setOriginalNearby] = useState<Place[]>([]);
@@ -32,6 +41,12 @@ export default function DiscoverPage() {
     // New state for filters
     const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
     const [categoryResults, setCategoryResults] = useState<Place[]>([]);
+
+    // Filtration Metadata State
+    const [filtrationMetadata, setFiltrationMetadata] = useState<DiscoveryFiltrationMetadata | null>(null);
+
+    // Submission Modal State
+    const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
 
     // Initial load - get user location or default to Paris
     useEffect(() => {
@@ -72,15 +87,23 @@ export default function DiscoverPage() {
 
     const fetchPlaces = async (coords: { lat: number; lng: number } | null, radius: number, locationName: string) => {
         setIsLoading(true);
+        setFiltrationMetadata(null); // Reset metadata
         try {
             console.log(`Fetching places for ${locationName}`);
+
+            // Fetch Community Places
+            const community = SubmissionService.getCommunityPlaces();
+            setCommunityPlaces(community);
 
             // 1. Fetch nearby places ONLY if we have coords
             if (coords) {
                 let nearby = await searchNearbyPlaces(coords, radius);
-                nearby = await enhancePlacesWithPhotosAndDistance(coords, nearby);
-                setNearbyPlacesList(nearby);
-                setOriginalNearby(nearby);
+                // Apply filtration to nearby places too
+                const { filteredPlaces, metadata } = applyDiscoveryFiltrationPipeline(nearby, locationName, '');
+                const enhancedNearby = await enhanceDiscoveryPlaces(filteredPlaces, coords);
+
+                setNearbyPlacesList(enhancedNearby);
+                setOriginalNearby(enhancedNearby);
             } else {
                 setNearbyPlacesList([]);
                 setOriginalNearby([]);
@@ -93,25 +116,35 @@ export default function DiscoverPage() {
             console.log('Executing Text Search with query:', trendingBase);
 
             let trending = await searchPlaces(trendingBase, coords || undefined, radius, 'tourist_attraction');
+
+            // Apply Advanced Filtration Pipeline
+            const { filteredPlaces: filteredTrending, metadata } = applyDiscoveryFiltrationPipeline(trending, locationName, 'attractions');
+            setFiltrationMetadata(metadata);
+
+            let enhancedTrending = filteredTrending;
             if (coords) {
-                trending = await enhancePlacesWithPhotosAndDistance(coords, trending);
+                enhancedTrending = await enhanceDiscoveryPlaces(filteredTrending, coords);
             }
-            setTrendingPlacesList(trending);
-            setOriginalTrending(trending);
+
+            setTrendingPlacesList(enhancedTrending);
+            setOriginalTrending(enhancedTrending);
 
             // Fetch hidden gems
             if (coords) {
                 let hidden = await searchHiddenGems(coords, radius);
-                hidden = await enhancePlacesWithPhotosAndDistance(coords, hidden);
-                setHiddenGemsList(hidden);
-                setOriginalHidden(hidden);
+                // Apply filtration to hidden gems
+                const { filteredPlaces: filteredHidden } = applyDiscoveryFiltrationPipeline(hidden, locationName, '');
+                const enhancedHidden = await enhanceDiscoveryPlaces(filteredHidden, coords);
+
+                setHiddenGemsList(enhancedHidden);
+                setOriginalHidden(enhancedHidden);
             } else {
                 setHiddenGemsList([]);
                 setOriginalHidden([]);
             }
 
             // Initialize filtered places with trending
-            setFilteredPlaces(trending);
+            setFilteredPlaces(enhancedTrending);
         } catch (error) {
             console.error('Error fetching places:', error);
         } finally {
@@ -122,6 +155,7 @@ export default function DiscoverPage() {
     const handleCategorySelect = async (categoryId: string) => {
         setSelectedCategory(categoryId);
         setActiveFilters({}); // Reset filters on category change
+        setFiltrationMetadata(null);
 
         if (!categoryId) {
             // No category selected, show all original trending
@@ -154,11 +188,17 @@ export default function DiscoverPage() {
                 }
             }
 
+            // Apply Advanced Filtration Pipeline
+            const { filteredPlaces, metadata } = applyDiscoveryFiltrationPipeline(results, currentLocationName, categoryId);
+            setFiltrationMetadata(metadata);
+
             // Enhance with distance and photos if we have coords
-            if (locationCoords && results.length > 0) {
-                results = await enhancePlacesWithPhotosAndDistance(locationCoords, results);
-                // Sort by distance
-                results.sort((a, b) => (a.distance?.value || 0) - (b.distance?.value || 0));
+            if (locationCoords && filteredPlaces.length > 0) {
+                results = await enhanceDiscoveryPlaces(filteredPlaces, locationCoords);
+                // Sort by credibility score then distance
+                results.sort((a, b) => (b.credibilityScore?.total || 0) - (a.credibilityScore?.total || 0));
+            } else {
+                results = filteredPlaces;
             }
 
             setCategoryResults(results); // Store base results for re-filtering
@@ -239,6 +279,7 @@ export default function DiscoverPage() {
         if (!query) return;
 
         setIsLoading(true);
+        setFiltrationMetadata(null);
         try {
             // Construct smart query
             const { query: smartQuery, type } = constructSmartQuery(query);
@@ -250,7 +291,17 @@ export default function DiscoverPage() {
             console.log('Searching with smart query:', fullQuery, 'Type:', type);
 
             const results = await searchPlaces(fullQuery, locationCoords || undefined, currentRadius, type);
-            setFilteredPlaces(results);
+
+            // Apply Advanced Filtration
+            const { filteredPlaces, metadata } = applyDiscoveryFiltrationPipeline(results, currentLocationName, '');
+            setFiltrationMetadata(metadata);
+
+            let enhancedResults = filteredPlaces;
+            if (locationCoords) {
+                enhancedResults = await enhanceDiscoveryPlaces(filteredPlaces, locationCoords);
+            }
+
+            setFilteredPlaces(enhancedResults);
             setSelectedCategory(''); // Clear category selection on search
         } catch (error) {
             console.error('Error searching:', error);
@@ -274,9 +325,14 @@ export default function DiscoverPage() {
     return (
         <div className="container mx-auto p-6 max-w-7xl">
             {/* Header */}
-            <div className="mb-6">
-                <h1 className="text-3xl font-bold mb-2">Discover Places</h1>
-                <p className="text-muted-foreground">Explore amazing destinations and activities around you</p>
+            <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold mb-2">Discover Places</h1>
+                    <p className="text-muted-foreground">Explore amazing destinations and activities around you</p>
+                </div>
+                <Button onClick={() => setIsSubmissionModalOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add New Place
+                </Button>
             </div>
 
             {/* Search & Filters */}
@@ -302,6 +358,16 @@ export default function DiscoverPage() {
                 <AdvancedFilters
                     category={selectedCategory}
                     onFilterChange={handleFilterChange}
+                />
+            )}
+
+            {/* Filtration Analytics */}
+            {filtrationMetadata && (
+                <FiltrationAnalytics
+                    originalCount={filtrationMetadata.originalCount}
+                    filteredCount={filtrationMetadata.filteredCount}
+                    filtrationRate={filtrationMetadata.filtrationRate}
+                    isVisible={true}
                 />
             )}
 
@@ -333,11 +399,25 @@ export default function DiscoverPage() {
                             {isLoading ? (
                                 <div className="flex justify-center p-8">Loading...</div>
                             ) : (
-                                <PlaceList
-                                    places={selectedCategory ? filteredPlaces : trendingPlacesList}
-                                    onAddToTrip={handleAddToTrip}
-                                    onSavePlace={handleSavePlace}
-                                />
+                                <div className="space-y-4">
+                                    {/* Community Places First */}
+                                    {communityPlaces.length > 0 && (
+                                        <div className="mb-6">
+                                            <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Community Picks</h3>
+                                            <div className="grid gap-4">
+                                                {communityPlaces.map(place => (
+                                                    <CommunityPlaceCard key={place.id} place={place} onAddToTrip={handleAddToTrip as any} />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <PlaceList
+                                        places={selectedCategory ? filteredPlaces : trendingPlacesList}
+                                        onAddToTrip={handleAddToTrip}
+                                        onSavePlace={handleSavePlace}
+                                    />
+                                </div>
                             )}
                         </CardContent>
                     </Card>
@@ -385,6 +465,12 @@ export default function DiscoverPage() {
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* Submission Modal */}
+            <PlaceSubmissionModal
+                isOpen={isSubmissionModalOpen}
+                onClose={() => setIsSubmissionModalOpen(false)}
+            />
         </div>
     );
 }

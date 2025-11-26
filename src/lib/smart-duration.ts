@@ -12,13 +12,17 @@ export interface DurationAdjustment {
 export function adjustTripDurationBasedOnPlaces(
     discoveredPlaces: Place[],
     requestedDuration: number,
-    destination: string
+    destination: string,
+    filtrationMetadata?: { originalCount: number, filteredCount: number, fakeEntities: any[] }
 ): DurationAdjustment {
     const totalQualityPlaces = discoveredPlaces.length;
 
+    // Calculate fake entity stats if available
+    const fakeEntityCount = filtrationMetadata ? filtrationMetadata.fakeEntities.length : 0;
+    const filtrationRate = filtrationMetadata ? ((fakeEntityCount / filtrationMetadata.originalCount) * 100).toFixed(0) : '0';
+
     // CALCULATE OPTIMAL DURATION BASED ON PLACE DENSITY
     // We assume a relaxed pace of ~4 major places per day (Morning, Afternoon, Evening + Food)
-    // But since 'discoveredPlaces' might include food, let's say 4 items total per day is a good metric for "quality" days.
     const placesPerDay = 4;
     const maxSustainableDays = Math.floor(totalQualityPlaces / placesPerDay);
 
@@ -27,26 +31,20 @@ export function adjustTripDurationBasedOnPlaces(
 
     if (maxSustainableDays < requestedDuration) {
         // If we don't have enough places for the requested duration
-        // e.g. requested 3 days (needs 12 places), found 8 places -> max 2 days
         adjustedDuration = Math.max(1, maxSustainableDays); // Minimum 1 day
 
         if (adjustedDuration < requestedDuration) {
-            adjustmentReason = `As there are limited quality places in ${destination} for a ${requestedDuration}-day trip, we recommend a ${adjustedDuration}-day itinerary to keep it engaging.`;
+            adjustmentReason = `Filtered ${fakeEntityCount} non-tourist entities (${filtrationRate}%). ${destination} has limited verified attractions for ${requestedDuration} days. Showing optimized ${adjustedDuration}-day itinerary.`;
         } else {
-            // Should not happen given the if condition, but fallback
-            adjustmentReason = `Optimized for ${adjustedDuration} days.`;
+            adjustmentReason = `Optimized for ${adjustedDuration} days based on verified places.`;
         }
     } else if (maxSustainableDays > requestedDuration) {
         // Can suggest longer trip if plenty of places
-        // We won't force extension, but we can suggest it or just note it.
-        // The requirement says "Extended to X days", so let's be proactive if it's significantly more.
-
-        // Only extend if we have A LOT more places (e.g. double what's needed)
         if (maxSustainableDays >= requestedDuration + 2) {
             adjustedDuration = Math.min(requestedDuration + 1, maxSustainableDays);
-            adjustmentReason = `We found many great places! Extended to ${adjustedDuration} days to cover more of ${destination}.`;
+            adjustmentReason = `Found ${totalQualityPlaces} high-quality verified places! Extended to ${adjustedDuration} days to cover more.`;
         } else {
-            adjustmentReason = `Perfect! ${requestedDuration} day itinerary for ${destination}.`;
+            adjustmentReason = `Perfect! ${requestedDuration} day itinerary with ${totalQualityPlaces} verified places in ${destination}.`;
         }
     } else {
         adjustmentReason = `Perfect! ${requestedDuration} day itinerary for ${destination}.`;
