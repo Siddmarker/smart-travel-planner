@@ -1,38 +1,57 @@
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { HeroSection } from '@/components/LandingPage/HeroSection';
+import { PremiumHeroSection } from '@/components/LandingPage/PremiumHeroSection';
 import { FeaturesShowcase } from '@/components/LandingPage/FeaturesShowcase';
 import { HowItWorksSection } from '@/components/LandingPage/HowItWorksSection';
-import { PricingSection } from '@/components/LandingPage/PricingSection';
+import { FinalCTASection } from '@/components/LandingPage/FinalCTASection';
 
 export default function LandingPage() {
   const { user } = useAuth();
 
   return (
-    <div className="min-h-screen bg-background">
-      <HeroSection user={user} />
+    <div className="min-h-screen bg-background premium-theme">
+      <PremiumHeroSection user={user} />
       <FeaturesShowcase />
       <HowItWorksSection />
-      <PricingSection />
+      <FinalCTASection user={user} />
 
       {/* Footer / Final CTA */}
       <footer className="bg-gray-900 text-white py-12">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-6">Ready to start your adventure?</h2>
-          <p className="text-gray-400 mb-8 max-w-2xl mx-auto">
-            Join thousands of travelers who are planning smarter, better trips with our AI-powered platform.
-          </p>
-          <div className="flex justify-center gap-4">
-            <button className="px-8 py-3 bg-blue-600 rounded-full font-bold hover:bg-blue-700 transition-colors" onClick={() => window.location.href = '/signup'}>
-              Get Started Free
-            </button>
-            <button className="px-8 py-3 border border-gray-600 rounded-full font-bold hover:bg-gray-800 transition-colors" onClick={() => window.location.href = '/login'}>
-              Sign In
-            </button>
+        <div className="container mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div>
+              <h3 className="text-2xl font-bold mb-4">SmartTravel</h3>
+              <p className="text-gray-400">
+                Your intelligent companion for seamless travel planning and unforgettable adventures.
+              </p>
+            </div>
+            <div>
+              <h4 className="font-bold mb-4">Product</h4>
+              <ul className="space-y-2 text-gray-400">
+                <li>Features</li>
+                <li>Pricing</li>
+                <li>About Us</li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-bold mb-4">Resources</h4>
+              <ul className="space-y-2 text-gray-400">
+                <li>Blog</li>
+                <li>Community</li>
+                <li>Help Center</li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-bold mb-4">Legal</h4>
+              <ul className="space-y-2 text-gray-400">
+                <li>Privacy Policy</li>
+                <li>Terms of Service</li>
+              </ul>
+            </div>
           </div>
-          <div className="mt-12 pt-8 border-t border-gray-800 text-gray-500 text-sm">
-            © {new Date().getFullYear()} TravelPlanner. All rights reserved.
+          <div className="border-t border-gray-800 mt-12 pt-8 text-center text-gray-400">
+            <p>&copy; 2024 SmartTravel. All rights reserved.</p>
           </div>
         </div>
       </footer>

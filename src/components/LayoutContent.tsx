@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { Sidebar } from '@/components/Sidebar';
+import { FeedbackWidget } from '@/components/Feedback/FeedbackWidget';
 
 const publicRoutes = ['/', '/login', '/signup', '/features', '/pricing'];
 
@@ -27,6 +28,7 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
                     </main>
                 </div>
             )}
+            <FeedbackWidget />
         </>
     );
 }
