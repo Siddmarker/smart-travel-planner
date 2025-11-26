@@ -27,21 +27,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         checkAuthStatus();
     }, []);
 
-    const checkAuthStatus = () => {
+    const checkAuthStatus = async () => {
         try {
+            // Check if user has existing valid session/token
             const token = localStorage.getItem('authToken');
             const userData = localStorage.getItem('user');
 
             if (token && userData) {
-                setUser(JSON.parse(userData));
-                console.log('✅ User session restored:', JSON.parse(userData).email);
+                // In a real app, we would verify the token with the backend here
+                // const verifiedUser = await verifyToken(token);
+                const parsedUser = JSON.parse(userData);
+                setUser(parsedUser);
+                console.log('✅ User session restored:', parsedUser.email);
             } else {
+                // No valid token, ensure user is null
                 console.log('❌ No active session found');
                 setUser(null);
+                // Optionally redirect to login page if we were trying to access a protected route
+                // But we'll let ProtectedRoute handle that to avoid redirect loops on public pages
             }
         } catch (error) {
-            console.error('Auth check error:', error);
+            console.error('Auth check failed:', error);
             setUser(null);
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
         } finally {
             setLoading(false);
         }

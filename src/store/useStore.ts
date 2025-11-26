@@ -28,37 +28,8 @@ interface AppState {
 }
 
 export const useStore = create<AppState>()(persist((set) => ({
-    currentUser: {
-        id: 'user-1',
-        name: 'Alex Johnson',
-        email: 'alex@example.com',
-        avatar: 'https://github.com/shadcn.png',
-        personalInfo: {
-            languages: ['English'],
-        },
-        travelPreferences: {
-            accommodationTypes: ['hotel'],
-            transportModes: ['flight'],
-            activityLevel: 'moderate',
-            diningPreferences: [],
-            budgetRange: 'moderate',
-        },
-        currencySettings: {
-            primaryCurrency: 'USD',
-            displayFormat: 'symbol',
-            autoConvert: true,
-        },
-        privacySettings: {
-            profileVisibility: 'public',
-            showTravelHistory: true,
-            showReviews: true,
-        },
-        travelStats: {
-            countriesVisited: 0,
-            tripsCompleted: 0,
-            totalDistance: 0,
-        },
-    },
+    currentUser: null,
+    isAuthenticated: false,
     currentTrip: null,
     savedPlaces: [],
     trips: [
@@ -73,7 +44,7 @@ export const useStore = create<AppState>()(persist((set) => ({
                 lng: 2.3522,
             },
             participants: [
-                { id: 'user-1', name: 'Alex Johnson', email: 'alex@example.com', avatar: 'https://github.com/shadcn.png' },
+                // { id: 'user-1', name: 'Alex Johnson', email: 'alex@example.com', avatar: 'https://github.com/shadcn.png' },
                 { id: 'user-2', name: 'Sarah Smith', email: 'sarah@example.com' }
             ],
             days: [],
@@ -94,7 +65,7 @@ export const useStore = create<AppState>()(persist((set) => ({
                 lng: 139.6503,
             },
             participants: [
-                { id: 'user-1', name: 'Alex Johnson', email: 'alex@example.com', avatar: 'https://github.com/shadcn.png' }
+                // { id: 'user-1', name: 'Alex Johnson', email: 'alex@example.com', avatar: 'https://github.com/shadcn.png' }
             ],
             days: [],
             budget: {
@@ -222,7 +193,6 @@ export const useStore = create<AppState>()(persist((set) => ({
     })),
 
     // Authentication actions
-    isAuthenticated: false,
 
     login: async (email: string, password: string) => {
         const user = validateCredentials(email, password);
