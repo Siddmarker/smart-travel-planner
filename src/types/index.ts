@@ -342,14 +342,11 @@ export interface VotedPlaceItem {
   };
 }
 
-[placeId: string]: {
-  preferred_slot: string;
-};
+export interface TimeConstraints {
+  [placeId: string]: {
+    preferred_slot: string;
+  };
 }
-
-// ==========================================
-// USER SUBMISSION TYPES
-// ==========================================
 
 export type SubmissionStatus = 'pending' | 'approved' | 'rejected' | 'changes_requested';
 
