@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Link from 'next/link';
 import './CompactLanding.css';
 
 interface CompactHeroProps {
@@ -79,17 +80,23 @@ export function CompactHero({ user }: CompactHeroProps) {
                     {/* Action Buttons */}
                     <div className="compact-actions">
                         {user ? (
-                            <button className="btn-compact-primary">
-                                Continue Planning
-                            </button>
+                            <Link href="/dashboard">
+                                <button className="btn-compact-primary">
+                                    Continue Planning
+                                </button>
+                            </Link>
                         ) : (
                             <>
-                                <button className="btn-compact-primary">
-                                    Start Free
-                                </button>
-                                <button className="btn-compact-secondary">
-                                    Sign In
-                                </button>
+                                <Link href="/signup">
+                                    <button className="btn-compact-primary">
+                                        Start Free
+                                    </button>
+                                </Link>
+                                <Link href="/login">
+                                    <button className="btn-compact-secondary">
+                                        Sign In
+                                    </button>
+                                </Link>
                             </>
                         )}
                     </div>
