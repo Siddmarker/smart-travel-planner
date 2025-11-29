@@ -305,7 +305,8 @@ export type TripCategory =
   | 'historical'
   | 'wildlife'
   | 'religious'
-  | 'markets';
+  | 'markets'
+  | 'offroading';
 
 export interface CategoryPreferences {
   categories: TripCategory[];

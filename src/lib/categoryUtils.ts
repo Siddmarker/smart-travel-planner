@@ -52,6 +52,11 @@ export const categoryMapping: Record<string, CategoryConfig> = {
         apiTypes: ['museum', 'art_gallery', 'library', 'church', 'hindu_temple', 'mosque', 'synagogue'],
         keywords: ['museum', 'art', 'history', 'culture', 'temple', 'gallery'],
         exclude: ['night_club', 'bar']
+    },
+    'offroading': {
+        apiTypes: ['park', 'natural_feature', 'point_of_interest', 'tourist_attraction'],
+        keywords: ['offroad', 'off-road', 'dirt bike', 'atv', '4x4', 'motocross', 'enduro', 'trail', 'track', 'adventure'],
+        exclude: ['store', 'rental', 'shop', 'repair', 'school', 'training']
     }
 };
 

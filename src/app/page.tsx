@@ -1,20 +1,21 @@
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { PremiumHeroSection } from '@/components/LandingPage/PremiumHeroSection';
-import { FeaturesShowcase } from '@/components/LandingPage/FeaturesShowcase';
-import { HowItWorksSection } from '@/components/LandingPage/HowItWorksSection';
-import { FinalCTASection } from '@/components/LandingPage/FinalCTASection';
+import { CompactHero } from '@/components/LandingPage/CompactHero';
+import { CompactFeatures } from '@/components/LandingPage/CompactFeatures';
+import { CompactHowItWorks } from '@/components/LandingPage/CompactHowItWorks';
+import { CompactCTA } from '@/components/LandingPage/CompactCTA';
+import '@/components/LandingPage/CompactLanding.css';
 
 export default function LandingPage() {
   const { user } = useAuth();
 
   return (
-    <div className="min-h-screen bg-background premium-theme">
-      <PremiumHeroSection user={user} />
-      <FeaturesShowcase />
-      <HowItWorksSection />
-      <FinalCTASection user={user} />
+    <div className="compact-landing min-h-screen bg-white">
+      <CompactHero user={user} />
+      <CompactFeatures />
+      <CompactHowItWorks />
+      <CompactCTA user={user} />
 
       {/* Footer / Final CTA */}
       <footer className="bg-gray-900 text-white py-12">
