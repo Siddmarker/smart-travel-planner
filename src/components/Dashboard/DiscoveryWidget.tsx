@@ -82,12 +82,10 @@ export function DiscoveryWidget() {
                             <span className="text-sm text-slate-500 whitespace-nowrap">Radius:</span>
                             <input
                                 type="number"
-                                min="1"
-                                max="500"
                                 value={radius}
                                 onChange={(e) => {
                                     const val = parseInt(e.target.value);
-                                    if (val >= 1 && val <= 500) setRadius(val);
+                                    if (!isNaN(val)) setRadius(val);
                                 }}
                                 className="w-full bg-transparent border-none focus:ring-0 text-slate-900 font-medium"
                             />

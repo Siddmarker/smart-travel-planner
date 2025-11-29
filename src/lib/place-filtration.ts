@@ -227,7 +227,8 @@ function isResidentialArea(vicinity: string): boolean {
 
 function hasSuspiciousRatingPattern(place: Place): boolean {
     // Perfect 5.0 with very few reviews often indicates fake/self reviews
-    if (place.rating === 5.0 && (!place.reviews || place.reviews < 5)) {
+    // Relaxed: Only flag if less than 2 reviews (was 5)
+    if (place.rating === 5.0 && (!place.reviews || place.reviews < 2)) {
         return true;
     }
     return false;
@@ -280,7 +281,7 @@ function calculateCredibilityScore(place: Place): CredibilityScore {
 }
 
 function passesCredibilityThreshold(score: CredibilityScore): boolean {
-    return score.total >= 4.0; // Minimum 4.0/10 credibility (adjusted from 60% in plan for flexibility)
+    return score.total >= 2.0; // Minimum 2.0/10 credibility (Relaxed from 4.0 to allow more results)
 }
 
 function hasSpecificTouristTypes(types: string[]): boolean {
