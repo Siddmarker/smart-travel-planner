@@ -37,20 +37,20 @@ export function applyDiscoveryFiltrationPipeline(
         return true;
     });
 
-    // STAGE 2: FAKE ENTITY DETECTION
-    filteredPlaces = filteredPlaces.filter(place => {
-        const fakeReason = isDiscoveryFakeEntity(place, destination, category);
-        if (fakeReason) {
-            fakeEntities.push({
-                name: place.name,
-                filterReason: fakeReason,
-                filterLayer: 'Fake Entity Detection'
-            });
-            layerResults.fakeEntityDetection++;
-            return false;
-        }
-        return true;
-    });
+    // STAGE 2: FAKE ENTITY DETECTION (DISABLED - Too aggressive for generic results)
+    // filteredPlaces = filteredPlaces.filter(place => {
+    //     const fakeReason = isDiscoveryFakeEntity(place, destination, category);
+    //     if (fakeReason) {
+    //         fakeEntities.push({
+    //             name: place.name,
+    //             filterReason: fakeReason,
+    //             filterLayer: 'Fake Entity Detection'
+    //         });
+    //         layerResults.fakeEntityDetection++;
+    //         return false;
+    //     }
+    //     return true;
+    // });
 
     // STAGE 3: CATEGORY RELEVANCE
     filteredPlaces = filteredPlaces.filter(place => {
@@ -80,19 +80,19 @@ export function applyDiscoveryFiltrationPipeline(
         return true;
     });
 
-    // STAGE 5: DESTINATION RELEVANCE
-    filteredPlaces = filteredPlaces.filter(place => {
-        if (!isDiscoveryDestinationRelevant(place, destination)) {
-            fakeEntities.push({
-                name: place.name,
-                filterReason: 'Not relevant to destination',
-                filterLayer: 'Destination Relevance'
-            });
-            layerResults.destinationRelevance++;
-            return false;
-        }
-        return true;
-    });
+    // STAGE 5: DESTINATION RELEVANCE (DISABLED - Too aggressive)
+    // filteredPlaces = filteredPlaces.filter(place => {
+    //     if (!isDiscoveryDestinationRelevant(place, destination)) {
+    //         fakeEntities.push({
+    //             name: place.name,
+    //             filterReason: 'Not relevant to destination',
+    //             filterLayer: 'Destination Relevance'
+    //         });
+    //         layerResults.destinationRelevance++;
+    //         return false;
+    //     }
+    //     return true;
+    // });
 
     const metadata: DiscoveryFiltrationMetadata = {
         originalCount,
@@ -331,8 +331,8 @@ function passesDiscoveryQualityThreshold(place: Place, category: string): boolea
         'attractions': { minRating: 3.5, minReviews: 10 },
         'parks': { minRating: 3.5, minReviews: 5 },
         'museums': { minRating: 3.5, minReviews: 5 },
-        'shopping': { minRating: 3.5, minReviews: 10 },
-        'default': { minRating: 3.5, minReviews: 5 }
+        'shopping': { minRating: 3.0, minReviews: 5 },
+        'default': { minRating: 3.0, minReviews: 1 }
     };
 
     let mappedCategory = 'default';
