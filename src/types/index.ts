@@ -74,6 +74,20 @@ export interface Place {
   credibilityScore?: CredibilityScore;
   photos?: string[];
   categoryTags?: string[];
+  // Enhanced Food & Dining Fields
+  dietaryOptions?: string[]; // e.g., 'Vegetarian', 'Vegan', 'Jain', 'Halal', 'Gluten-Free'
+  popularDish?: {
+    name: string;
+    price?: number;
+    image?: string;
+  };
+  socialStats?: {
+    trending: boolean;
+    views?: string; // e.g., "1.2M"
+    shares?: string; // e.g., "45K"
+    platform?: 'Instagram' | 'TikTok' | 'YouTube';
+  };
+  tags?: string[]; // e.g., 'Rooftop', 'Live Music', 'Pet-Friendly'
 }
 
 export interface PlaceDetails extends Place {

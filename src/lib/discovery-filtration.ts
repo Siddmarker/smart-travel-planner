@@ -400,8 +400,74 @@ export async function enhanceDiscoveryPlaces(
         // Add category tags
         place.categoryTags = extractCategoryTags(place.rawTypes || []);
 
+        // ENHANCEMENT: Add Food & Dining specific fields if category is food-related
+        if (isFoodCategory(place.category) || place.rawTypes?.includes('restaurant') || place.rawTypes?.includes('food')) {
+            enhanceFoodPlace(place);
+        }
+
         return place;
     });
+}
+
+function isFoodCategory(category: string): boolean {
+    return ['food', 'restaurant', 'cafe', 'bar', 'nightlife'].includes(category);
+}
+
+function enhanceFoodPlace(place: Place) {
+    const name = place.name.toLowerCase();
+    const types = (place.rawTypes || []).join(' ').toLowerCase();
+    const description = (place.description || '').toLowerCase();
+    const combinedText = `${name} ${types} ${description}`;
+
+    // 1. Infer Dietary Options
+    place.dietaryOptions = [];
+    if (combinedText.includes('veg') || combinedText.includes('green') || combinedText.includes('plant')) place.dietaryOptions.push('Vegetarian');
+    if (combinedText.includes('vegan')) place.dietaryOptions.push('Vegan');
+    if (combinedText.includes('jain') || combinedText.includes('pure veg')) place.dietaryOptions.push('Jain');
+    if (combinedText.includes('halal') || combinedText.includes('arab') || combinedText.includes('mughlai')) place.dietaryOptions.push('Halal');
+    if (combinedText.includes('gluten') || combinedText.includes('healthy')) place.dietaryOptions.push('Gluten-Free');
+    if (combinedText.includes('keto') || combinedText.includes('diet')) place.dietaryOptions.push('Keto');
+
+    // Default to Veg/Non-Veg based on cuisine hints if empty
+    if (place.dietaryOptions.length === 0) {
+        if (combinedText.includes('steak') || combinedText.includes('grill') || combinedText.includes('chicken')) {
+            place.dietaryOptions.push('Non-Vegetarian');
+        } else {
+            place.dietaryOptions.push('Vegetarian'); // Fallback for safety/inclusivity
+        }
+    }
+
+    // 2. Infer Tags (Features & Cuisine)
+    place.tags = [];
+    // Cuisine
+    if (combinedText.includes('north indian') || combinedText.includes('punjabi') || combinedText.includes('tandoor')) place.tags.push('North Indian');
+    if (combinedText.includes('south indian') || combinedText.includes('dosa') || combinedText.includes('idli')) place.tags.push('South Indian');
+    if (combinedText.includes('chinese') || combinedText.includes('asian') || combinedText.includes('noodle')) place.tags.push('Chinese');
+    if (combinedText.includes('italian') || combinedText.includes('pizza') || combinedText.includes('pasta')) place.tags.push('Italian');
+    // Features
+    if (combinedText.includes('rooftop') || combinedText.includes('view') || combinedText.includes('terrace')) place.tags.push('Rooftop');
+    if (combinedText.includes('live') || combinedText.includes('music')) place.tags.push('Live Music');
+    if (combinedText.includes('pet') || combinedText.includes('dog')) place.tags.push('Pet-Friendly');
+    if (combinedText.includes('delivery')) place.tags.push('Home Delivery');
+
+    // 3. Simulate Social Stats (Mock Data for Demo)
+    // We use the place ID to generate consistent "random" numbers
+    const idNum = place.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const isTrending = idNum % 5 === 0; // 20% chance
+
+    place.socialStats = {
+        trending: isTrending,
+        views: isTrending ? `${(idNum % 90 + 10) / 10}M` : `${idNum % 50 + 5}K`,
+        shares: isTrending ? `${idNum % 20 + 5}K` : `${idNum % 1000}`,
+        platform: idNum % 3 === 0 ? 'TikTok' : (idNum % 3 === 1 ? 'Instagram' : 'YouTube')
+    };
+
+    // 4. Simulate Popular Dish
+    const dishes = ['Butter Chicken', 'Paneer Tikka', 'Masala Dosa', 'Truffle Pasta', 'Avocado Toast', 'Sushi Platter', 'Biryani', 'Cheesecake'];
+    place.popularDish = {
+        name: dishes[idNum % dishes.length],
+        price: (place.priceLevel || 2) * 150 + (idNum % 100)
+    };
 }
 
 function calculateDiscoveryCredibilityScore(place: Place): any {

@@ -5,15 +5,17 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Star, MapPin, Plus, Heart, Share2 } from 'lucide-react';
 import { Place } from '@/types';
+import { EnhancedPlaceCard } from './EnhancedPlaceCard';
 
 interface PlaceListProps {
     places: Place[];
     onAddToTrip?: (place: Place) => void;
     onSavePlace?: (place: Place) => void;
     viewMode?: 'grid' | 'list';
+    useEnhancedCard?: boolean;
 }
 
-export function PlaceList({ places, onAddToTrip, onSavePlace, viewMode = 'grid' }: PlaceListProps) {
+export function PlaceList({ places, onAddToTrip, onSavePlace, viewMode = 'grid', useEnhancedCard = false }: PlaceListProps) {
     const getPriceLevelSymbol = (level: number) => {
         return '$'.repeat(level);
     };
@@ -39,6 +41,21 @@ export function PlaceList({ places, onAddToTrip, onSavePlace, viewMode = 'grid' 
             window.open(`https://www.google.com/maps/dir//${destLat},${destLng}`, '_blank');
         }
     };
+
+    if (useEnhancedCard) {
+        return (
+            <div className="grid grid-cols-1 gap-4">
+                {places.map((place) => (
+                    <EnhancedPlaceCard
+                        key={place.id}
+                        place={place}
+                        onAddToTrip={onAddToTrip}
+                        onSavePlace={onSavePlace}
+                    />
+                ))}
+            </div>
+        );
+    }
 
     return (
         <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : 'space-y-4'}>
@@ -111,7 +128,8 @@ export function PlaceList({ places, onAddToTrip, onSavePlace, viewMode = 'grid' 
                                 onClick={() => onAddToTrip?.(place)}
                             >
                                 <Plus className="h-4 w-4 mr-2" />
-                                Add to Trip
+                                <span className="hidden sm:inline">Add to Trip</span>
+                                <span className="sm:hidden">Add</span>
                             </Button>
                             <Button
                                 variant="outline"
@@ -119,7 +137,8 @@ export function PlaceList({ places, onAddToTrip, onSavePlace, viewMode = 'grid' 
                                 onClick={() => handleGetDirections(place)}
                             >
                                 <MapPin className="h-4 w-4 mr-2" />
-                                Directions
+                                <span className="hidden sm:inline">Directions</span>
+                                <span className="sm:hidden">Map</span>
                             </Button>
                             <Button variant="outline" size="icon">
                                 <Share2 className="h-4 w-4" />

@@ -25,34 +25,79 @@ interface FilterConfig {
 
 const dynamicFilters: Record<string, Record<string, FilterConfig>> = {
     'food': {
-        'price': {
-            type: 'radio',
-            label: 'Price Level',
-            options: [
-                { label: 'Any', value: 'any' },
-                { label: '$ Budget', value: 1 },
-                { label: '$$ Moderate', value: 2 },
-                { label: '$$$ Expensive', value: 3 },
-                { label: '$$$$ Luxury', value: 4 }
-            ]
-        },
-        'rating': {
-            type: 'radio',
-            label: 'Minimum Rating',
-            options: [
-                { label: 'Any', value: 0 },
-                { label: '3.5+', value: 3.5 },
-                { label: '4.0+', value: 4.0 },
-                { label: '4.5+', value: 4.5 }
-            ]
-        },
         'dietary': {
             type: 'checkbox',
             label: 'Dietary Preferences',
             options: [
-                { label: 'Vegetarian', value: 'vegetarian' },
-                { label: 'Vegan', value: 'vegan' },
-                { label: 'Gluten-Free', value: 'gluten_free' }
+                { label: 'Vegetarian', value: 'Vegetarian' },
+                { label: 'Non-Vegetarian', value: 'Non-Vegetarian' },
+                { label: 'Eggetarian', value: 'Eggetarian' },
+                { label: 'Jain (No root veggies)', value: 'Jain' },
+                { label: 'Vegan', value: 'Vegan' },
+                { label: 'Gluten-Free', value: 'Gluten-Free' },
+                { label: 'Halal', value: 'Halal' },
+                { label: 'Keto-Friendly', value: 'Keto' }
+            ]
+        },
+        'establishmentType': {
+            type: 'checkbox', // Changed to checkbox for multiple selection
+            label: 'Establishment Type',
+            options: [
+                { label: 'Famous Local', value: 'Famous Local' },
+                { label: 'International Chain', value: 'International Chain' },
+                { label: 'Street Food', value: 'Street Food' },
+                { label: 'Cafés & Bakeries', value: 'Cafe' },
+                { label: 'Fine Dining', value: 'Fine Dining' },
+                { label: 'Budget Eatery', value: 'Budget' },
+                { label: 'Food Truck', value: 'Food Truck' },
+                { label: 'Rooftop/Restobar', value: 'Rooftop' }
+            ]
+        },
+        'trending': {
+            type: 'checkbox',
+            label: 'Trending & Social',
+            options: [
+                { label: 'Social Media Trending', value: 'Trending' },
+                { label: 'Blogger Recommended', value: 'Blogger' },
+                { label: 'Celebrity Visited', value: 'Celebrity' },
+                { label: 'Viral Dishes', value: 'Viral' },
+                { label: 'Newly Opened', value: 'New' }
+            ]
+        },
+        'cuisine': {
+            type: 'checkbox',
+            label: 'Cuisine Type',
+            options: [
+                { label: 'North Indian', value: 'North Indian' },
+                { label: 'South Indian', value: 'South Indian' },
+                { label: 'Chinese', value: 'Chinese' },
+                { label: 'Italian', value: 'Italian' },
+                { label: 'Mexican', value: 'Mexican' },
+                { label: 'Asian Fusion', value: 'Asian' },
+                { label: 'Desserts Only', value: 'Dessert' }
+            ]
+        },
+        'features': {
+            type: 'checkbox',
+            label: 'Special Features',
+            options: [
+                { label: 'Open 24x7', value: '24x7' },
+                { label: 'Home Delivery', value: 'Delivery' },
+                { label: 'Pet-Friendly', value: 'Pet-Friendly' },
+                { label: 'Live Music', value: 'Live Music' },
+                { label: 'Buffet Available', value: 'Buffet' },
+                { label: 'BYOB', value: 'BYOB' }
+            ]
+        },
+        'price': {
+            type: 'radio',
+            label: 'Price Range',
+            options: [
+                { label: 'Any', value: 'any' },
+                { label: '💰 Budget', value: 1 },
+                { label: '💰💰 Moderate', value: 2 },
+                { label: '💰💰💰 Premium', value: 3 },
+                { label: '💰💰💰💰 Luxury', value: 4 }
             ]
         }
     },

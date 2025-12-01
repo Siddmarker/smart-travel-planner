@@ -17,6 +17,7 @@ import { applyDiscoveryFiltrationPipeline, enhanceDiscoveryPlaces } from '@/lib/
 import { smartCategoryFilter } from '@/lib/categoryUtils';
 import { SubmissionService } from '@/lib/submission-service';
 import { Button } from '@/components/ui/button';
+import { SocialTrends } from '@/components/Discover/SocialTrends';
 
 export default function DiscoverPage() {
     const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -251,14 +252,24 @@ export default function DiscoverPage() {
         }
 
         // Keyword-based filters (Dietary, Type, etc.)
-        const keywordFilters = ['dietary', 'type', 'difficulty', 'features', 'activities'];
+        const keywordFilters = ['dietary', 'type', 'difficulty', 'features', 'activities', 'cuisine', 'establishmentType', 'trending'];
+
         keywordFilters.forEach(key => {
             const val = activeFilters[key];
             if (val && val !== 'any') {
                 const valuesToCheck = Array.isArray(val) ? val : [val];
                 if (valuesToCheck.length > 0) {
                     results = results.filter(p => {
-                        const text = (p.name + ' ' + p.description + ' ' + p.category).toLowerCase();
+                        // Combine all searchable text
+                        const text = (
+                            p.name + ' ' +
+                            p.description + ' ' +
+                            p.category + ' ' +
+                            (p.dietaryOptions?.join(' ') || '') + ' ' +
+                            (p.tags?.join(' ') || '') + ' ' +
+                            (p.socialStats?.trending ? 'trending' : '')
+                        ).toLowerCase();
+
                         return valuesToCheck.some((v: string) => text.includes(v.toLowerCase()));
                     });
                 }
@@ -410,6 +421,11 @@ export default function DiscoverPage() {
                                 <div className="flex justify-center p-8">Loading...</div>
                             ) : (
                                 <div className="space-y-4">
+                                    {/* Social Trends Section for Food */}
+                                    {(selectedCategory === 'food' || selectedCategory === 'restaurants') && (
+                                        <SocialTrends />
+                                    )}
+
                                     {/* Community Places First */}
                                     {communityPlaces.length > 0 && (
                                         <div className="mb-6">
@@ -426,6 +442,7 @@ export default function DiscoverPage() {
                                         places={selectedCategory ? filteredPlaces : trendingPlacesList}
                                         onAddToTrip={handleAddToTrip}
                                         onSavePlace={handleSavePlace}
+                                        useEnhancedCard={selectedCategory === 'food' || selectedCategory === 'restaurants'}
                                     />
                                 </div>
                             )}
