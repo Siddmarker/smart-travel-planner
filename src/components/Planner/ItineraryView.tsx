@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { Trip, DayPlan } from '@/types';
+import { useState, useEffect, useMemo } from 'react';
+import { Trip, DayPlan, Place, ItineraryItem } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Plus, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, Calendar as CalendarIcon, Sun, Sunset, Moon, Coffee } from 'lucide-react';
 import { ActivityCard } from './ActivityCard';
 import { useStore } from '@/store/useStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RouteMap } from '../Map/RouteMap';
+import { SmartItineraryBuilder, SmartDay, TimeSlotName } from '@/lib/smart-itinerary';
+import { AddActivityModal } from './AddActivityModal';
 
 interface ItineraryViewProps {
     trip: Trip;
@@ -16,122 +18,100 @@ interface ItineraryViewProps {
 
 export function ItineraryView({ trip }: ItineraryViewProps) {
     const { updateTrip, places } = useStore();
-    const [selectedDayId, setSelectedDayId] = useState<string>(trip.days[0]?.id || 'no-days');
+    const [selectedDayId, setSelectedDayId] = useState<string>('');
     const [isGenerating, setIsGenerating] = useState(false);
 
-    const handleAddDay = () => {
-        alert('Add Day functionality to be implemented');
-    };
+    // Add Activity Modal State
+    const [isAddActivityOpen, setIsAddActivityOpen] = useState(false);
+    const [activeDayId, setActiveDayId] = useState<string>('');
+    const [activeTimeSlot, setActiveTimeSlot] = useState<TimeSlotName>('Morning');
 
-    const handleAddActivity = (dayId: string) => {
-        alert(`Add activity to day ${dayId}`);
-    };
+    // Initialize Smart Itinerary
+    const smartItinerary = useMemo(() => {
+        const builder = new SmartItineraryBuilder(trip);
+        return builder.forceShowAllDays();
+    }, [trip]);
 
-    const handleGenerateItinerary = async () => {
-        setIsGenerating(true);
-        try {
-            const start = new Date(trip.startDate);
-            const end = new Date(trip.endDate);
-            const dayCount = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-            // Import enhanced planner
-            const { UnifiedTravelPlanner } = await import('@/lib/unified-planner');
-            const planner = new UnifiedTravelPlanner();
-
-            const userPreferences = {
-                destination: trip.destination,
-                categories: trip.categoryPreferences?.categories || ['attraction', 'food', 'culture'],
-                trip_duration: dayCount,
-                trip_dates: { start: trip.startDate, end: trip.endDate },
-                start_location: trip.destination,
-                day_start_time: new Date(),
-                return_to_start: trip.preferences?.returnToStart || false
-            };
-
-            // Execute unified workflow
-            const optimizedItinerary = await planner.unified_planning_workflow(
-                userPreferences,
-                places,
-                trip.categoryPreferences
-            );
-
-            console.log('Generated optimized itinerary:', optimizedItinerary);
-
-            // Convert to DayPlan format
-            const newDays: DayPlan[] = [];
-            for (let day = 1; day <= dayCount; day++) {
-                const currentDate = new Date(start);
-                currentDate.setDate(start.getDate() + (day - 1));
-
-                const dayItems = optimizedItinerary[day] || [];
-
-                newDays.push({
-                    id: crypto.randomUUID(),
-                    date: currentDate.toISOString(),
-                    items: dayItems
-                });
-            }
-
-            if (newDays.length > 0) {
-                updateTrip(trip.id, { days: newDays });
-                setSelectedDayId(newDays[0].id);
-                alert("Unified itinerary generated with voting-first logic!");
-            } else {
-                alert("No places available. Try adding more places.");
-            }
-
-        } catch (error) {
-            console.error("Failed to generate itinerary", error);
-            alert("Failed to generate itinerary. Please try again.");
-        } finally {
-            setIsGenerating(false);
+    // Set initial selected day
+    useEffect(() => {
+        if (smartItinerary.length > 0 && !selectedDayId) {
+            setSelectedDayId(smartItinerary[0].id);
         }
+    }, [smartItinerary, selectedDayId]);
+
+    const handleAddActivityClick = (dayId: string, slotName: TimeSlotName) => {
+        setActiveDayId(dayId);
+        setActiveTimeSlot(slotName);
+        setIsAddActivityOpen(true);
     };
 
-    if (!trip.days || trip.days.length === 0) {
-        return (
-            <div className="text-center py-12 border-2 border-dashed rounded-lg">
-                <CalendarIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No days planned yet</h3>
-                <p className="text-muted-foreground mb-4">Start by adding days to your itinerary.</p>
-                <div className="flex gap-2 justify-center">
-                    <Button onClick={handleAddDay} variant="outline">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add Day 1
-                    </Button>
-                    <Button onClick={handleGenerateItinerary} disabled={isGenerating}>
-                        {isGenerating ? 'Generating...' : 'Generate AI Itinerary'}
-                    </Button>
-                </div>
-            </div>
-        );
-    }
+    const handlePlaceSelected = (place: Place) => {
+        const day = smartItinerary.find(d => d.id === activeDayId);
+        if (!day) return;
+
+        // Calculate start time based on slot
+        let startTime = '09:00';
+        if (activeTimeSlot === 'Afternoon') startTime = '13:00';
+        if (activeTimeSlot === 'Evening') startTime = '18:00';
+        if (activeTimeSlot === 'Night') startTime = '21:00';
+
+        const newItem: ItineraryItem = {
+            id: crypto.randomUUID(),
+            placeId: place.id,
+            startTime: startTime,
+            endTime: startTime, // Placeholder
+            type: 'activity',
+            notes: `Added to ${activeTimeSlot}`
+        };
+
+        // Update Trip
+        const updatedDays = trip.days.map(d => {
+            if (d.id === activeDayId) {
+                return { ...d, items: [...d.items, newItem] };
+            }
+            return d;
+        });
+
+        // If day didn't exist in trip.days (was auto-generated), we need to add it
+        if (!trip.days.find(d => d.id === activeDayId)) {
+            const newDay: DayPlan = {
+                id: activeDayId,
+                date: day.date,
+                items: [newItem]
+            };
+            // Insert in correct order (simplified: just append and sort or rely on builder to handle next render)
+            // Better: Reconstruct all days from smartItinerary
+            const allDays = smartItinerary.map(sd => {
+                if (sd.id === activeDayId) {
+                    return { id: sd.id, date: sd.date, items: [...sd.items, newItem] };
+                }
+                // Return existing or empty
+                const existing = trip.days.find(td => td.id === sd.id);
+                return existing || { id: sd.id, date: sd.date, items: [] };
+            });
+            updateTrip(trip.id, { days: allDays });
+        } else {
+            updateTrip(trip.id, { days: updatedDays });
+        }
+
+        setIsAddActivityOpen(false);
+    };
 
     // Helper to construct route segments for the map
-    const getDaySegments = (dayItems: any[]): any[] => {
+    const getDaySegments = (dayItems: ItineraryItem[]): any[] => {
         if (!dayItems || dayItems.length === 0) return [];
 
         const segments: any[] = [];
-        let currentLocation = trip.destination; // Start from trip destination (or hotel if we had one)
+        let currentLocation = trip.destination;
 
         dayItems.forEach((item) => {
             const place = places.find((p) => p.id === item.placeId);
             if (place) {
-                // Try to parse distance/duration from notes if available, otherwise mock
-                // Notes format: "Travel: 5.2 km. Recommended..."
-                let distance = 0;
-                let duration = 0;
-
-                if (item.notes) {
-                    const distMatch = item.notes.match(/Travel: ([\d.]+) km/);
-                    if (distMatch) distance = parseFloat(distMatch[1]);
-                }
-
                 segments.push({
                     from: currentLocation,
                     to: place,
-                    distance: distance,
-                    duration: duration,
+                    distance: 0,
+                    duration: 0,
                     mode: 'driving'
                 });
                 currentLocation = place;
@@ -141,83 +121,133 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
         return segments;
     };
 
+    const getSlotIcon = (name: string) => {
+        switch (name) {
+            case 'Morning': return <Coffee className="h-4 w-4 text-orange-500" />;
+            case 'Afternoon': return <Sun className="h-4 w-4 text-yellow-500" />;
+            case 'Evening': return <Sunset className="h-4 w-4 text-purple-500" />;
+            case 'Night': return <Moon className="h-4 w-4 text-indigo-500" />;
+            default: return <CalendarIcon className="h-4 w-4" />;
+        }
+    };
+
     return (
         <div className="h-full flex flex-col">
             <div className="flex justify-between items-center mb-4 px-4 pt-4">
                 <h2 className="text-2xl font-bold">Itinerary</h2>
                 <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={handleGenerateItinerary} disabled={isGenerating}>
-                        {isGenerating ? 'Regenerating...' : 'Regenerate AI Itinerary'}
-                    </Button>
-                    <Button size="sm" onClick={() => handleAddActivity(selectedDayId)}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add Activity
-                    </Button>
+                    {/* Add Day button could go here */}
                 </div>
             </div>
 
             <Tabs value={selectedDayId} onValueChange={setSelectedDayId} className="flex-1 flex flex-col overflow-hidden">
                 <div className="px-4">
                     <ScrollArea className="w-full whitespace-nowrap pb-2">
-                        <TabsList className="w-full justify-start">
-                            {trip.days.map((day, index) => (
-                                <TabsTrigger key={day.id} value={day.id} className="min-w-[100px]">
-                                    Day {index + 1}
-                                    <span className="ml-2 text-xs text-muted-foreground">
-                                        {new Date(day.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                    </span>
+                        <TabsList className="w-full justify-start bg-transparent p-0 gap-2">
+                            {smartItinerary.map((day, index) => (
+                                <TabsTrigger
+                                    key={day.id}
+                                    value={day.id}
+                                    className="min-w-[100px] data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20"
+                                >
+                                    <div className="flex flex-col items-start">
+                                        <span className="font-semibold">Day {index + 1}</span>
+                                        <span className="text-xs text-muted-foreground">
+                                            {new Date(day.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                        </span>
+                                    </div>
                                 </TabsTrigger>
                             ))}
                         </TabsList>
                     </ScrollArea>
                 </div>
 
-                {trip.days.map((day) => (
+                {smartItinerary.map((day) => (
                     <TabsContent key={day.id} value={day.id} className="flex-1 mt-0 overflow-hidden">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full p-4 pt-0">
-                            {/* Left: Activity List */}
+                            {/* Left: Time Slots */}
                             <ScrollArea className="h-full pr-4">
-                                {day.items.length === 0 ? (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        No activities for this day.
-                                    </div>
-                                ) : (
-                                    <div className="space-y-4">
-                                        {day.items.map((item) => {
-                                            const place = places.find((p) => p.id === item.placeId);
-                                            return (
-                                                <ActivityCard
-                                                    key={item.id}
-                                                    item={item}
-                                                    place={place}
-                                                    onDelete={() => {
-                                                        console.log('Delete item', item.id);
-                                                    }}
-                                                />
-                                            );
-                                        })}
-                                    </div>
-                                )}
+                                <div className="space-y-6 pb-10">
+                                    {day.timeSlots.map((slot) => (
+                                        <div key={slot.name} className="space-y-3">
+                                            <div className="flex items-center gap-2 pb-2 border-b">
+                                                {getSlotIcon(slot.name)}
+                                                <h3 className="font-medium text-lg">{slot.name}</h3>
+                                                <span className="text-xs text-muted-foreground ml-auto">
+                                                    {slot.activities.length} activities
+                                                </span>
+                                            </div>
+
+                                            {slot.activities.length === 0 ? (
+                                                <div
+                                                    className="border-2 border-dashed rounded-lg p-4 flex flex-col items-center justify-center text-muted-foreground hover:bg-accent/50 cursor-pointer transition-colors"
+                                                    onClick={() => handleAddActivityClick(day.id, slot.name)}
+                                                >
+                                                    <p className="text-sm mb-2">No activities planned</p>
+                                                    <Button variant="ghost" size="sm" className="h-8">
+                                                        <Plus className="h-3 w-3 mr-1" />
+                                                        Add to {slot.name}
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    {slot.activities.map((item) => {
+                                                        const place = places.find((p) => p.id === item.placeId);
+                                                        return (
+                                                            <ActivityCard
+                                                                key={item.id}
+                                                                item={item}
+                                                                place={place}
+                                                                onDelete={() => {
+                                                                    // Implement delete
+                                                                    const newDays = trip.days.map(d => {
+                                                                        if (d.id === day.id) {
+                                                                            return { ...d, items: d.items.filter(i => i.id !== item.id) };
+                                                                        }
+                                                                        return d;
+                                                                    });
+                                                                    updateTrip(trip.id, { days: newDays });
+                                                                }}
+                                                            />
+                                                        );
+                                                    })}
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="w-full text-muted-foreground hover:text-primary"
+                                                        onClick={() => handleAddActivityClick(day.id, slot.name)}
+                                                    >
+                                                        <Plus className="h-3 w-3 mr-1" />
+                                                        Add another activity
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
                             </ScrollArea>
 
                             {/* Right: Map */}
                             <div className="hidden lg:block h-full rounded-lg overflow-hidden border bg-muted relative">
-                                {day.items.length > 0 ? (
-                                    <RouteMap
-                                        startLocation={trip.destination}
-                                        segments={getDaySegments(day.items)}
-                                        animate={false}
-                                    />
-                                ) : (
-                                    <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                                        Add activities to see the route map
-                                    </div>
-                                )}
+                                <RouteMap
+                                    startLocation={trip.destination}
+                                    segments={getDaySegments(day.items)}
+                                    animate={false}
+                                />
                             </div>
                         </div>
                     </TabsContent>
                 ))}
             </Tabs>
+
+            <AddActivityModal
+                isOpen={isAddActivityOpen}
+                onClose={() => setIsAddActivityOpen(false)}
+                onSelectPlace={handlePlaceSelected}
+                dayId={activeDayId}
+                timeSlot={activeTimeSlot}
+            />
         </div>
     );
 }
+
