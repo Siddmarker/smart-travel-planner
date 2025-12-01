@@ -459,56 +459,24 @@ function calculateStraightLineDistance(userLocation: { lat: number; lng: number 
 export async function calculateRealDistances(userLocation: { lat: number; lng: number }, places: Place[]): Promise<Place[]> {
     if (!userLocation || !places.length) return places;
 
+    // OPTIMIZATION: Use straight-line distance for list views to prevent slow loading
+    // The Distance Matrix API is too slow for 20+ items on every search.
+    // We will use Haversine formula for immediate feedback.
+    return calculateStraightLineDistance(userLocation, places);
+
+    /* 
+    // Original Distance Matrix Logic (Disabled for performance)
     try {
         await initGoogleMaps();
         if (typeof window === 'undefined' || !window.google?.maps) return calculateStraightLineDistance(userLocation, places);
 
         const distanceService = new window.google.maps.DistanceMatrixService();
-
-        const origins = [new window.google.maps.LatLng(userLocation.lat, userLocation.lng)];
-        const destinations = places.map(place =>
-            new window.google.maps.LatLng(place.lat, place.lng)
-        );
-
-        // Google Maps Distance Matrix API has limits (25 destinations per request usually)
-        // We slice to ensure we don't exceed if list is long, though usually it's 20.
-        const limitedDestinations = destinations.slice(0, 25);
-
-        const response = await new Promise<google.maps.DistanceMatrixResponse>((resolve, reject) => {
-            distanceService.getDistanceMatrix({
-                origins: origins,
-                destinations: limitedDestinations,
-                travelMode: window.google.maps.TravelMode.DRIVING,
-                unitSystem: window.google.maps.UnitSystem.METRIC
-            }, (response, status) => {
-                if (status === window.google.maps.DistanceMatrixStatus.OK && response) {
-                    resolve(response);
-                } else {
-                    reject(status);
-                }
-            });
-        });
-
-        return places.map((place, index) => {
-            if (index >= 25) return place; // Skip if beyond limit
-            const element = response.rows[0].elements[index];
-            if (element && element.status === 'OK') {
-                return {
-                    ...place,
-                    distance: {
-                        text: element.distance.text,
-                        value: element.distance.value,
-                        duration: element.duration.text
-                    }
-                };
-            }
-            return place;
-        });
-
+        // ... (rest of the slow logic)
     } catch (error) {
         console.error('Distance calculation failed:', error);
         return calculateStraightLineDistance(userLocation, places);
     }
+    */
 }
 
 export async function enhancePlacesWithPhotosAndDistance(
