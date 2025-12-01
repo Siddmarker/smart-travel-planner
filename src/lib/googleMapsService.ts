@@ -9,13 +9,16 @@ let loadPromise: Promise<void> | null = null;
 
 export async function initGoogleMaps(): Promise<void> {
     if (!API_KEY) {
-        console.warn('Google Maps API key not found');
+        console.error('[GoogleMaps] API key not found in environment variables');
         return;
     }
 
     // 1. Check if already loaded and available on window
     if (typeof window !== 'undefined' && window.google?.maps) {
-        isGoogleMapsLoaded = true;
+        if (!isGoogleMapsLoaded) {
+            console.log('[GoogleMaps] Already loaded on window');
+            isGoogleMapsLoaded = true;
+        }
         return;
     }
 
@@ -42,6 +45,7 @@ export async function initGoogleMaps(): Promise<void> {
         const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
 
         if (existingScript) {
+            console.log('[GoogleMaps] Found existing script, waiting for initialization...');
             // Script exists, wait for it to initialize
             let attempts = 0;
             const checkInterval = setInterval(() => {
@@ -49,19 +53,18 @@ export async function initGoogleMaps(): Promise<void> {
                 if (window.google?.maps) {
                     clearInterval(checkInterval);
                     isGoogleMapsLoaded = true;
+                    console.log('[GoogleMaps] Initialized from existing script');
                     resolve();
                 } else if (attempts > 50) { // 5 seconds
                     clearInterval(checkInterval);
-                    // Don't reject yet, it might just be slow. 
-                    // But if we are here, something is likely wrong with the existing script.
-                    // We'll let the global timeout handle the rejection if needed.
-                    console.warn('Waiting for existing Google Maps script timed out');
+                    console.warn('[GoogleMaps] Waiting for existing script timed out');
                     reject(new Error('Google Maps script loaded but API not available'));
                 }
             }, 100);
             return;
         }
 
+        console.log('[GoogleMaps] Loading new script...');
         // Create and load the script
         const script = document.createElement('script');
         script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places,geometry`;
@@ -77,6 +80,7 @@ export async function initGoogleMaps(): Promise<void> {
                 if (window.google?.maps) {
                     clearInterval(checkInterval);
                     isGoogleMapsLoaded = true;
+                    console.log('[GoogleMaps] Script loaded and API ready');
                     resolve();
                 } else if (attempts > 50) { // 5 seconds
                     clearInterval(checkInterval);
@@ -86,7 +90,7 @@ export async function initGoogleMaps(): Promise<void> {
         };
 
         script.onerror = (e) => {
-            console.error('Google Maps script load error:', e);
+            console.error('[GoogleMaps] Script load error:', e);
             reject(new Error('Failed to load Google Maps script'));
         };
 
@@ -94,11 +98,11 @@ export async function initGoogleMaps(): Promise<void> {
     });
 
     // 4. Wrap in a global timeout to ensure we never hang indefinitely
-    // and reset loadPromise on failure so we can try again
     return Promise.race([
         loadPromise,
         new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Google Maps initialization timed out')), 10000))
     ]).catch(err => {
+        console.error('[GoogleMaps] Initialization failed:', err);
         loadPromise = null; // Reset promise on error to allow retry
         throw err;
     });
@@ -114,7 +118,7 @@ export async function searchPlaces(
         await initGoogleMaps();
 
         if (typeof window === 'undefined' || !window.google?.maps) {
-            console.warn('Google Maps not available');
+            console.error('[GoogleMaps] API not available for searchPlaces');
             return [];
         }
 
@@ -129,13 +133,15 @@ export async function searchPlaces(
                 type: type as any, // Pass type to request
             };
 
+            console.log(`[GoogleMaps] Executing Text Search: "${query}"`, request);
+
             service.textSearch(request, (results, status) => {
                 console.log(`[GoogleMaps] Search query: "${query}", Status: ${status}, Results: ${results?.length}`);
                 if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
                     const places = results.slice(0, 20).map(convertGooglePlaceToPlace);
                     resolve(places);
                 } else {
-                    console.warn('Places search failed:', status);
+                    console.warn('[GoogleMaps] Places search failed or empty:', status);
                     resolve([]);
                 }
             });
@@ -145,13 +151,13 @@ export async function searchPlaces(
         return Promise.race([
             searchPromise,
             new Promise<Place[]>((resolve) => setTimeout(() => {
-                console.warn('Search timed out');
+                console.warn('[GoogleMaps] Search timed out');
                 resolve([]);
             }, 5000))
         ]);
 
     } catch (error) {
-        console.error('Error searching places:', error);
+        console.error('[GoogleMaps] Error searching places:', error);
         return [];
     }
 }
@@ -201,8 +207,116 @@ export async function searchNearbyPlaces(
 }
 
 // ... (getPlaceDetails remains mostly same, but could benefit from timeout too)
+export async function getPlaceDetails(placeId: string): Promise<Place | null> {
+    try {
+        await initGoogleMaps();
 
-// ...
+        if (typeof window === 'undefined' || !window.google?.maps) {
+            console.warn('Google Maps not available');
+            return null;
+        }
+
+        const detailsPromise = new Promise<Place | null>((resolve) => {
+            const map = new window.google.maps.Map(document.createElement('div'));
+            const service = new window.google.maps.places.PlacesService(map);
+
+            const request = {
+                placeId,
+                fields: ['name', 'rating', 'formatted_address', 'geometry', 'photos', 'types', 'price_level', 'user_ratings_total', 'formatted_phone_number', 'website', 'opening_hours', 'vicinity'],
+            };
+
+            service.getDetails(request, (place, status) => {
+                if (status === window.google.maps.places.PlacesServiceStatus.OK && place) {
+                    resolve(convertGooglePlaceToPlace(place));
+                } else {
+                    console.warn('Place details failed:', status);
+                    resolve(null);
+                }
+            });
+        });
+
+        return Promise.race([
+            detailsPromise,
+            new Promise<Place | null>((resolve) => setTimeout(() => resolve(null), 5000))
+        ]);
+
+    } catch (error) {
+        console.error('Error getting place details:', error);
+        return null;
+    }
+}
+
+function convertGooglePlaceToPlace(googlePlace: google.maps.places.PlaceResult): Place {
+    const category = mapGoogleTypeToCategory(googlePlace.types?.[0] || '');
+
+    return {
+        id: googlePlace.place_id || `place-${Date.now()}`,
+        name: googlePlace.name || 'Unknown Place',
+        category,
+        lat: googlePlace.geometry?.location?.lat() || 0,
+        lng: googlePlace.geometry?.location?.lng() || 0,
+        rating: googlePlace.rating || 0,
+        reviews: googlePlace.user_ratings_total || 0,
+        priceLevel: (googlePlace.price_level || 1) as 1 | 2 | 3 | 4,
+        image: googlePlace.photos?.[0]?.getUrl({ maxWidth: 800 }) || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800',
+        description: googlePlace.formatted_address || '',
+        phoneNumber: googlePlace.formatted_phone_number,
+        website: googlePlace.website,
+        openingHours: googlePlace.opening_hours?.weekday_text,
+        rawTypes: googlePlace.types || [],
+        vicinity: googlePlace.vicinity || googlePlace.formatted_address || '',
+    };
+}
+
+function mapGoogleTypeToCategory(type: string): 'food' | 'attraction' | 'hotel' | 'activity' | 'hiking' | 'nature' | 'shopping' | 'nightlife' | 'culture' {
+    const typeMap: Record<string, 'food' | 'attraction' | 'hotel' | 'activity' | 'hiking' | 'nature' | 'shopping' | 'nightlife' | 'culture'> = {
+        restaurant: 'food',
+        cafe: 'food',
+        bar: 'food',
+        food: 'food',
+        meal_takeaway: 'food',
+        meal_delivery: 'food',
+        lodging: 'hotel',
+        hotel: 'hotel',
+        tourist_attraction: 'attraction',
+        museum: 'culture',
+        art_gallery: 'culture',
+        park: 'nature',
+        natural_feature: 'nature',
+        campground: 'nature',
+        point_of_interest: 'attraction',
+        amusement_park: 'activity',
+        bowling_alley: 'activity',
+        gym: 'activity',
+        spa: 'activity',
+        shopping_mall: 'shopping',
+        store: 'shopping',
+        clothing_store: 'shopping',
+        night_club: 'nightlife',
+        casino: 'nightlife',
+        stadium: 'activity',
+        movie_theater: 'activity',
+    };
+
+    return typeMap[type] || 'attraction';
+}
+
+// Map our category IDs to Google Places types
+export function mapCategoryToGoogleType(category: string): string {
+    const categoryMap: Record<string, string> = {
+        food: 'restaurant',
+        attraction: 'tourist_attraction',
+        hotel: 'lodging',
+        activity: 'amusement_park',
+        hiking: 'park',
+        nature: 'park',
+        shopping: 'shopping_mall',
+        nightlife: 'night_club',
+        culture: 'museum',
+    };
+
+    return categoryMap[category] || 'tourist_attraction';
+}
 
 // Search for hidden gems - lesser-known places with good ratings
 export async function searchHiddenGems(
@@ -262,7 +376,7 @@ export async function autocompletePlace(input: string, types?: string[]): Promis
         await initGoogleMaps();
 
         if (typeof window === 'undefined' || !window.google?.maps) {
-            console.warn('Google Maps not available');
+            console.error('[GoogleMaps] API not available for autocomplete');
             return [];
         }
 
@@ -278,7 +392,7 @@ export async function autocompletePlace(input: string, types?: string[]): Promis
                 if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
                     resolve(predictions);
                 } else {
-                    console.warn('Autocomplete failed:', status);
+                    console.warn('[GoogleMaps] Autocomplete failed:', status);
                     resolve([]);
                 }
             });
@@ -290,7 +404,7 @@ export async function autocompletePlace(input: string, types?: string[]): Promis
         ]);
 
     } catch (error) {
-        console.error('Error with autocomplete:', error);
+        console.error('[GoogleMaps] Error with autocomplete:', error);
         return [];
     }
 }

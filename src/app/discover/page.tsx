@@ -118,7 +118,16 @@ export default function DiscoverPage() {
             let trending = await searchPlaces(trendingBase, coords || undefined, radius, 'tourist_attraction');
 
             // Apply Advanced Filtration Pipeline
-            const { filteredPlaces: filteredTrending, metadata } = applyDiscoveryFiltrationPipeline(trending, locationName, 'attractions');
+            let { filteredPlaces: filteredTrending, metadata } = applyDiscoveryFiltrationPipeline(trending, locationName, 'attractions');
+
+            // FALLBACK: If filtration removed everything, show original results (but warn)
+            if (trending.length > 0 && filteredTrending.length === 0) {
+                console.warn('[Discovery] Filtration removed all results. Showing raw results as fallback.');
+                filteredTrending = trending;
+                metadata.filteredCount = trending.length;
+                metadata.filtrationRate = 0;
+            }
+
             setFiltrationMetadata(metadata);
 
             let enhancedTrending = filteredTrending;
@@ -147,6 +156,7 @@ export default function DiscoverPage() {
             setFilteredPlaces(enhancedTrending);
         } catch (error) {
             console.error('Error fetching places:', error);
+            // TODO: Show error toast or UI state
         } finally {
             setIsLoading(false);
         }
