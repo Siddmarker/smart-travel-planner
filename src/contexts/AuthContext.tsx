@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { authService, SignupData, AuthResponse } from '@/services/auth';
+import { useStore } from '@/store/useStore';
 
 interface User {
     id: string;
@@ -28,6 +29,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    const { setCurrentUser: setStoreUser } = useStore();
+
     useEffect(() => {
         // Check if user is logged in on app start and page refresh
         checkAuthStatus();
@@ -44,15 +47,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // const verifiedUser = await verifyToken(token);
                 const parsedUser = JSON.parse(userData);
                 setUser(parsedUser);
+
+                // SYNC WITH ZUSTAND STORE
+                // This ensures components using useStore (like Sidebar, NewTripPage) are updated
+                setStoreUser(parsedUser);
+
                 console.log('✅ User session restored:', parsedUser.email);
             } else {
                 // No valid token, ensure user is null
                 console.log('❌ No active session found');
                 setUser(null);
+                setStoreUser(null as any); // Force clear store
             }
         } catch (error) {
             console.error('Auth check failed:', error);
             setUser(null);
+            setStoreUser(null as any);
             localStorage.removeItem('authToken');
             localStorage.removeItem('userData');
         } finally {
