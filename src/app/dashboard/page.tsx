@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useStore } from '@/store/useStore';
 import { Plus, Plane, MapPin, DollarSign, Calendar } from 'lucide-react';
 import { TripCard } from '@/components/TripCard';
-import { DiscoveryWidget } from '@/components/Dashboard/DiscoveryWidget';
+import { DestinationDisplay } from '@/components/Dashboard/DestinationDisplay';
 import Link from 'next/link';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { CurrencySettings } from '@/components/CurrencySettings';
@@ -99,10 +99,9 @@ function DashboardContent() {
                     {/* Currency Settings */}
                     <CurrencySettings />
 
-                    {/* Discovery Widget */}
+                    {/* Destination Display */}
                     <div>
-                        <h2 className="text-2xl font-semibold mb-4">Discover</h2>
-                        <DiscoveryWidget />
+                        <DestinationDisplay />
                     </div>
                 </div>
             </div>

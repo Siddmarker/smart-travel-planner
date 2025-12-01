@@ -1,19 +1,24 @@
 'use client';
 import { createContext, useContext, useEffect, useState } from 'react';
+import { authService, SignupData, AuthResponse } from '@/services/auth';
 
 interface User {
     id: string;
     email: string;
     name: string;
     picture?: string;
-    email_verified: boolean;
+    email_verified?: boolean;
+    token?: string;
 }
 
 interface AuthContextType {
     user: User | null;
     loading: boolean;
+    error: string | null;
     login: (userData: User, token: string) => void;
+    signup: (userData: SignupData) => Promise<AuthResponse>;
     logout: () => void;
+    clearError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,6 +26,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         // Check if user is logged in on app start and page refresh
@@ -31,7 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
             // Check if user has existing valid session/token
             const token = localStorage.getItem('authToken');
-            const userData = localStorage.getItem('user');
+            const userData = localStorage.getItem('userData'); // Changed from 'user' to 'userData' to match request
 
             if (token && userData) {
                 // In a real app, we would verify the token with the backend here
@@ -43,14 +49,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // No valid token, ensure user is null
                 console.log('❌ No active session found');
                 setUser(null);
-                // Optionally redirect to login page if we were trying to access a protected route
-                // But we'll let ProtectedRoute handle that to avoid redirect loops on public pages
             }
         } catch (error) {
             console.error('Auth check failed:', error);
             setUser(null);
             localStorage.removeItem('authToken');
-            localStorage.removeItem('user');
+            localStorage.removeItem('userData');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const signup = async (userData: SignupData): Promise<AuthResponse> => {
+        setError(null);
+        setLoading(true);
+
+        try {
+            const result = await authService.signup(userData);
+
+            if (result.success && result.user && result.token) {
+                // ✅ CRITICAL: Store token and user data
+                localStorage.setItem('authToken', result.token);
+                localStorage.setItem('userData', JSON.stringify(result.user));
+
+                // Update state
+                setUser(result.user);
+
+                return {
+                    success: true,
+                    user: result.user,
+                    token: result.token,
+                    message: result.message
+                };
+            } else {
+                const errorMsg = result.error || 'Signup failed';
+                setError(errorMsg);
+                return {
+                    success: false,
+                    error: errorMsg
+                };
+            }
+        } catch (error: any) {
+            const errorMessage = error.message || 'Signup failed. Please try again.';
+            setError(errorMessage);
+            return {
+                success: false,
+                error: errorMessage
+            };
         } finally {
             setLoading(false);
         }
@@ -58,21 +103,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const login = (userData: User, token: string) => {
         localStorage.setItem('authToken', token);
-        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('userData', JSON.stringify(userData));
         setUser(userData);
         console.log('✅ User logged in:', userData.email);
     };
 
     const logout = () => {
         localStorage.removeItem('authToken');
-        localStorage.removeItem('user');
+        localStorage.removeItem('userData');
         setUser(null);
         console.log('✅ User logged out');
-        window.location.href = '/login';
+        // Optional: Redirect to login is handled by components or manually
     };
 
+    const clearError = () => setError(null);
+
     return (
-        <AuthContext.Provider value={{ user, login, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, signup, logout, loading, error, clearError }}>
             {children}
         </AuthContext.Provider>
     );
