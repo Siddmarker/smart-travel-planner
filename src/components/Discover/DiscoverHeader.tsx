@@ -113,10 +113,18 @@ export function DiscoverHeader({ onSearch, onLocationChange, onRadiusChange }: D
                             max="500"
                             value={radius}
                             onChange={(e) => {
-                                const val = parseInt(e.target.value);
-                                if (val >= 1 && val <= 500) {
-                                    setRadius(val);
-                                    onRadiusChange?.(val);
+                                const val = e.target.value;
+                                if (val === '') {
+                                    // Allow empty intermediate state
+                                    setRadius(NaN);
+                                    return;
+                                }
+                                const numVal = parseInt(val);
+                                if (!isNaN(numVal)) {
+                                    setRadius(numVal);
+                                    if (numVal >= 1 && numVal <= 500) {
+                                        onRadiusChange?.(numVal);
+                                    }
                                 }
                             }}
                             className="w-[90px] h-9 text-sm"

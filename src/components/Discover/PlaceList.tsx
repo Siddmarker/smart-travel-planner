@@ -42,6 +42,20 @@ export function PlaceList({ places, onAddToTrip, onSavePlace, viewMode = 'grid',
         }
     };
 
+    if (!places || places.length === 0) {
+        return (
+            <div className="text-center py-12 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-dashed">
+                <div className="mx-auto h-12 w-12 text-muted-foreground mb-3">
+                    <MapPin className="h-full w-full opacity-50" />
+                </div>
+                <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100">No places found</h3>
+                <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1">
+                    Try adjusting your filters or increasing the search radius.
+                </p>
+            </div>
+        );
+    }
+
     if (useEnhancedCard) {
         return (
             <div className="grid grid-cols-1 gap-4">

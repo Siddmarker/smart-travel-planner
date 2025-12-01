@@ -277,6 +277,15 @@ export default function DiscoverPage() {
         });
 
         setFilteredPlaces(results);
+
+        // Also apply filters to Nearby and Hidden Gems tabs
+        // Note: For Nearby, we might want to re-sort by distance, but filtering is priority
+        setNearbyPlacesList(results);
+
+        // For Hidden Gems, maintain the rating/review criteria
+        const hidden = results.filter(p => (p.rating || 0) >= 4.0 && (p.reviews || 0) < 100);
+        setHiddenGemsList(hidden);
+
     }, [activeFilters, categoryResults, selectedCategory]);
 
     const handleLocationChange = (location: string, coords?: { lat: number; lng: number }) => {
