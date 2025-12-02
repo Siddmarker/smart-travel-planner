@@ -34,7 +34,6 @@ export class UnifiedTravelPlanner {
         );
 
         // PHASE 2: WAIT FOR USER VOTING (External Process)
-        // In your app, this is where users actually vote
         // For simulation, we'll auto-resolve votes
         const votedPlan = this.simulate_voting_resolution(votingInterface);
 
@@ -52,35 +51,30 @@ export class UnifiedTravelPlanner {
         availablePlaces: Place[],
         categoryPreferences?: { categories: TripCategory[]; priorities?: { [key in TripCategory]?: number } }
     ): Promise<VotingInterface> {
-        // Discover places with advanced filtering
+        // Discover places with advanced filtering (Independent of routing)
         const { places: rawPlaces, filtrationMetadata } = await this.discoverPlacesWithFilters(
             userPreferences,
             availablePlaces
         );
 
         // SMART DURATION ADJUSTMENT
-        // We use the raw filtered places to determine if the duration is sustainable
         const durationAdjustment = adjustTripDurationBasedOnPlaces(
             rawPlaces,
             userPreferences.trip_duration,
-            // Use actual destination name
             userPreferences.destination.name || "the destination",
             filtrationMetadata
         );
 
-        // Update preferences with adjusted duration for the rest of the flow
         const adjustedPreferences = {
             ...userPreferences,
             trip_duration: durationAdjustment.adjustedDuration
         };
 
-        // Enhance with real data (distance from start location)
         const enhancedPlaces = await enhancePlacesWithPhotosAndDistance(
             userPreferences.start_location,
             rawPlaces
         );
 
-        // Group by days but DON'T optimize routes yet
         const dailyVotingOptions: { [day: number]: DailyVotingOptions } = {};
         const usedPlaceIds = new Set<string>();
 
@@ -88,7 +82,7 @@ export class UnifiedTravelPlanner {
             const dayOptions: DailyVotingOptions = {};
 
             for (const timeSlot of ['morning', 'afternoon', 'evening']) {
-                // Get 3 options per time slot, ensuring diversity and time appropriateness
+                // Get 3 options per time slot, purely based on quality/relevance
                 const slotOptions = this.getTimeAppropriatePlaces(
                     enhancedPlaces,
                     timeSlot,
@@ -96,7 +90,6 @@ export class UnifiedTravelPlanner {
                     usedPlaceIds
                 );
 
-                // Mark selected places as used
                 slotOptions.forEach(p => usedPlaceIds.add(p.id));
 
                 dayOptions[timeSlot] = slotOptions.map(place => ({
@@ -106,7 +99,6 @@ export class UnifiedTravelPlanner {
                     why_recommended: this.generate_voting_recommendation(place, timeSlot),
                     // CRITICAL: No routing info at voting stage
                     travel_time: null,
-                    distance_text: place.distance?.text || null,
                     estimated_arrival: null
                 }));
             }
@@ -115,12 +107,12 @@ export class UnifiedTravelPlanner {
 
         return {
             voting_interface: dailyVotingOptions,
-            duration_adjustment: durationAdjustment, // Pass this back to UI
+            duration_adjustment: durationAdjustment,
             metadata: {
                 total_options: (Object.values(dailyVotingOptions) as DailyVotingOptions[]).reduce((acc: number, day: DailyVotingOptions) =>
                     acc + Object.values(day).reduce((dAcc: number, slot: VotingOption[]) => dAcc + slot.length, 0), 0),
                 categories_covered: userPreferences.categories,
-                voting_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // Fake deadline
+                voting_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
             }
         };
     }
@@ -225,8 +217,7 @@ export class UnifiedTravelPlanner {
             for (const [timeSlot, options] of Object.entries(slots)) {
                 if (!options || options.length === 0) continue;
 
-                // In real app: Use actual user votes
-                // For simulation: Use quality score + diversity
+                // Simulate voting with random factor
                 const winner = this.select_voting_winner(options);
                 if (winner) {
                     dayPlan[timeSlot] = winner;
@@ -237,17 +228,27 @@ export class UnifiedTravelPlanner {
         return votedPlan;
     }
 
+
     /**
      * STEP 3: AFTER VOTING - Apply map routing optimization to voted places
      */
     public async optimize_post_voting_routing(votedPlan: VotedPlan, userPreferences: UserPreferences): Promise<{ [day: number]: ItineraryItem[] }> {
         const optimizedItinerary: { [day: number]: ItineraryItem[] } = {};
-        let currentLocation = { ...userPreferences.start_location, id: 'start', name: 'Start' } as Place; // Mock start place
+
+        // Fix: Add missing properties to mock Place object
+        let currentLocation = {
+            ...userPreferences.start_location,
+            id: 'start',
+            name: 'Start',
+            category: 'activity',
+            rating: 5,
+            reviews: 0,
+            priceLevel: 1
+        } as Place;
 
         for (let day = 1; day <= userPreferences.trip_duration; day++) {
             if (!votedPlan[day]) continue;
 
-            // Extract voted places for this day
             const votedPlaces: VotedPlaceItem[] = [];
             for (const timeSlot of ['morning', 'afternoon', 'evening']) {
                 if (votedPlan[day][timeSlot]) {
@@ -259,7 +260,6 @@ export class UnifiedTravelPlanner {
                 }
             }
 
-            // NOW apply routing optimization to the VOTED places
             const dayItinerary = await this.optimize_day_routing_post_vote(
                 currentLocation,
                 votedPlaces,
@@ -269,7 +269,6 @@ export class UnifiedTravelPlanner {
 
             optimizedItinerary[day] = dayItinerary;
 
-            // Update location for next day (last place visited)
             if (dayItinerary.length > 0) {
                 const lastItem = dayItinerary[dayItinerary.length - 1];
                 const lastPlace = votedPlaces.find(vp => vp.place.id === lastItem.placeId)?.place;
@@ -279,24 +278,34 @@ export class UnifiedTravelPlanner {
             }
         }
 
-        // Handle return trip if requested (append to last day)
+        // Handle return trip if requested
         if (userPreferences.return_to_start && Object.keys(optimizedItinerary).length > 0) {
             const lastDay = userPreferences.trip_duration;
             if (optimizedItinerary[lastDay] && optimizedItinerary[lastDay].length > 0) {
                 const lastItem = optimizedItinerary[lastDay][optimizedItinerary[lastDay].length - 1];
 
-                // Calculate return trip using REAL distance
-                const returnDistInfo = (await calculateRealDistances(currentLocation, [{ ...userPreferences.start_location, id: 'end', name: 'End' } as Place]))[0];
-                const returnDuration = returnDistInfo.distance?.duration ? parseInt(returnDistInfo.distance.duration) : 30; // fallback
+                // Fix: Add missing properties to mock Place object
+                const endLocation = {
+                    ...userPreferences.start_location,
+                    id: 'end',
+                    name: 'End',
+                    category: 'activity',
+                    rating: 5,
+                    reviews: 0,
+                    priceLevel: 1
+                } as Place;
 
-                // Calculate start time for return trip based on last item's end time
+                // Calculate return trip using REAL distance
+                const returnDistInfo = (await calculateRealDistances(currentLocation, [endLocation]))[0];
+                const returnDuration = returnDistInfo.distance?.duration ? parseInt(returnDistInfo.distance.duration) : 30;
+
                 const lastEndTime = new Date(lastItem.endTime);
                 const returnStartTime = lastEndTime;
                 const returnEndTime = new Date(returnStartTime.getTime() + returnDuration * 60000);
 
                 optimizedItinerary[lastDay].push({
                     id: uuidv4(),
-                    placeId: 'return_trip', // Special ID
+                    placeId: 'return_trip',
                     startTime: returnStartTime.toISOString(),
                     endTime: returnEndTime.toISOString(),
                     notes: `Return to start: ${returnDistInfo.distance?.text || 'Calculating...'}`,
@@ -320,7 +329,6 @@ export class UnifiedTravelPlanner {
     ): Promise<ItineraryItem[]> {
         if (!votedPlaces || votedPlaces.length === 0) return [];
 
-        // Convert to routing format
         const placesToRoute = votedPlaces.map(vp => vp.place);
         const timeConstraints: TimeConstraints = {};
         votedPlaces.forEach(vp => {
@@ -336,12 +344,10 @@ export class UnifiedTravelPlanner {
         );
 
         // Build final itinerary with actual timing
-        // Start time for the day
         const date = new Date(userPreferences.trip_dates.start);
         date.setDate(date.getDate() + (dayNumber - 1));
-
         let currentTime = new Date(date);
-        currentTime.setHours(9, 0, 0, 0); // Default start 9 AM
+        currentTime.setHours(9, 0, 0, 0);
         if (userPreferences.day_start_time) {
             const startH = new Date(userPreferences.day_start_time).getHours();
             const startM = new Date(userPreferences.day_start_time).getMinutes();
@@ -354,8 +360,7 @@ export class UnifiedTravelPlanner {
         for (const place of optimizedOrder) {
             // Calculate REAL travel time
             const placeWithDist = (await calculateRealDistances(currentLocation, [place]))[0];
-            // Parse duration string "15 mins" -> 15
-            let travelTime = 15; // default
+            let travelTime = 15;
             if (placeWithDist.distance?.duration) {
                 travelTime = parseInt(placeWithDist.distance.duration);
             }
@@ -363,49 +368,50 @@ export class UnifiedTravelPlanner {
             // Apply time slot constraints
             const timeSlotConstraint = timeConstraints[place.id];
 
-            // Add travel time to current time
+            // Calculate constrained arrival
             let arrivalTime = new Date(currentTime.getTime() + travelTime * 60000);
-
-            // Adjust arrival based on constraints
             arrivalTime = this.calculate_constrained_arrival(arrivalTime, timeSlotConstraint);
 
-            // Assume 1.5 hours visit duration
-            const visitDuration = 90;
-            const departureTime = new Date(arrivalTime.getTime() + visitDuration * 60000);
+            // Check feasibility
+            const feasibility = this.check_visit_feasibility(place, arrivalTime);
 
-            finalItinerary.push({
-                id: uuidv4(),
-                placeId: place.id,
-                startTime: arrivalTime.toISOString(),
-                endTime: departureTime.toISOString(),
-                notes: `Travel: ${placeWithDist.distance?.text || '...'}. Recommended for ${timeSlotConstraint.preferred_slot}`,
-                type: 'activity'
-            });
+            if (feasibility.feasible) {
+                finalItinerary.push({
+                    id: uuidv4(),
+                    placeId: place.id,
+                    startTime: arrivalTime.toISOString(),
+                    endTime: feasibility.departureTime.toISOString(),
+                    notes: `Travel: ${placeWithDist.distance?.text || '...'}. Recommended for ${timeSlotConstraint.preferred_slot}`,
+                    type: 'activity'
+                });
 
-            // Update for next iteration
-            currentTime = departureTime;
-            currentLocation = place;
+                currentTime = feasibility.departureTime;
+                currentLocation = place;
+            }
         }
 
         return finalItinerary;
     }
 
     private time_aware_traveling_salesman(startLocation: Place, places: Place[], timeConstraints: TimeConstraints): Place[] {
-        // If only 1-2 places, order doesn't matter much (or just nearest neighbor)
         if (places.length <= 2) {
-            // Simple sort by distance from start
             return places.sort((a, b) =>
                 calculateDistance(startLocation, a) - calculateDistance(startLocation, b)
             );
         }
 
-        // For 3 places, consider time slot preferences (Morning -> Afternoon -> Evening)
         if (places.length === 3) {
             return this.optimize_three_place_route(startLocation, places, timeConstraints);
         }
 
-        // For more places, just return as is for now (or implement complex TSP)
-        return places;
+        // For more places, use constraint-aware routing (simplified for now)
+        // Sort by preferred slot order: Morning -> Afternoon -> Evening
+        const slotOrder = { 'morning': 1, 'afternoon': 2, 'evening': 3 };
+        return places.sort((a, b) => {
+            const slotA = timeConstraints[a.id]?.preferred_slot || 'morning';
+            const slotB = timeConstraints[b.id]?.preferred_slot || 'morning';
+            return (slotOrder[slotA as keyof typeof slotOrder] || 1) - (slotOrder[slotB as keyof typeof slotOrder] || 1);
+        });
     }
 
     private optimize_three_place_route(startLocation: Place, places: Place[], timeConstraints: TimeConstraints): Place[] {
@@ -413,14 +419,45 @@ export class UnifiedTravelPlanner {
         const afternoonPlaces = places.filter(p => timeConstraints[p.id]?.preferred_slot === 'afternoon');
         const eveningPlaces = places.filter(p => timeConstraints[p.id]?.preferred_slot === 'evening');
 
-        // Ideally we want M -> A -> E
-        const ordered = [...morningPlaces, ...afternoonPlaces, ...eveningPlaces];
+        // Generate possible sequences that respect time slots
+        const sequences = this.generate_time_respecting_sequences(morningPlaces, afternoonPlaces, eveningPlaces);
 
-        // If any places were missed (e.g. no preferred slot?), add them
-        const usedIds = new Set(ordered.map(p => p.id));
-        const remaining = places.filter(p => !usedIds.has(p.id));
+        let bestRoute = places; // Fallback
+        let bestScore = Infinity;
 
-        return [...ordered, ...remaining];
+        for (const sequence of sequences) {
+            // Calculate total distance score
+            let score = calculateDistance(startLocation, sequence[0]);
+            for (let i = 0; i < sequence.length - 1; i++) {
+                score += calculateDistance(sequence[i], sequence[i + 1]);
+            }
+
+            if (score < bestScore) {
+                bestScore = score;
+                bestRoute = sequence;
+            }
+        }
+
+        return bestRoute;
+    }
+
+    private generate_time_respecting_sequences(morning: Place[], afternoon: Place[], evening: Place[]): Place[][] {
+        const sequences: Place[][] = [];
+        // Basic flow: Morning -> Afternoon -> Evening
+        // Handle cases where some slots might be empty or have multiple
+        const m = morning.length > 0 ? morning : [null];
+        const a = afternoon.length > 0 ? afternoon : [null];
+        const e = evening.length > 0 ? evening : [null];
+
+        for (const mp of m) {
+            for (const ap of a) {
+                for (const ep of e) {
+                    const seq = [mp, ap, ep].filter(p => p !== null) as Place[];
+                    if (seq.length > 0) sequences.push(seq);
+                }
+            }
+        }
+        return sequences;
     }
 
     private calculate_constrained_arrival(proposedArrival: Date, timeConstraints: { preferred_slot: string }): Date {
@@ -432,6 +469,7 @@ export class UnifiedTravelPlanner {
         const morningStart = new Date(`${dateStr}T09:00:00`);
         const afternoonStart = new Date(`${dateStr}T12:00:00`);
         const eveningStart = new Date(`${dateStr}T17:00:00`);
+        const eveningEnd = new Date(`${dateStr}T21:00:00`);
 
         if (preferredSlot === 'morning') {
             if (proposedArrival < morningStart) return morningStart;
@@ -442,6 +480,24 @@ export class UnifiedTravelPlanner {
         }
 
         return proposedArrival;
+    }
+
+    private check_visit_feasibility(place: Place, arrivalTime: Date): { feasible: boolean, departureTime: Date } {
+        const visitDuration = place.visitDuration || 90;
+        const departureTime = new Date(arrivalTime.getTime() + visitDuration * 60000);
+
+        // Check closing time
+        if (place.opensAt && place.closesAt) {
+            const [closeH, closeM] = place.closesAt.split(':').map(Number);
+            const closeTime = new Date(arrivalTime);
+            closeTime.setHours(closeH, closeM, 0, 0);
+
+            if (departureTime > closeTime) {
+                return { feasible: false, departureTime };
+            }
+        }
+
+        return { feasible: true, departureTime };
     }
 
     private getTimeAppropriatePlaces(places: Place[], timeSlot: string, count: number, usedPlaceIds: Set<string>): Place[] {
@@ -511,12 +567,15 @@ export class UnifiedTravelPlanner {
 
     private select_voting_winner(options: VotingOption[]): VotingOption | null {
         if (options.length === 0) return null;
-        // Simulate voting: just pick the one with highest quality score
-        return options.sort((a, b) => b.quality_score - a.quality_score)[0];
+        const scoredOptions = options.map(option => {
+            const randomFactor = Math.random() * 0.2 + 0.9; // 0.9 to 1.1
+            return { option, score: option.quality_score * randomFactor };
+        });
+        return scoredOptions.sort((a, b) => b.score - a.score)[0].option;
     }
 
     private calculateRelevanceScore(place: Place, categories: string[]): number {
-        let score = place.rating * 20; // 0-100
+        let score = place.rating * 20;
         if (categories.includes(place.category)) score += 10;
         return Math.min(100, score);
     }

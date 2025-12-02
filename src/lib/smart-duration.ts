@@ -30,14 +30,11 @@ export function adjustTripDurationBasedOnPlaces(
     let adjustmentReason = '';
 
     if (maxSustainableDays < requestedDuration) {
-        // If we don't have enough places for the requested duration
-        adjustedDuration = Math.max(1, maxSustainableDays); // Minimum 1 day
+        // If we don't have enough places, we still respect the USER'S requested duration.
+        // We will just spread them out or leave some free time.
+        adjustedDuration = requestedDuration;
 
-        if (adjustedDuration < requestedDuration) {
-            adjustmentReason = `Filtered ${fakeEntityCount} non-tourist entities (${filtrationRate}%). ${destination} has limited verified attractions for ${requestedDuration} days. Showing optimized ${adjustedDuration}-day itinerary.`;
-        } else {
-            adjustmentReason = `Optimized for ${adjustedDuration} days based on verified places.`;
-        }
+        adjustmentReason = `Found ${totalQualityPlaces} verified places. Some days might be lighter to keep a relaxed pace for your ${requestedDuration}-day trip.`;
     } else if (maxSustainableDays > requestedDuration) {
         // Can suggest longer trip if plenty of places
         if (maxSustainableDays >= requestedDuration + 2) {
