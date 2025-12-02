@@ -430,10 +430,14 @@ function enhanceFoodPlace(place: Place) {
 
     // Default to Veg/Non-Veg based on cuisine hints if empty
     if (place.dietaryOptions.length === 0) {
-        if (combinedText.includes('steak') || combinedText.includes('grill') || combinedText.includes('chicken')) {
+        if (combinedText.includes('steak') || combinedText.includes('grill') || combinedText.includes('chicken') || combinedText.includes('mutton') || combinedText.includes('fish') || combinedText.includes('seafood')) {
             place.dietaryOptions.push('Non-Vegetarian');
+        } else if (combinedText.includes('pure veg') || combinedText.includes('vegetarian only')) {
+            place.dietaryOptions.push('Vegetarian');
         } else {
-            place.dietaryOptions.push('Vegetarian'); // Fallback for safety/inclusivity
+            // If ambiguous, assume it serves both (standard restaurant)
+            place.dietaryOptions.push('Vegetarian');
+            place.dietaryOptions.push('Non-Vegetarian');
         }
     }
 

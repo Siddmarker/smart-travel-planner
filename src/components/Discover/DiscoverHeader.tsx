@@ -52,7 +52,7 @@ export function DiscoverHeader({ onSearch, onLocationChange, onRadiusChange }: D
         }
     };
 
-    const handleLocationSubmit = () => {
+    const handleLocationSubmit = async () => {
         // 1. GET THE LIVE VALUE FROM THE INPUT
         if (!location) {
             alert('Please enter a city name.');
@@ -61,9 +61,22 @@ export function DiscoverHeader({ onSearch, onLocationChange, onRadiusChange }: D
 
         console.log('Handling location submit for:', location);
 
-        // 2. PASS THAT VALUE TO THE PARENT (which will use Text Search)
-        // We do NOT resolve coordinates here anymore, to ensure we use the text query.
-        // We pass undefined for coords to indicate we want a text-based search.
+        // 2. Try to get coordinates for the entered text to enable "Nearby" search
+        try {
+            const results = await autocompletePlace(location);
+            if (results && results.length > 0) {
+                const topMatch = results[0];
+                const placeDetails = await getPlaceDetails(topMatch.place_id);
+                if (placeDetails) {
+                    onLocationChange?.(location, { lat: placeDetails.lat, lng: placeDetails.lng });
+                    return;
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching coords for submit:', error);
+        }
+
+        // Fallback: Pass text only if geocoding fails
         onLocationChange?.(location, undefined);
     };
 
