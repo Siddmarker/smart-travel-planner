@@ -70,14 +70,18 @@ export function DiscoverHeader({ onSearch, onLocationChange, onRadiusChange }: D
     return (
         <div className="space-y-4">
             {/* Location & Radius */}
-            <div className="flex flex-wrap gap-3 items-center w-full">
-                <div className="flex items-center gap-2 flex-1 relative min-w-[300px]">
-                    <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <div className="flex-1 relative">
+            {/* Location & Radius & Search */}
+            <div className="flex flex-col md:flex-row gap-4 items-start md:items-end w-full">
+                {/* Location Input */}
+                <div className="flex-1 w-full md:w-auto relative min-w-[250px]">
+                    <label htmlFor="location-input" className="text-sm font-medium mb-1 block text-muted-foreground">
+                        📍 Location
+                    </label>
+                    <div className="relative">
                         <Input
-                            id="location-input" // Adding ID for clarity
+                            id="location-input"
                             placeholder="Enter location (e.g., Paris, France)"
-                            value={location} // 1. Live value from state
+                            value={location}
                             onChange={(e) => handleLocationInput(e.target.value)}
                             onKeyPress={(e) => e.key === 'Enter' && handleLocationSubmit()}
                             className="w-full"
@@ -98,15 +102,14 @@ export function DiscoverHeader({ onSearch, onLocationChange, onRadiusChange }: D
                             </div>
                         )}
                     </div>
-                    {/* Removed Geolocation Button as requested by user */}
-                    <Button onClick={handleLocationSubmit}>
-                        Search
-                    </Button>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Within:</span>
-                    <div className="flex items-center gap-1">
+                {/* Distance Filter */}
+                <div className="w-full md:w-auto">
+                    <label className="text-sm font-medium mb-1 block text-muted-foreground">
+                        📏 Within
+                    </label>
+                    <div className="flex items-center gap-2">
                         <Input
                             type="number"
                             min="1"
@@ -115,7 +118,6 @@ export function DiscoverHeader({ onSearch, onLocationChange, onRadiusChange }: D
                             onChange={(e) => {
                                 const val = e.target.value;
                                 if (val === '') {
-                                    // Allow empty intermediate state
                                     setRadius(NaN);
                                     return;
                                 }
@@ -127,21 +129,26 @@ export function DiscoverHeader({ onSearch, onLocationChange, onRadiusChange }: D
                                     }
                                 }
                             }}
-                            className="w-[90px] h-9 text-sm"
+                            className="w-[100px]"
                         />
-                        <span className="text-sm text-muted-foreground">km</span>
+                        <span className="text-sm text-muted-foreground whitespace-nowrap">km</span>
                     </div>
                 </div>
 
-                {/* Quick Filters */}
-                <div className="flex gap-2 ml-auto">
-                    <Badge variant="outline" className="cursor-pointer hover:bg-accent">
+                {/* Search Button - Moved to end */}
+                <Button onClick={handleLocationSubmit} className="w-full md:w-auto min-w-[100px]">
+                    Search
+                </Button>
+
+                {/* Quick Filters - Moved to separate row on mobile or pushed right */}
+                <div className="flex gap-2 ml-auto mt-2 md:mt-0 overflow-x-auto w-full md:w-auto pb-2 md:pb-0">
+                    <Badge variant="outline" className="cursor-pointer hover:bg-accent whitespace-nowrap">
                         🔥 Trending
                     </Badge>
-                    <Badge variant="outline" className="cursor-pointer hover:bg-accent">
+                    <Badge variant="outline" className="cursor-pointer hover:bg-accent whitespace-nowrap">
                         ⭐ Top Rated
                     </Badge>
-                    <Badge variant="outline" className="cursor-pointer hover:bg-accent">
+                    <Badge variant="outline" className="cursor-pointer hover:bg-accent whitespace-nowrap">
                         💎 Hidden Gems
                     </Badge>
                 </div>

@@ -40,6 +40,9 @@ export function ActivityCard({ item, place, onDelete }: ActivityCardProps) {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                                 <DropdownMenuItem>Edit Details</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => alert('Reported as agency content')}>
+                                    Report Agency Content
+                                </DropdownMenuItem>
                                 <DropdownMenuItem className="text-destructive" onClick={onDelete}>
                                     Remove
                                 </DropdownMenuItem>

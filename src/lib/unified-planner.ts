@@ -188,6 +188,28 @@ export class UnifiedTravelPlanner {
             return true;
         });
 
+        // 4. Fallback: If we have too few places, generate "Ask Community" placeholders
+        if (filteredPlaces.length < 5) {
+            console.log('[UnifiedPlanner] Insufficient places found. Generating fallbacks.');
+            const fallbackCount = 5 - filteredPlaces.length;
+            for (let i = 0; i < fallbackCount; i++) {
+                filteredPlaces.push({
+                    id: `fallback-${Date.now()}-${i}`,
+                    name: "Ask Community for Suggestions",
+                    category: 'activity',
+                    lat: userPreferences.destination.lat || 0,
+                    lng: userPreferences.destination.lng || 0,
+                    rating: 0,
+                    reviews: 0,
+                    priceLevel: 1,
+                    image: '', // Placeholder image will be handled by UI
+                    description: "We couldn't find enough verified local experiences. Ask the community for their hidden gems!",
+                    rawTypes: ['fallback'],
+                    vicinity: userPreferences.destination.name || "Destination"
+                });
+            }
+        }
+
         return { places: filteredPlaces, filtrationMetadata: metadata };
     }
 

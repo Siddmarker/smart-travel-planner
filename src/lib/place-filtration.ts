@@ -199,7 +199,33 @@ function isPotentialFakeEntity(place: Place, destination: string): string | null
     // Check for suspicious rating patterns
     if (hasSuspiciousRatingPattern(place)) return 'Suspicious rating pattern';
 
+    // Check for Agency/Tour Operator
+    if (isAgencyOrTourOperator(place)) return 'Agency or Tour Operator';
+
     return null;
+}
+
+function isAgencyOrTourOperator(place: Place): boolean {
+    const name = place.name.toLowerCase();
+    const types = place.rawTypes || [];
+
+    const agencyKeywords = [
+        'tour agency', 'travel agent', 'travel agency', 'booking office',
+        'tour operator', 'holiday package', 'vacation planner',
+        'tourism office', 'information center', 'ticket booking'
+    ];
+
+    const agencyTypes = [
+        'travel_agency', 'real_estate_agency'
+    ];
+
+    // Check keywords
+    if (agencyKeywords.some(keyword => name.includes(keyword))) return true;
+
+    // Check types
+    if (types.some(type => agencyTypes.includes(type))) return true;
+
+    return false;
 }
 
 function hasOnlyGenericTypes(types: string[]): boolean {

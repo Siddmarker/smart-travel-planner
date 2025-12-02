@@ -59,10 +59,43 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
     };
 
     const handleDestinationInput = async (value: string) => {
-        setDestination(value);
-        if (value.length > 2) {
+        // Smart Parsing for "N day trip to Destination"
+        const durationRegex = /(\d+)\s*day/i;
+        const match = value.match(durationRegex);
+
+        let searchTerm = value;
+        let detectedDuration = null;
+
+        if (match) {
+            const days = parseInt(match[1]);
+            if (days > 0 && days <= 30) {
+                detectedDuration = days;
+                // Remove the "N day" part to get the destination
+                // Also remove common words like "trip", "itinerary", "to", "in"
+                searchTerm = value
+                    .replace(durationRegex, '')
+                    .replace(/\b(trip|itinerary|vacation|holiday|to|in)\b/gi, '')
+                    .trim();
+
+                // Auto-set dates if duration detected
+                const start = new Date();
+                start.setDate(start.getDate() + 1); // Start tomorrow
+                const end = new Date(start);
+                end.setDate(start.getDate() + days - 1); // N days duration
+
+                setStartDate(start.toISOString().split('T')[0]);
+                setEndDate(end.toISOString().split('T')[0]);
+            }
+        }
+
+        setDestination(value); // Keep original input visible? Or clean it? Let's keep original for now but search with clean.
+
+        // If we extracted a cleaner search term, use that for autocomplete
+        const query = searchTerm.length > 0 ? searchTerm : value;
+
+        if (query.length > 2) {
             try {
-                const results = await autocompletePlace(value);
+                const results = await autocompletePlace(query);
                 setPredictions(results);
                 setShowPredictions(true);
             } catch (error) {

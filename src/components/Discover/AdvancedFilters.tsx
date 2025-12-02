@@ -7,7 +7,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { X } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, Filter } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 interface FilterOption {
     label: string;
@@ -158,11 +159,21 @@ interface AdvancedFiltersProps {
 export function AdvancedFilters({ category, onFilterChange }: AdvancedFiltersProps) {
     const [filters, setFilters] = useState<Record<string, any>>({});
 
+    const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+        // Open the first section by default or keep all closed as requested
+        // 'dietary': true 
+    });
+
     // Reset filters when category changes
     useEffect(() => {
         setFilters({});
         onFilterChange({});
+        setOpenSections({});
     }, [category]);
+
+    const toggleSection = (key: string) => {
+        setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+    };
 
     const handleFilterUpdate = (key: string, value: any) => {
         const newFilters = { ...filters, [key]: value };
@@ -186,66 +197,116 @@ export function AdvancedFilters({ category, onFilterChange }: AdvancedFiltersPro
     if (!config) return null;
 
     return (
-        <div className="bg-secondary/20 p-4 rounded-lg border mb-6 animate-in fade-in slide-in-from-top-2">
-            <div className="flex justify-between items-center mb-4">
+        <div className="bg-card rounded-lg border shadow-sm mb-6 animate-in fade-in slide-in-from-top-2">
+            <div className="p-4 border-b flex justify-between items-center bg-muted/30">
                 <h3 className="font-semibold flex items-center gap-2">
-                    🔍 Refine {category.charAt(0).toUpperCase() + category.slice(1)}
+                    <Filter className="h-4 w-4" />
+                    Refine {category.charAt(0).toUpperCase() + category.slice(1)}
                 </h3>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                        setFilters({});
-                        onFilterChange({});
-                    }}
-                    className="h-8 text-muted-foreground hover:text-foreground"
-                >
-                    Reset
-                </Button>
+                {Object.keys(filters).length > 0 && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                            setFilters({});
+                            onFilterChange({});
+                        }}
+                        className="h-8 text-muted-foreground hover:text-destructive text-xs"
+                    >
+                        Clear All
+                    </Button>
+                )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {Object.entries(config).map(([key, filter]) => (
-                    <div key={key} className="space-y-2">
-                        <Label className="text-sm font-medium text-muted-foreground">{filter.label}</Label>
+            {/* Active Filter Chips */}
+            {Object.keys(filters).length > 0 && (
+                <div className="p-4 pb-0 flex flex-wrap gap-2">
+                    {Object.entries(filters).map(([key, value]) => {
+                        if (!value || (Array.isArray(value) && value.length === 0)) return null;
+                        if (value === 'any') return null;
 
-                        {filter.type === 'radio' && filter.options && (
-                            <RadioGroup
-                                value={filters[key]?.toString() || filter.options[0].value.toString()}
-                                onValueChange={(val) => handleFilterUpdate(key, val)}
-                                className="flex flex-col gap-2"
+                        const displayValues = Array.isArray(value) ? value : [value];
+                        return displayValues.map((val: string) => (
+                            <Badge key={`${key}-${val}`} variant="secondary" className="flex items-center gap-1">
+                                {val}
+                                <X
+                                    className="h-3 w-3 cursor-pointer hover:text-destructive"
+                                    onClick={() => {
+                                        if (Array.isArray(value)) {
+                                            handleCheckboxUpdate(key, val, false);
+                                        } else {
+                                            handleFilterUpdate(key, 'any'); // or remove
+                                        }
+                                    }}
+                                />
+                            </Badge>
+                        ));
+                    })}
+                </div>
+            )}
+
+            <div className="p-4 space-y-2">
+                {Object.entries(config).map(([key, filter]) => {
+                    const isOpen = openSections[key];
+                    const activeCount = Array.isArray(filters[key]) ? filters[key].length : (filters[key] && filters[key] !== 'any' ? 1 : 0);
+
+                    return (
+                        <div key={key} className="border rounded-md overflow-hidden">
+                            <button
+                                onClick={() => toggleSection(key)}
+                                className="w-full flex justify-between items-center p-3 bg-muted/10 hover:bg-muted/20 transition-colors text-sm font-medium"
                             >
-                                {filter.options.map((opt) => (
-                                    <div key={opt.value} className="flex items-center space-x-2">
-                                        <RadioGroupItem value={opt.value.toString()} id={`${key}-${opt.value}`} />
-                                        <Label htmlFor={`${key}-${opt.value}`} className="font-normal cursor-pointer">
-                                            {opt.label}
-                                        </Label>
-                                    </div>
-                                ))}
-                            </RadioGroup>
-                        )}
+                                <span className="flex items-center gap-2">
+                                    {filter.label}
+                                    {activeCount > 0 && (
+                                        <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                                            {activeCount}
+                                        </Badge>
+                                    )}
+                                </span>
+                                {isOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                            </button>
 
-                        {filter.type === 'checkbox' && filter.options && (
-                            <div className="flex flex-col gap-2">
-                                {filter.options.map((opt) => (
-                                    <div key={opt.value} className="flex items-center space-x-2">
-                                        <Checkbox
-                                            id={`${key}-${opt.value}`}
-                                            checked={(filters[key] as string[])?.includes(opt.value.toString())}
-                                            onCheckedChange={(checked) => handleCheckboxUpdate(key, opt.value.toString(), checked as boolean)}
-                                        />
-                                        <Label htmlFor={`${key}-${opt.value}`} className="font-normal cursor-pointer">
-                                            {opt.label}
-                                        </Label>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                            {isOpen && (
+                                <div className="p-3 bg-card border-t animate-in slide-in-from-top-1">
+                                    {filter.type === 'radio' && filter.options && (
+                                        <RadioGroup
+                                            value={filters[key]?.toString() || filter.options[0].value.toString()}
+                                            onValueChange={(val) => handleFilterUpdate(key, val)}
+                                            className="flex flex-col gap-2"
+                                        >
+                                            {filter.options.map((opt) => (
+                                                <div key={opt.value} className="flex items-center space-x-2">
+                                                    <RadioGroupItem value={opt.value.toString()} id={`${key}-${opt.value}`} />
+                                                    <Label htmlFor={`${key}-${opt.value}`} className="font-normal cursor-pointer text-sm">
+                                                        {opt.label}
+                                                    </Label>
+                                                </div>
+                                            ))}
+                                        </RadioGroup>
+                                    )}
 
-                        {/* Add Dropdown/Slider support if needed later */}
-                    </div>
-                ))}
+                                    {filter.type === 'checkbox' && filter.options && (
+                                        <div className="flex flex-col gap-2">
+                                            {filter.options.map((opt) => (
+                                                <div key={opt.value} className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id={`${key}-${opt.value}`}
+                                                        checked={(filters[key] as string[])?.includes(opt.value.toString())}
+                                                        onCheckedChange={(checked) => handleCheckboxUpdate(key, opt.value.toString(), checked as boolean)}
+                                                    />
+                                                    <Label htmlFor={`${key}-${opt.value}`} className="font-normal cursor-pointer text-sm">
+                                                        {opt.label}
+                                                    </Label>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
