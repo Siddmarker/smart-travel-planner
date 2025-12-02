@@ -9,7 +9,7 @@ import { useStore } from '@/store/useStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RouteMap } from '../Map/RouteMap';
-import { SmartItineraryBuilder, SmartDay, TimeSlotName } from '@/lib/smart-itinerary';
+import { SmartItineraryBuilder, SmartDay, TimeSlotName, DayStatus } from '@/lib/smart-itinerary';
 import { AddActivityModal } from './AddActivityModal';
 
 interface ItineraryViewProps {
@@ -148,10 +148,15 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
                                 <TabsTrigger
                                     key={day.id}
                                     value={day.id}
-                                    className="min-w-[100px] data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20"
+                                    className="min-w-[120px] data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20"
                                 >
-                                    <div className="flex flex-col items-start">
-                                        <span className="font-semibold">Day {index + 1}</span>
+                                    <div className="flex flex-col items-start w-full">
+                                        <div className="flex justify-between w-full items-center">
+                                            <span className="font-semibold">Day {index + 1}</span>
+                                            {day.status === 'COMPLETED' && <span className="text-green-500 text-xs">✓</span>}
+                                            {day.status === 'IN_PROGRESS' && <span className="text-blue-500 text-xs">●</span>}
+                                            {day.status === 'NOT_STARTED' && <span className="text-gray-300 text-xs">○</span>}
+                                        </div>
                                         <span className="text-xs text-muted-foreground">
                                             {new Date(day.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                         </span>
@@ -167,64 +172,81 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full p-4 pt-0">
                             {/* Left: Time Slots */}
                             <ScrollArea className="h-full pr-4">
-                                <div className="space-y-6 pb-10">
-                                    {day.timeSlots.map((slot) => (
-                                        <div key={slot.name} className="space-y-3">
-                                            <div className="flex items-center gap-2 pb-2 border-b">
-                                                {getSlotIcon(slot.name)}
-                                                <h3 className="font-medium text-lg">{slot.name}</h3>
-                                                <span className="text-xs text-muted-foreground ml-auto">
-                                                    {slot.activities.length} activities
-                                                </span>
-                                            </div>
-
-                                            {slot.activities.length === 0 ? (
-                                                <div
-                                                    className="border-2 border-dashed rounded-lg p-4 flex flex-col items-center justify-center text-muted-foreground hover:bg-accent/50 cursor-pointer transition-colors"
-                                                    onClick={() => handleAddActivityClick(day.id, slot.name)}
-                                                >
-                                                    <p className="text-sm mb-2">No activities planned</p>
-                                                    <Button variant="ghost" size="sm" className="h-8">
-                                                        <Plus className="h-3 w-3 mr-1" />
-                                                        Add to {slot.name}
-                                                    </Button>
+                                {day.isEmpty ? (
+                                    <div className="flex flex-col items-center justify-center h-[400px] text-center space-y-4 border-2 border-dashed rounded-xl m-4">
+                                        <div className="p-4 bg-primary/10 rounded-full">
+                                            <CalendarIcon className="h-8 w-8 text-primary" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-semibold">Day {day.dayNumber} is empty</h3>
+                                            <p className="text-muted-foreground max-w-xs mx-auto">
+                                                Start planning your activities for this day.
+                                            </p>
+                                        </div>
+                                        <Button onClick={() => handleAddActivityClick(day.id, 'Morning')}>
+                                            Start Planning
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-6 pb-10">
+                                        {day.timeSlots.map((slot) => (
+                                            <div key={slot.name} className="space-y-3">
+                                                <div className="flex items-center gap-2 pb-2 border-b">
+                                                    {getSlotIcon(slot.name)}
+                                                    <h3 className="font-medium text-lg">{slot.name}</h3>
+                                                    <span className="text-xs text-muted-foreground ml-auto">
+                                                        {slot.activities.length} activities
+                                                    </span>
                                                 </div>
-                                            ) : (
-                                                <div className="space-y-3">
-                                                    {slot.activities.map((item) => {
-                                                        const place = places.find((p) => p.id === item.placeId);
-                                                        return (
-                                                            <ActivityCard
-                                                                key={item.id}
-                                                                item={item}
-                                                                place={place}
-                                                                onDelete={() => {
-                                                                    // Implement delete
-                                                                    const newDays = trip.days.map(d => {
-                                                                        if (d.id === day.id) {
-                                                                            return { ...d, items: d.items.filter(i => i.id !== item.id) };
-                                                                        }
-                                                                        return d;
-                                                                    });
-                                                                    updateTrip(trip.id, { days: newDays });
-                                                                }}
-                                                            />
-                                                        );
-                                                    })}
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="w-full text-muted-foreground hover:text-primary"
+
+                                                {slot.activities.length === 0 ? (
+                                                    <div
+                                                        className="border-2 border-dashed rounded-lg p-4 flex flex-col items-center justify-center text-muted-foreground hover:bg-accent/50 cursor-pointer transition-colors"
                                                         onClick={() => handleAddActivityClick(day.id, slot.name)}
                                                     >
-                                                        <Plus className="h-3 w-3 mr-1" />
-                                                        Add another activity
-                                                    </Button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
+                                                        <p className="text-sm mb-2">No activities planned</p>
+                                                        <Button variant="ghost" size="sm" className="h-8">
+                                                            <Plus className="h-3 w-3 mr-1" />
+                                                            Add to {slot.name}
+                                                        </Button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-3">
+                                                        {slot.activities.map((item) => {
+                                                            const place = places.find((p) => p.id === item.placeId);
+                                                            return (
+                                                                <ActivityCard
+                                                                    key={item.id}
+                                                                    item={item}
+                                                                    place={place}
+                                                                    onDelete={() => {
+                                                                        // Implement delete
+                                                                        const newDays = trip.days.map(d => {
+                                                                            if (d.id === day.id) {
+                                                                                return { ...d, items: d.items.filter(i => i.id !== item.id) };
+                                                                            }
+                                                                            return d;
+                                                                        });
+                                                                        updateTrip(trip.id, { days: newDays });
+                                                                    }}
+                                                                />
+                                                            );
+                                                        })}
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="w-full text-muted-foreground hover:text-primary"
+                                                            onClick={() => handleAddActivityClick(day.id, slot.name)}
+                                                        >
+                                                            <Plus className="h-3 w-3 mr-1" />
+                                                            Add another activity
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </ScrollArea>
 
                             {/* Right: Map */}

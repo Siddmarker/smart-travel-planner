@@ -94,6 +94,21 @@ export default function NewTripPage() {
         }
 
         try {
+            const startDate = new Date(formData.startDate);
+            const endDate = new Date(formData.endDate);
+            const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+            const initialDays = [];
+            for (let i = 0; i < totalDays; i++) {
+                const dayDate = new Date(startDate);
+                dayDate.setDate(startDate.getDate() + i);
+                initialDays.push({
+                    id: uuidv4(),
+                    date: dayDate.toISOString(),
+                    items: []
+                });
+            }
+
             const newTrip: Trip = {
                 id: uuidv4(),
                 name: formData.name,
@@ -105,7 +120,7 @@ export default function NewTripPage() {
                     lng: destinationCoords.lng,
                 },
                 participants: [currentUser],
-                days: [],
+                days: initialDays,
                 budget: {
                     currency: 'USD',
                     total: 0,

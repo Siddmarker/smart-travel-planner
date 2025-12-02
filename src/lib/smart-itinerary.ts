@@ -2,6 +2,7 @@ import { Trip, Place, DayPlan, ItineraryItem } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
 export type TimeSlotName = 'Morning' | 'Afternoon' | 'Evening' | 'Night';
+export type DayStatus = 'COMPLETED' | 'IN_PROGRESS' | 'NOT_STARTED';
 
 export interface TimeSlot {
     name: TimeSlotName;
@@ -20,6 +21,8 @@ export interface SmartDay extends DayPlan {
     fillPercentage: number;
     needsAttention: boolean;
     isEmpty: boolean;
+    status: DayStatus;
+    progress: number;
 }
 
 export class SmartItineraryBuilder {
@@ -69,7 +72,9 @@ export class SmartItineraryBuilder {
             isVisible: true,
             fillPercentage: 0,
             needsAttention: true,
-            isEmpty: true
+            isEmpty: true,
+            status: 'NOT_STARTED',
+            progress: 0
         };
     }
 
@@ -86,7 +91,12 @@ export class SmartItineraryBuilder {
         });
 
         const filledSlots = timeSlots.filter(s => s.activities.length > 0).length;
-        const fillPercentage = (filledSlots / 4) * 100;
+        const totalSlots = 4; // Morning, Afternoon, Evening, Night
+        const fillPercentage = (filledSlots / totalSlots) * 100;
+
+        let status: DayStatus = 'NOT_STARTED';
+        if (filledSlots === totalSlots) status = 'COMPLETED';
+        else if (filledSlots > 0) status = 'IN_PROGRESS';
 
         return {
             ...day,
@@ -95,7 +105,9 @@ export class SmartItineraryBuilder {
             isVisible: true,
             fillPercentage,
             needsAttention: fillPercentage < 50,
-            isEmpty: filledSlots === 0
+            isEmpty: filledSlots === 0,
+            status,
+            progress: fillPercentage
         };
     }
 
