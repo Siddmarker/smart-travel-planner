@@ -11,6 +11,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { RouteMap } from '../Map/RouteMap';
 import { SmartItineraryBuilder, SmartDay, TimeSlotName, DayStatus } from '@/lib/smart-itinerary';
 import { AddActivityModal } from './AddActivityModal';
+import { UnifiedTravelPlanner } from '@/lib/unified-planner';
+import { UserPreferences } from '@/types';
+import { Sparkles } from 'lucide-react';
 
 interface ItineraryViewProps {
     trip: Trip;
@@ -97,6 +100,70 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
         setIsAddActivityOpen(false);
     };
 
+    const handleAutoPlan = async (dayId: string) => {
+        const day = smartItinerary.find(d => d.id === dayId);
+        if (!day) return;
+
+        setIsGenerating(true);
+        try {
+            const planner = new UnifiedTravelPlanner();
+
+            // Construct preferences from trip data
+            // Note: In a real app, we'd have more detailed preferences stored
+            const preferences: UserPreferences = {
+                trip_duration: 1, // Plan one day at a time for now
+                budget: 'medium',
+                categories: ['attraction', 'food', 'culture'],
+                dietary: [],
+                start_location: trip.destination,
+                destination: trip.destination,
+                trip_dates: {
+                    start: day.date,
+                    end: day.date
+                },
+                day_start_time: new Date(new Date(day.date).setHours(9, 0, 0, 0)),
+                return_to_start: false
+            };
+
+            // Run the workflow
+            // We pass empty availablePlaces to force discovery
+            const result = await planner.unified_planning_workflow(preferences, []);
+
+            // The result is keyed by day number (1-based relative to duration)
+            // Since we asked for 1 day, we take day 1
+            const dayItinerary = result[1];
+
+            if (dayItinerary && dayItinerary.length > 0) {
+                // Update the trip with new items
+                const updatedDays = trip.days.map(d => {
+                    if (d.id === dayId) {
+                        return { ...d, items: [...d.items, ...dayItinerary] };
+                    }
+                    return d;
+                });
+
+                // If day didn't exist in trip.days (was auto-generated), we need to add it
+                if (!trip.days.find(d => d.id === dayId)) {
+                    const allDays = smartItinerary.map(sd => {
+                        if (sd.id === dayId) {
+                            return { id: sd.id, date: sd.date, items: [...sd.items, ...dayItinerary] };
+                        }
+                        const existing = trip.days.find(td => td.id === sd.id);
+                        return existing || { id: sd.id, date: sd.date, items: [] };
+                    });
+                    updateTrip(trip.id, { days: allDays });
+                } else {
+                    updateTrip(trip.id, { days: updatedDays });
+                }
+            }
+        } catch (error) {
+            console.error("Auto-planning failed:", error);
+            // Ideally show a toast here
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
     // Helper to construct route segments for the map
     const getDaySegments = (dayItems: ItineraryItem[]): any[] => {
         if (!dayItems || dayItems.length === 0) return [];
@@ -169,8 +236,8 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
 
                 {smartItinerary.map((day) => (
                     <TabsContent key={day.id} value={day.id} className="flex-1 mt-0 overflow-hidden">
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full p-4 pt-0">
-                            {/* Left: Time Slots */}
+                        <div className="grid grid-cols-1 gap-4 h-full p-4 pt-0">
+                            {/* Time Slots */}
                             <ScrollArea className="h-full pr-4">
                                 {day.isEmpty ? (
                                     <div className="flex flex-col items-center justify-center h-[400px] text-center space-y-4 border-2 border-dashed rounded-xl m-4">
@@ -183,9 +250,15 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
                                                 Start planning your activities for this day.
                                             </p>
                                         </div>
-                                        <Button onClick={() => handleAddActivityClick(day.id, 'Morning')}>
-                                            Start Planning
-                                        </Button>
+                                        <div className="flex gap-2">
+                                            <Button onClick={() => handleAddActivityClick(day.id, 'Morning')} variant="outline">
+                                                Manually Add
+                                            </Button>
+                                            <Button onClick={() => handleAutoPlan(day.id)} disabled={isGenerating}>
+                                                <Sparkles className="h-4 w-4 mr-2" />
+                                                {isGenerating ? 'Planning...' : 'Auto-Plan with AI'}
+                                            </Button>
+                                        </div>
                                     </div>
                                 ) : (
                                     <div className="space-y-6 pb-10">
@@ -248,15 +321,6 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
                                     </div>
                                 )}
                             </ScrollArea>
-
-                            {/* Right: Map */}
-                            <div className="hidden lg:block h-full rounded-lg overflow-hidden border bg-muted relative">
-                                <RouteMap
-                                    startLocation={trip.destination}
-                                    segments={getDaySegments(day.items)}
-                                    animate={false}
-                                />
-                            </div>
                         </div>
                     </TabsContent>
                 ))}
