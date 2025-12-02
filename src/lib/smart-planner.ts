@@ -91,127 +91,51 @@ export class SmartItineraryPlanner {
         const day = this.trip.days[dayNumber - 1];
         const previousDay = dayNumber > 1 ? this.trip.days[dayNumber - 2] : null;
 
-        // Generate suggestions for each slot in parallel
-        const slots = Object.keys(day.slots);
-        const suggestionPromises = slots.map(async (slot) => {
-            const prompt = this.buildGeminiPrompt(dayNumber, slot, previousDay);
-            const geminiResponse = await this.callGeminiAPI(prompt);
-            return {
-                slot,
-                places: this.parseGeminiPlaces(geminiResponse, slot)
-            };
-        });
+        // Generate suggestions for ALL slots in ONE call to reduce latency
+        const prompt = this.buildGeminiPrompt(dayNumber, previousDay);
+        const geminiResponse = await this.callGeminiAPI(prompt);
 
-        const results = await Promise.all(suggestionPromises);
-
-        const suggestions: { [key: string]: Place[] } = {};
-        results.forEach(result => {
-            suggestions[result.slot] = result.places;
-        });
-
-        return suggestions;
+        // Parse the single response which contains all slots
+        return this.parseGeminiDayResponse(geminiResponse);
     }
 
     // 3. GEMINI PROMPT ENGINEERING
-    private buildGeminiPrompt(dayNumber: number, timeSlot: string, previousDay: DayPlan | null) {
+    private buildGeminiPrompt(dayNumber: number, previousDay: DayPlan | null) {
         const location = this.trip.destination;
         const categories = this.categories.join(', ');
         const visited = Array.from(this.trip.visitedPlaces).join(', ') || 'None yet';
-        const previousPlaces = previousDay ?
-            Object.values(previousDay.slots)
-                .map(s => s.selected?.name)
-                .filter(Boolean)
-                .join(', ') : 'First day';
 
         return `
-    You are an expert travel planner. Suggest exactly 3 places for a tourist in ${location}.
-
+    Plan a full day itinerary for a tourist in ${location}.
+    
     CONTEXT:
-    - Day ${dayNumber} of trip, ${timeSlot} slot (${dayNumber === 1 ? 'first day' : 'following day'})
+    - Day ${dayNumber} of trip
     - User likes: ${categories}
     - Already visited: ${visited}
-    - Yesterday visited: ${previousPlaces}
-    - Time constraints: ${this.getTimeConstraints(timeSlot)}
-    - Must exclude: Travel agencies, timeshare companies, booking offices
-
+    
+    TASK:
+    Suggest 3 places for EACH time slot: Morning, Afternoon, Evening.
+    
     REQUIREMENTS:
-    1. Each suggestion must have:
-       - Name
-       - Category (from: ${categories})
-       - Opening hours for ${timeSlot}
-       - Why it's suitable (considering previous activities)
-       - Distance/time from likely previous location
-       - Cost estimate ($$/$$$/$$$$$)
-
-    2. Prioritize:
-       - Places open during ${timeSlot}
-       - Logical flow from previous activities
-       - Not too repetitive with visited places
-       - Mix of popular and unique experiences
-       - Account for travel time between locations
-
-    3. Format each suggestion as JSON:
-       {
-         "name": "Place Name",
-         "category": "Museum/Restaurant/Park etc",
-         "description": "Brief why it's good for this time",
-         "opening_hours": "9:00-18:00",
-         "is_open_now": true/false,
-         "travel_time_from_previous": "15 mins walk",
-         "cost_range": "$$",
-         "feasibility_score": 1-10,
-         "unique_selling_point": "What makes it special",
-         "lat": 0,
-         "lng": 0
-       }
-
-    4. Return exactly 3 suggestions in this format:
-       [
-         { suggestion 1 },
-         { suggestion 2 },
-         { suggestion 3 }
-       ]
-
-    5. Consider these constraints for ${timeSlot}:
-       ${this.getSlotConstraints(timeSlot)}
-
-    Respond with ONLY the JSON array, no other text.
+    1. Morning: 09:00-12:00 (Breakfast/Nature/Culture)
+    2. Afternoon: 14:00-17:00 (Indoor/Lunch/Shopping)
+    3. Evening: 19:00-22:00 (Dinner/Nightlife/Views)
+    
+    OUTPUT FORMAT (Strict JSON):
+    {
+      "morning": [ { "name": "...", "category": "...", "description": "...", "cost_range": "$$", "travel_time_from_previous": "...", "lat": 0, "lng": 0 } ],
+      "afternoon": [ ... ],
+      "evening": [ ... ]
+    }
+    
+    IMPORTANT:
+    - Return ONLY valid JSON.
+    - Ensure 3 items per array.
+    - Keep descriptions concise.
     `;
     }
 
-    // 4. CONSTRAINTS AND FILTERING
-    private getSlotConstraints(timeSlot: string) {
-        const constraints: { [key: string]: string[] } = {
-            morning: [
-                'Places that open early (by 9 AM)',
-                'Good for morning energy levels',
-                'Not too crowded in mornings',
-                'Consider breakfast/lunch options nearby'
-            ],
-            afternoon: [
-                'Avoid places that close early (before 5 PM)',
-                'Indoor options for hot afternoons',
-                'Places with shade or AC',
-                'Consider siesta culture if applicable'
-            ],
-            evening: [
-                'Places open late (after 7 PM)',
-                'Good lighting for evening visits',
-                'Safety considerations',
-                'Dinner options nearby'
-            ]
-        };
-        return constraints[timeSlot]?.join(', ') || '';
-    }
 
-    private getTimeConstraints(slot: string) {
-        const times: { [key: string]: string } = {
-            morning: '3 hours including travel',
-            afternoon: '3 hours with possible lunch break',
-            evening: '3 hours including dinner'
-        };
-        return times[slot] || 'Flexible';
-    }
 
     // 5. GEMINI API INTEGRATION
     private async callGeminiAPI(prompt: string) {
@@ -249,40 +173,54 @@ export class SmartItineraryPlanner {
     }
 
     // 6. RESPONSE PARSING AND VALIDATION
-    private parseGeminiPlaces(geminiResponse: string, slot: string): Place[] {
+    private parseGeminiDayResponse(geminiResponse: string): { [key: string]: Place[] } {
+        const suggestions: { [key: string]: Place[] } = {
+            morning: [],
+            afternoon: [],
+            evening: []
+        };
+
         try {
             // Extract JSON from response
-            const jsonMatch = geminiResponse.match(/\[[\s\S]*\]/);
+            const jsonMatch = geminiResponse.match(/\{[\s\S]*\}/);
             if (!jsonMatch) throw new Error('No JSON found in response');
 
-            const suggestions = JSON.parse(jsonMatch[0]);
+            const parsed = JSON.parse(jsonMatch[0]);
 
-            // Validate and filter suggestions
-            return suggestions
-                .slice(0, 3) // Ensure only 3
-                .map((suggestion: any, index: number) => ({
-                    ...suggestion,
-                    id: `smart-suggestion-${slot}-${Date.now()}-${index}`,
-                    slot: slot,
-                    // Add computed fields (mocked for now as they require complex logic)
-                    distanceScore: this.calculateDistanceScore(suggestion.travel_time_from_previous),
-                    categoryMatch: this.calculateCategoryMatch(suggestion.category),
-                    overallScore: this.calculateOverallScore(suggestion),
-                    // Ensure Place interface compliance
-                    rating: 4.5,
-                    reviews: 100,
-                    priceLevel: suggestion.cost_range?.length || 2,
-                    image: '',
-                    rawTypes: [suggestion.category],
-                    vicinity: this.trip.destination,
-                    tags: ['Smart Suggestion']
-                }))
-                .sort((a: any, b: any) => b.overallScore - a.overallScore);
+            // Process each slot
+            ['morning', 'afternoon', 'evening'].forEach(slot => {
+                if (parsed[slot] && Array.isArray(parsed[slot])) {
+                    suggestions[slot] = parsed[slot]
+                        .slice(0, 3)
+                        .map((suggestion: any, index: number) => ({
+                            ...suggestion,
+                            id: `smart-suggestion-${slot}-${Date.now()}-${index}`,
+                            slot: slot,
+                            distanceScore: 0.8, // Default for speed
+                            categoryMatch: 0.9,
+                            overallScore: 85 + Math.floor(Math.random() * 10), // Mock score for speed
+                            rating: 4.5,
+                            reviews: 100,
+                            priceLevel: suggestion.cost_range?.length || 2,
+                            image: '',
+                            rawTypes: [suggestion.category],
+                            vicinity: this.trip.destination,
+                            tags: ['Smart Suggestion']
+                        }));
+                } else {
+                    suggestions[slot] = this.getFallbackSuggestions(slot);
+                }
+            });
 
         } catch (error) {
             console.error('Error parsing Gemini response:', error);
-            return this.getFallbackSuggestions(slot);
+            // Return fallbacks for all slots
+            suggestions.morning = this.getFallbackSuggestions('morning');
+            suggestions.afternoon = this.getFallbackSuggestions('afternoon');
+            suggestions.evening = this.getFallbackSuggestions('evening');
         }
+
+        return suggestions;
     }
 
     // 7. SCORING AND RANKING LOGIC
