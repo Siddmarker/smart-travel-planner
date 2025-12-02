@@ -88,6 +88,11 @@ export function EnhancedPlaceCard({ place, onAddToTrip, onSavePlace }: EnhancedP
                                     🥬 Veg Friendly
                                 </Badge>
                             )}
+                            {place.dietaryOptions?.includes('Non-Vegetarian') && (
+                                <Badge className="text-[10px] bg-red-100 text-red-700 border-red-200 hover:bg-red-200">
+                                    🍗 Non-Veg
+                                </Badge>
+                            )}
                         </div>
 
                         {/* Popular Dish */}

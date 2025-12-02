@@ -467,9 +467,21 @@ function enhanceFoodPlace(place: Place) {
     };
 
     // 4. Simulate Popular Dish
-    const dishes = ['Butter Chicken', 'Paneer Tikka', 'Masala Dosa', 'Truffle Pasta', 'Avocado Toast', 'Sushi Platter', 'Biryani', 'Cheesecake'];
+    const vegDishes = ['Paneer Tikka', 'Masala Dosa', 'Truffle Pasta', 'Avocado Toast', 'Cheesecake', 'Veg Biryani'];
+    const nonVegDishes = ['Butter Chicken', 'Sushi Platter', 'Chicken Biryani', 'Grilled Salmon', 'Mutton Rogan Josh', 'Pepperoni Pizza'];
+
+    let availableDishes = [...vegDishes, ...nonVegDishes];
+
+    // If strictly one type, filter dishes
+    if (place.dietaryOptions.includes('Vegetarian') && !place.dietaryOptions.includes('Non-Vegetarian')) {
+        availableDishes = vegDishes;
+    } else if (place.dietaryOptions.includes('Non-Vegetarian') && !place.dietaryOptions.includes('Vegetarian')) {
+        availableDishes = nonVegDishes;
+    }
+    // If both, keep all available
+
     place.popularDish = {
-        name: dishes[idNum % dishes.length],
+        name: availableDishes[idNum % availableDishes.length],
         price: (place.priceLevel || 2) * 150 + (idNum % 100)
     };
 }
