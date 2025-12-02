@@ -152,7 +152,7 @@ export function PreferencesModal({ isOpen, onOpenChange, onSubmit, initialPrefer
                         <div className="space-y-3 border-t pt-6 slide-in">
                             <Label className="text-lg font-semibold text-slate-800">🥗 Dietary Preferences</Label>
                             <div className="flex flex-wrap gap-2">
-                                {['Vegetarian', 'Vegan', 'Halal', 'Gluten-Free'].map(opt => (
+                                {['Vegetarian', 'Non-Vegetarian', 'Eggetarian', 'Jain', 'Vegan', 'Gluten-Free', 'Halal', 'Keto'].map(opt => (
                                     <div
                                         key={opt}
                                         className={`preference-chip ${dietary.includes(opt) ? 'selected' : ''}`}
