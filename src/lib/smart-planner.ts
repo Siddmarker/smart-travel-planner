@@ -91,16 +91,23 @@ export class SmartItineraryPlanner {
         const day = this.trip.days[dayNumber - 1];
         const previousDay = dayNumber > 1 ? this.trip.days[dayNumber - 2] : null;
 
-        // Generate suggestions for each slot
-        const suggestions: { [key: string]: Place[] } = {};
-
-        for (const [slot, _] of Object.entries(day.slots)) {
+        // Generate suggestions for each slot in parallel
+        const slots = Object.keys(day.slots);
+        const suggestionPromises = slots.map(async (slot) => {
             const prompt = this.buildGeminiPrompt(dayNumber, slot, previousDay);
             const geminiResponse = await this.callGeminiAPI(prompt);
+            return {
+                slot,
+                places: this.parseGeminiPlaces(geminiResponse, slot)
+            };
+        });
 
-            // Parse Gemini response to extract 3 best places
-            suggestions[slot] = this.parseGeminiPlaces(geminiResponse, slot);
-        }
+        const results = await Promise.all(suggestionPromises);
+
+        const suggestions: { [key: string]: Place[] } = {};
+        results.forEach(result => {
+            suggestions[result.slot] = result.places;
+        });
 
         return suggestions;
     }
@@ -224,7 +231,7 @@ export class SmartItineraryPlanner {
                         temperature: 0.7,
                         topK: 40,
                         topP: 0.95,
-                        maxOutputTokens: 2000,
+                        maxOutputTokens: 1000,
                     }
                 })
             });
