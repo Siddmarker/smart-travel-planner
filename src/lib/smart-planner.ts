@@ -86,17 +86,50 @@ export class SmartItineraryPlanner {
         };
     }
 
+    private cache = new Map<string, { data: any; timestamp: number }>();
+    private CACHE_TTL = 3600000; // 1 hour
+
     // 2. SMART PLACE SUGGESTION ENGINE
     public async suggestPlacesForDay(dayNumber: number) {
+        const cacheKey = `day-${dayNumber}-${this.trip.destination}`;
+
+        // Check cache first
+        const cached = this.cache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+            console.log(`[SmartPlanner] Cache hit for day ${dayNumber}`);
+            return cached.data;
+        }
+
         const day = this.trip.days[dayNumber - 1];
         const previousDay = dayNumber > 1 ? this.trip.days[dayNumber - 2] : null;
 
-        // Generate suggestions for ALL slots in ONE call to reduce latency
-        const prompt = this.buildGeminiPrompt(dayNumber, previousDay);
-        const geminiResponse = await this.callGeminiAPI(prompt);
+        try {
+            // Generate suggestions for ALL slots in ONE call to reduce latency
+            const prompt = this.buildGeminiPrompt(dayNumber, previousDay);
+            const geminiResponse = await this.callGeminiAPI(prompt);
 
-        // Parse the single response which contains all slots
-        return this.parseGeminiDayResponse(geminiResponse);
+            // Parse the single response which contains all slots
+            const suggestions = this.parseGeminiDayResponse(geminiResponse);
+
+            // Cache the result
+            this.cache.set(cacheKey, {
+                data: suggestions,
+                timestamp: Date.now()
+            });
+
+            return suggestions;
+        } catch (error) {
+            console.error(`[SmartPlanner] API failed for day ${dayNumber}, using fallback`, error);
+            return this.getOfflineFallback(dayNumber);
+        }
+    }
+
+    private getOfflineFallback(dayNumber: number) {
+        return {
+            morning: this.getFallbackSuggestions('morning'),
+            afternoon: this.getFallbackSuggestions('afternoon'),
+            evening: this.getFallbackSuggestions('evening')
+        };
     }
 
     // 3. GEMINI PROMPT ENGINEERING

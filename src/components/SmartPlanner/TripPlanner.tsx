@@ -3,6 +3,7 @@ import { SmartItineraryPlanner } from '@/lib/smart-planner';
 import { DayCard } from './DayCard';
 import { DayNavigation } from './DayNavigation';
 import { LoadingSpinner } from './Common';
+import { SkeletonLoader } from './Common/SkeletonLoader';
 import { UserPreferences } from '@/types';
 
 interface TripPlannerProps {
@@ -54,12 +55,21 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({ tripData, userPreferen
                 evening: (dayData.slots as any).evening.places
             });
             setCurrentDay(dayNumber);
+
+            // Pre-fetch next day in background
+            if (dayNumber < tripData.totalDays) {
+                setTimeout(() => {
+                    console.log(`[TripPlanner] Pre-fetching day ${dayNumber + 1}`);
+                    planner.suggestPlacesForDay(dayNumber + 1).catch(e => console.error('Pre-fetch failed', e));
+                }, 1000);
+            }
+
         } catch (err) {
             console.error('Error loading day:', err);
         } finally {
             setIsLoading(false);
         }
-    }, [planner]);
+    }, [planner, tripData.totalDays]);
 
     // Load initial day when planner is ready
     useEffect(() => {
@@ -72,8 +82,6 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({ tripData, userPreferen
         if (!planner) return;
 
         if (placeIndex === null) {
-            // Deselect logic if needed, currently selectPlace handles selection
-            // For deselecting, we might need a method in planner or just set selected to null manually
             const day = planner.trip.days[currentDay - 1];
             (day.slots as any)[slot].selected = null;
         } else {
@@ -90,11 +98,11 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({ tripData, userPreferen
         }
     };
 
-    if (!planner || (isLoading && !currentDayData)) {
+    if (!planner) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-                <LoadingSpinner size="large" />
-                <p className="text-gray-600 font-medium">Creating your smart itinerary...</p>
+                <SkeletonLoader type="day" />
+                <p className="text-gray-600 font-medium">Initializing planner...</p>
             </div>
         );
     }
@@ -119,9 +127,9 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({ tripData, userPreferen
 
             {/* Main Content */}
             {isLoading ? (
-                <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 bg-white rounded-xl border border-gray-200">
-                    <LoadingSpinner size="large" />
-                    <p className="text-gray-600 font-medium">Planning Day {currentDay}...</p>
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
+                    <SkeletonLoader type="day" />
+                    <p className="text-center text-gray-500 mt-4">Planning Day {currentDay}...</p>
                 </div>
             ) : (
                 currentDayData && (
@@ -143,8 +151,8 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({ tripData, userPreferen
                         <button
                             key={category}
                             className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${selectedCategories.includes(category)
-                                    ? 'bg-blue-600 text-white shadow-md'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                 }`}
                             onClick={() => {
                                 if (selectedCategories.includes(category)) {
@@ -152,7 +160,6 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({ tripData, userPreferen
                                 } else {
                                     setSelectedCategories(prev => [...prev, category]);
                                 }
-                                // Note: Changing categories will re-initialize planner in useEffect
                             }}
                         >
                             {category} {selectedCategories.includes(category) ? '✓' : '+'}
