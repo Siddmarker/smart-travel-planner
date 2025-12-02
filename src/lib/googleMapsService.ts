@@ -129,7 +129,7 @@ export async function searchPlaces(
             const request: google.maps.places.TextSearchRequest = {
                 query,
                 location: location ? new window.google.maps.LatLng(location.lat, location.lng) : undefined,
-                radius,
+                radius: Math.min(radius, 50000), // Text search also prefers radius <= 50km for strict bias
                 type: type as any, // Pass type to request
             };
 
@@ -180,7 +180,7 @@ export async function searchNearbyPlaces(
 
             const request: google.maps.places.PlaceSearchRequest = {
                 location: new window.google.maps.LatLng(location.lat, location.lng),
-                radius,
+                radius: Math.min(radius, 50000), // Clamp to 50km max for nearbySearch
                 type: type as any,
             };
 
