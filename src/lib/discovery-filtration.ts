@@ -466,24 +466,8 @@ function enhanceFoodPlace(place: Place) {
         platform: idNum % 3 === 0 ? 'TikTok' : (idNum % 3 === 1 ? 'Instagram' : 'YouTube')
     };
 
-    // 4. Simulate Popular Dish
-    const vegDishes = ['Paneer Tikka', 'Masala Dosa', 'Truffle Pasta', 'Avocado Toast', 'Cheesecake', 'Veg Biryani'];
-    const nonVegDishes = ['Butter Chicken', 'Sushi Platter', 'Chicken Biryani', 'Grilled Salmon', 'Mutton Rogan Josh', 'Pepperoni Pizza'];
-
-    let availableDishes = [...vegDishes, ...nonVegDishes];
-
-    // If strictly one type, filter dishes
-    if (place.dietaryOptions.includes('Vegetarian') && !place.dietaryOptions.includes('Non-Vegetarian')) {
-        availableDishes = vegDishes;
-    } else if (place.dietaryOptions.includes('Non-Vegetarian') && !place.dietaryOptions.includes('Vegetarian')) {
-        availableDishes = nonVegDishes;
-    }
-    // If both, keep all available
-
-    place.popularDish = {
-        name: availableDishes[idNum % availableDishes.length],
-        price: (place.priceLevel || 2) * 150 + (idNum % 100)
-    };
+    // 4. Simulate Popular Dish - REMOVED as per user request (inappropriate suggestions)
+    // place.popularDish = ...
 }
 
 function calculateDiscoveryCredibilityScore(place: Place): any {
