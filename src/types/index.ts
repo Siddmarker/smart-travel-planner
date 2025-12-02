@@ -305,6 +305,10 @@ export interface UserPreferences {
   difficulty?: 'easy' | 'moderate' | 'hard';
   foodVariety?: 'high' | 'medium' | 'low';
   cuisines?: string[];
+  // Smart Planner additions
+  interests?: string[];
+  isFirstDay?: boolean;
+  isLastDay?: boolean;
 }
 
 export type TripCategory =

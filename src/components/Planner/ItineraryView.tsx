@@ -14,6 +14,7 @@ import { AddActivityModal } from './AddActivityModal';
 import { UnifiedTravelPlanner } from '@/lib/unified-planner';
 import { UserPreferences } from '@/types';
 import { Sparkles } from 'lucide-react';
+import { TripPlanner } from '../SmartPlanner/TripPlanner';
 
 interface ItineraryViewProps {
     trip: Trip;
@@ -204,16 +205,68 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
         }
     };
 
+    const [viewMode, setViewMode] = useState<'standard' | 'smart'>('standard');
+
+    // ... existing code ...
+
+    if (viewMode === 'smart') {
+        const userPreferences: UserPreferences = {
+            trip_duration: trip.days.length,
+            budget: 'medium',
+            categories: ['attraction', 'food', 'culture'],
+            dietary: [],
+            start_location: trip.destination,
+            destination: trip.destination,
+            trip_dates: {
+                start: trip.startDate,
+                end: trip.endDate
+            },
+            day_start_time: new Date(),
+            return_to_start: false
+        } as any;
+
+        return (
+            <div className="h-full flex flex-col">
+                <div className="flex justify-between items-center mb-4 px-4 pt-4">
+                    <h2 className="text-2xl font-bold">Smart Planner</h2>
+                    <Button variant="outline" onClick={() => setViewMode('standard')}>
+                        Back to Standard View
+                    </Button>
+                </div>
+                <div className="flex-1 overflow-auto">
+                    <TripPlanner
+                        tripData={{
+                            destination: trip.destination.name || 'Destination',
+                            startDate: trip.startDate,
+                            endDate: trip.endDate,
+                            totalDays: trip.days.length
+                        }}
+                        userPreferences={userPreferences}
+                    />
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="h-full flex flex-col">
             <div className="flex justify-between items-center mb-4 px-4 pt-4">
                 <h2 className="text-2xl font-bold">Itinerary</h2>
                 <div className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        className="gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
+                        onClick={() => setViewMode('smart')}
+                    >
+                        <Sparkles className="h-4 w-4" />
+                        Smart Planner Mode
+                    </Button>
                     {/* Add Day button could go here */}
                 </div>
             </div>
 
             <Tabs value={selectedDayId} onValueChange={setSelectedDayId} className="flex-1 flex flex-col overflow-hidden">
+                {/* ... existing Tabs content ... */}
                 <div className="px-4">
                     <ScrollArea className="w-full whitespace-nowrap pb-2">
                         <TabsList className="w-full justify-start bg-transparent p-0 gap-2">
