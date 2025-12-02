@@ -108,6 +108,9 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
         try {
             const planner = new UnifiedTravelPlanner();
 
+            // Calculate index for context
+            const dayIndex = smartItinerary.findIndex(d => d.id === dayId);
+
             // Construct preferences from trip data
             // Note: In a real app, we'd have more detailed preferences stored
             const preferences: UserPreferences = {
@@ -122,8 +125,11 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
                     end: day.date
                 },
                 day_start_time: new Date(new Date(day.date).setHours(9, 0, 0, 0)),
-                return_to_start: false
-            };
+                return_to_start: false,
+                // Pass context for smart suggestions
+                isFirstDay: dayIndex === 0,
+                isLastDay: dayIndex === smartItinerary.length - 1
+            } as any; // Cast to any to bypass strict type check for now, or update type definition
 
             // Run the workflow
             // We pass empty availablePlaces to force discovery

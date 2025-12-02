@@ -180,31 +180,78 @@ export class UnifiedTravelPlanner {
             return true;
         });
 
-        // 4. Fallback: If we have too few places, generate "Ask Community" placeholders
+        // 4. Fallback: If we have too few places, generate "Smart Suggestions"
         if (filteredPlaces.length < 5) {
-            console.log('[UnifiedPlanner] Insufficient places found. Generating fallbacks.');
-            const fallbackCount = 5 - filteredPlaces.length;
-            for (let i = 0; i < fallbackCount; i++) {
-                filteredPlaces.push({
-                    id: `fallback-${Date.now()}-${i}`,
-                    name: "Ask Community for Suggestions",
-                    category: 'activity',
-                    lat: userPreferences.destination.lat || 0,
-                    lng: userPreferences.destination.lng || 0,
-                    rating: 0,
-                    reviews: 0,
-                    priceLevel: 1,
-                    image: '', // Placeholder image will be handled by UI
-                    description: "We couldn't find enough verified local experiences. Ask the community for their hidden gems!",
-                    rawTypes: ['fallback'],
-                    vicinity: userPreferences.destination.name || "Destination"
-                });
-            }
+            console.log('[UnifiedPlanner] Insufficient places found. Generating smart suggestions.');
+            const suggestions = this.generateContextualSuggestions(
+                userPreferences,
+                filteredPlaces.length
+            );
+            filteredPlaces = [...filteredPlaces, ...suggestions];
         }
 
         return { places: filteredPlaces, filtrationMetadata: metadata };
     }
 
+    /**
+     * SMART SUGGESTION ENGINE
+     * Generates contextual placeholders based on trip phase (Arrival, Departure, etc.)
+     */
+    private generateContextualSuggestions(userPreferences: UserPreferences, currentCount: number): Place[] {
+        const suggestions: Place[] = [];
+        const needed = 5 - currentCount;
+        const isFirstDay = (userPreferences as any).isFirstDay;
+        const isLastDay = (userPreferences as any).isLastDay;
+
+        // Helper to create a suggestion place
+        const createSuggestion = (id: string, name: string, category: string, desc: string): Place => ({
+            id: `suggestion-${id}-${Date.now()}`,
+            name: name,
+            category: category as any,
+            lat: userPreferences.destination.lat || 0,
+            lng: userPreferences.destination.lng || 0,
+            rating: 4.5, // High rating to encourage consideration
+            reviews: 100,
+            priceLevel: 2,
+            image: '',
+            description: desc,
+            rawTypes: ['suggestion'],
+            vicinity: userPreferences.destination.name || "Destination",
+            tags: ['Recommended']
+        });
+
+        // Context 1: Arrival / Check-in
+        if (isFirstDay && currentCount === 0) {
+            suggestions.push(createSuggestion('check-in', 'Check-in to Hotel', 'hotel', 'Relax and settle in after your journey.'));
+        }
+
+        // Context 2: Departure
+        if (isLastDay) {
+            suggestions.push(createSuggestion('departure', 'Prepare for Departure', 'activity', 'Pack up and head to the airport/station.'));
+        }
+
+        // Context 3: Meal times (Always good fillers)
+        if (needed > suggestions.length) {
+            suggestions.push(createSuggestion('local-dining', 'Explore Local Cuisine', 'food', 'Try famous local dishes at a nearby rated restaurant.'));
+        }
+
+        // Context 4: Relaxed Evening
+        if (needed > suggestions.length) {
+            suggestions.push(createSuggestion('evening-stroll', 'Evening City Walk', 'activity', 'Take a leisure walk to soak in the city vibe.'));
+        }
+
+        // Context 5: Shopping / Souvenirs
+        if (needed > suggestions.length) {
+            suggestions.push(createSuggestion('shopping', 'Souvenir Shopping', 'shopping', 'Pick up some memories from local markets.'));
+        }
+
+        // Context 6: Generic Exploration
+        while (needed > suggestions.length) {
+            suggestions.push(createSuggestion(`explore-${suggestions.length}`, 'Discover Hidden Gems', 'activity', 'Wander around and find unplanned spots.'));
+        }
+
+        return suggestions;
+    }
     /**
      * STEP 2: Resolve voting (in real app, this comes from user votes)
      */
