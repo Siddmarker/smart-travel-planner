@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { OAuth2Client } from 'google-auth-library';
+import { saveUser, findUserByEmail } from '@/lib/auth';
 
 const client = new OAuth2Client(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 
@@ -28,21 +29,42 @@ export async function POST(request: Request) {
         }
 
         // Extract user info from the verified payload
-        const user = {
+        const googleUser = {
             id: payload.sub,
-            email: payload.email,
-            name: payload.name,
+            email: payload.email!,
+            name: payload.name!,
             picture: payload.picture,
             email_verified: payload.email_verified
         };
 
-        // Generate a session token (in a real app, sign a JWT here)
-        const token = `auth-${user.id}-${Date.now()}`;
+        // Check if user exists, otherwise create/update
+        let storedUser = findUserByEmail(googleUser.email);
+
+        if (!storedUser) {
+            // Create new user from Google profile
+            storedUser = {
+                id: googleUser.id,
+                name: googleUser.name,
+                email: googleUser.email,
+                password: '', // No password for OAuth
+                avatar: googleUser.picture,
+                createdAt: new Date().toISOString()
+            };
+            saveUser(storedUser);
+        }
+
+        // Generate a session token
+        const token = `auth-${storedUser.id}-${Date.now()}`;
 
         return NextResponse.json({
             success: true,
             token: token,
-            user: user,
+            user: {
+                id: storedUser.id,
+                name: storedUser.name,
+                email: storedUser.email,
+                avatar: storedUser.avatar
+            },
             redirectTo: '/dashboard'
         });
 

@@ -1,6 +1,6 @@
 
 import { NextResponse } from 'next/server';
-import { v4 as uuidv4 } from 'uuid';
+import { createUser, findUserByEmail } from '@/lib/auth';
 
 // Mock database for demonstration if no real DB is connected
 // In a real app, you would import your DB connection here
@@ -18,29 +18,31 @@ export async function POST(request: Request) {
             );
         }
 
-        // Simulate user creation delay
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Check if user already exists
+        const existingUser = findUserByEmail(email);
+        if (existingUser) {
+            return NextResponse.json(
+                { message: 'User with this email already exists' },
+                { status: 409 }
+            );
+        }
 
-        // Mock successful user creation
-        // In a real app:
-        // 1. Check if user exists in DB
-        // 2. Hash password
-        // 3. Create user record
-        // 4. Generate JWT
+        // Create new user
+        const newUser = createUser(name, email, password);
 
-        const mockUser = {
-            id: uuidv4(),
-            name,
-            email,
-        };
-
-        const mockToken = `mock-jwt-token-${uuidv4()}`;
+        // Generate a simple token (in production use real JWT)
+        const token = `auth-${newUser.id}-${Date.now()}`;
 
         return NextResponse.json({
             success: true,
             message: 'User created successfully',
-            user: mockUser,
-            token: mockToken
+            user: {
+                id: newUser.id,
+                name: newUser.name,
+                email: newUser.email,
+                avatar: newUser.avatar
+            },
+            token: token
         }, { status: 201 });
 
     } catch (error) {
