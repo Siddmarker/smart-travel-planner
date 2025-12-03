@@ -51,12 +51,14 @@ global.fetch = async (url: any, options: any) => {
 async function runTest() {
     const userPreferences: UserPreferences = {
         interests: ['Nature', 'Culture'],
-        budget: '$$',
+        budget: 'medium',
         trip_duration: 3,
         destination: { name: 'Paris', lat: 48.8566, lng: 2.3522 },
         start_location: { lat: 48.8566, lng: 2.3522 },
         trip_dates: { start: '2025-05-01', end: '2025-05-03' },
-        categories: ['Nature', 'Culture']
+        categories: ['Nature', 'Culture'],
+        day_start_time: new Date('2025-05-01T09:00:00'),
+        return_to_start: true
     };
 
     const tripData = {
