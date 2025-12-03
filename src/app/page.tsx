@@ -5,13 +5,11 @@ import { CompactHero } from '@/components/LandingPage/CompactHero';
 import { CompactFeatures } from '@/components/LandingPage/CompactFeatures';
 import { CompactHowItWorks } from '@/components/LandingPage/CompactHowItWorks';
 import { CompactCTA } from '@/components/LandingPage/CompactCTA';
-import '@/components/LandingPage/CompactLanding.css';
-
 export default function LandingPage() {
   const { user } = useAuth();
 
   return (
-    <div className="compact-landing min-h-screen bg-white">
+    <div className="min-h-screen bg-[#F2F2F7] dark:bg-black">
       <CompactHero user={user} />
       <CompactFeatures />
       <CompactHowItWorks />

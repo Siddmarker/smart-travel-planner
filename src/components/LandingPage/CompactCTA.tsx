@@ -1,5 +1,5 @@
 import React from 'react';
-import './CompactLanding.css';
+
 
 interface CompactCTAProps {
     user: any;
