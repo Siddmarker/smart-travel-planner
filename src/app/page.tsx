@@ -21,29 +21,29 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
               <h3 className="text-2xl font-bold mb-4">2wards</h3>
-              <p className="text-gray-400">
+              <p className="text-gray-300">
                 Your intelligent companion for seamless travel planning and unforgettable adventures.
               </p>
             </div>
             <div>
-              <h4 className="font-bold mb-4">Product</h4>
-              <ul className="space-y-2 text-gray-400">
+              <h4 className="font-bold mb-4 text-white">Product</h4>
+              <ul className="space-y-2 text-gray-300">
                 <li>Features</li>
                 <li>Pricing</li>
                 <li>About Us</li>
               </ul>
             </div>
             <div>
-              <h4 className="font-bold mb-4">Resources</h4>
-              <ul className="space-y-2 text-gray-400">
+              <h4 className="font-bold mb-4 text-white">Resources</h4>
+              <ul className="space-y-2 text-gray-300">
                 <li>Blog</li>
                 <li>Community</li>
                 <li>Help Center</li>
               </ul>
             </div>
             <div>
-              <h4 className="font-bold mb-4">Legal</h4>
-              <ul className="space-y-2 text-gray-400">
+              <h4 className="font-bold mb-4 text-white">Legal</h4>
+              <ul className="space-y-2 text-gray-300">
                 <li>Privacy Policy</li>
                 <li>Terms of Service</li>
               </ul>
