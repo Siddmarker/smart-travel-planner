@@ -34,7 +34,7 @@ export function Sidebar() {
                         <Map className="h-6 w-6" />
                     </div>
                     <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-cyan-600 dark:from-blue-400 dark:to-cyan-400">
-                        TravelMate
+                        2wards
                     </span>
                 </Link>
             </div>
