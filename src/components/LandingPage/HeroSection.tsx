@@ -8,7 +8,7 @@ export function HeroSection({ user }: { user: any }) {
     const [isExploring, setIsExploring] = useState(false);
 
     return (
-        <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500">
+        <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#FF5C69] via-[#ff8f67] to-[#FFD166]">
             {/* Background Elements */}
             <div className="absolute inset-0 overflow-hidden">
                 <div className="absolute top-20 left-10 text-6xl animate-bounce delay-1000 opacity-20">🗺️</div>
@@ -20,7 +20,7 @@ export function HeroSection({ user }: { user: any }) {
             <div className="container mx-auto px-4 z-10 grid md:grid-cols-2 gap-12 items-center">
                 <div className="text-white space-y-6">
                     <h1 className="text-5xl md:text-7xl font-bold leading-tight">
-                        Plan Your Perfect Trip with <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-pink-300">AI-Powered</span> Magic
+                        Plan Your Perfect Trip with <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#FFD166] to-white">AI-Powered</span> Magic
                     </h1>
                     <p className="text-xl md:text-2xl text-white/90">
                         Discover hidden gems, create personalized itineraries, and travel smarter with our intelligent trip planning platform.
@@ -37,7 +37,7 @@ export function HeroSection({ user }: { user: any }) {
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
                             <Button
-                                className="rounded-full px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold transition-transform hover:scale-105"
+                                className="rounded-full px-8 py-3 bg-gradient-to-r from-[#FF5C69] to-[#FFD166] hover:from-[#ff4b59] hover:to-[#ffc84d] text-white font-bold transition-transform hover:scale-105"
                                 onClick={() => setIsExploring(true)}
                             >
                                 Explore

@@ -34,10 +34,18 @@
 :root {
   /* ADVENTURE INSPIRED COLOR PALETTE */
   /* Primary Colors - Sky & Exploration */
-  --primary-blue: #2563eb;
-  /* Trustworthy blue */
-  --sky-gradient: linear-gradient(135deg, #3b82f6, #06b6d4);
-  --sunset-orange: #f59e0b;
+  /* Primary Colors - Brand Identity */
+  --primary-brand: #FF5C69;
+  /* Coral */
+  --secondary-brand: #FFD166;
+  /* Yellow */
+
+  --primary-blue: var(--primary-brand);
+  /* Mapping old var to new brand color */
+
+  /* Trustworthy gradients */
+  --sky-gradient: linear-gradient(135deg, #FF5C69, #FFD166);
+  --sunset-orange: #FFD166;
   /* Warm sunset accent */
 
   /* Nature & Earth Tones */

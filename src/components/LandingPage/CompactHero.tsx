@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import './CompactLanding.css';
 
@@ -10,9 +11,9 @@ export function CompactHero({ user }: CompactHeroProps) {
     const [activeDestination, setActiveDestination] = useState(0);
 
     const destinations = [
-        { name: 'Bali', emoji: '🏝️', color: '#06B6D4' },
-        { name: 'Tokyo', emoji: '🗼', color: '#8B5CF6' },
-        { name: 'Paris', emoji: '🥐', color: '#EC4899' },
+        { name: 'Bali', emoji: '🏝️', color: '#FF5C69' },
+        { name: 'Tokyo', emoji: '🗼', color: '#FFD166' },
+        { name: 'Paris', emoji: '🥐', color: '#FF8F67' },
         { name: 'Barcelona', emoji: '🏰', color: '#F59E0B' }
     ];
 
@@ -28,8 +29,14 @@ export function CompactHero({ user }: CompactHeroProps) {
             <div className="compact-hero-container">
                 {/* Left Content - Tight Layout */}
                 <div className="compact-hero-content">
-                    <div className="compact-badge">
-                        <span>✨ AI Travel Assistant</span>
+                    <div className="mb-8 relative h-12 w-40">
+                        <Image
+                            src="/logo.png"
+                            alt="2wards Logo"
+                            fill
+                            className="object-contain object-left"
+                            priority
+                        />
                     </div>
 
                     <h1 className="compact-title">

@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Map, LayoutDashboard, Briefcase, Settings, LogOut, Plus, Compass } from 'lucide-react';
+import Image from 'next/image';
+import { LayoutDashboard, Briefcase, Settings, LogOut, Plus, Compass } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
@@ -30,18 +31,21 @@ export function Sidebar() {
         <div className="flex h-screen w-64 flex-col border-r bg-white/80 backdrop-blur-xl border-gray-200 dark:bg-slate-900/80 dark:border-slate-800">
             <div className="p-6">
                 <Link href="/" className="flex items-center gap-2 font-bold text-2xl text-primary tracking-tight">
-                    <div className="p-2 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg text-white shadow-lg shadow-blue-500/20">
-                        <Map className="h-6 w-6" />
+                    <div className="relative h-10 w-32">
+                        <Image
+                            src="/logo.png"
+                            alt="2wards Logo"
+                            fill
+                            className="object-contain object-left"
+                            priority
+                        />
                     </div>
-                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-cyan-600 dark:from-blue-400 dark:to-cyan-400">
-                        2wards
-                    </span>
                 </Link>
             </div>
 
             <div className="px-4 mb-6">
                 <CreateTripModal>
-                    <Button className="w-full justify-start gap-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-md hover:shadow-lg transition-all duration-300" size="lg">
+                    <Button className="w-full justify-start gap-2 bg-gradient-to-r from-[#FF5C69] to-[#FFD166] hover:from-[#ff4b59] hover:to-[#ffc84d] text-white shadow-md hover:shadow-lg transition-all duration-300" size="lg">
                         <Plus className="h-5 w-5" />
                         <span className="font-semibold">New Trip</span>
                     </Button>
