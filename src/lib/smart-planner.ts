@@ -172,6 +172,7 @@ export class SmartItineraryPlanner {
 
     // 5. GEMINI API INTEGRATION
     private async callGeminiAPI(prompt: string) {
+        console.log('[SmartPlanner] Calling Gemini API...');
         try {
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${this.geminiApiKey}`, {
                 method: 'POST',
@@ -195,12 +196,14 @@ export class SmartItineraryPlanner {
 
             const data = await response.json();
             if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-                console.error('Invalid response from Gemini:', data);
+                console.error('[SmartPlanner] Invalid response from Gemini:', JSON.stringify(data).substring(0, 200));
                 return '[]';
             }
-            return data.candidates[0].content.parts[0].text;
+            const text = data.candidates[0].content.parts[0].text;
+            console.log('[SmartPlanner] Gemini response received (length):', text.length);
+            return text;
         } catch (error) {
-            console.error('Gemini API Error:', error);
+            console.error('[SmartPlanner] Gemini API Error:', error);
             return '[]';
         }
     }
@@ -216,13 +219,16 @@ export class SmartItineraryPlanner {
         try {
             // Extract JSON from response
             const jsonMatch = geminiResponse.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) throw new Error('No JSON found in response');
+            if (!jsonMatch) {
+                console.warn('[SmartPlanner] No JSON found in response, using fallbacks');
+                throw new Error('No JSON found in response');
+            }
 
             const parsed = JSON.parse(jsonMatch[0]);
 
             // Process each slot
             ['morning', 'afternoon', 'evening'].forEach(slot => {
-                if (parsed[slot] && Array.isArray(parsed[slot])) {
+                if (parsed[slot] && Array.isArray(parsed[slot]) && parsed[slot].length > 0) {
                     suggestions[slot] = parsed[slot]
                         .slice(0, 3)
                         .map((suggestion: any, index: number) => ({
@@ -241,6 +247,7 @@ export class SmartItineraryPlanner {
                             tags: ['Smart Suggestion']
                         }));
                 } else {
+                    console.warn(`[SmartPlanner] Empty or invalid data for ${slot}, using fallback`);
                     suggestions[slot] = this.getFallbackSuggestions(slot);
                 }
             });

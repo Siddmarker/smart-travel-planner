@@ -45,6 +45,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({ tripData, userPreferen
 
             // If not planned or re-planning needed, call API
             if (dayData.status === 'pending') {
+                console.log(`[TripPlanner] Planning Day ${dayNumber}...`);
                 dayData = await planner.planDay(dayNumber);
             }
 
@@ -66,6 +67,12 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({ tripData, userPreferen
 
         } catch (err) {
             console.error('Error loading day:', err);
+            // Even if error, try to show what we have (likely fallbacks if planner handled it, or previous state)
+            const dayData = planner.trip.days[dayNumber - 1];
+            if (dayData) {
+                setCurrentDayData({ ...dayData });
+                setCurrentDay(dayNumber);
+            }
         } finally {
             setIsLoading(false);
         }

@@ -10,10 +10,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { CreateTripModal } from './CreateTripModal';
 
 const navigation = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'My Trips', href: '/trips', icon: Briefcase },
     { name: 'Discover', href: '/discover', icon: Compass },
-    { name: 'Map View', href: '/map', icon: Map },
     { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
