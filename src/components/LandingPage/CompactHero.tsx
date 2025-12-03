@@ -53,13 +53,10 @@ export function CompactHero({ user }: CompactHeroProps) {
     return (
         <section className="relative min-h-[95vh] flex flex-col overflow-hidden bg-[#F2F2F7] dark:bg-black">
             {/* Navbar */}
-            <nav className="absolute top-0 left-0 right-0 z-50 p-6">
+            <nav className="absolute top-0 left-0 right-0 z-50 py-6 px-4">
                 <div className="container mx-auto max-w-6xl flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
-                            2
-                        </div>
-                        <span className="text-xl font-bold text-gray-900 dark:text-white">2wards</span>
+                        <span className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">2wards</span>
                     </div>
 
                     <div className="flex items-center gap-4">
