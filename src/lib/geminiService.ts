@@ -5,16 +5,16 @@ const API_KEY = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API
 const genAI = new GoogleGenerativeAI(API_KEY!);
 
 export const getDestinationSuggestions = async (
-    preferences: any
+  preferences: any
 ): Promise<any[]> => {
-    if (!API_KEY) {
-        console.error("Gemini API key is missing");
-        return [];
-    }
+  if (!API_KEY) {
+    console.error("Gemini API key is missing");
+    return [];
+  }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+  const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
-    const prompt = `
+  const prompt = `
     Suggest 5 travel destinations based on these preferences:
     - Budget: ${preferences.budget}
     - Climate: ${preferences.climate}
@@ -29,35 +29,50 @@ export const getDestinationSuggestions = async (
     - coordinates: { lat: number, lng: number }
   `;
 
-    try {
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
-        // Clean up markdown code blocks if present
-        const jsonStr = text.replace(/```json\n?|\n?```/g, "").trim();
-        return JSON.parse(jsonStr);
-    } catch (error) {
-        console.error("Error generating suggestions:", error);
-        return [];
-    }
+    // Clean up markdown code blocks if present
+    const jsonStr = text.replace(/```json\n?|\n?```/g, "").trim();
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.error("Error generating suggestions:", error);
+    return [];
+  }
 };
 
 export const generateMultiDayItinerary = async (
-    destination: string,
-    days: number,
-    preferences: string[] = []
+  destination: string,
+  days: number,
+  preferences: any = {}
 ): Promise<any> => {
-    if (!API_KEY) {
-        console.error("Gemini API key is missing");
-        return null;
-    }
+  if (!API_KEY) {
+    console.error("Gemini API key is missing");
+    return null;
+  }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+  const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
-    const prompt = `
+  // Format preferences for the prompt
+  let preferencesStr = "";
+  if (Array.isArray(preferences)) {
+    preferencesStr = preferences.join(", ");
+  } else if (typeof preferences === 'object') {
+    const parts = [];
+    if (preferences.foodVariety) parts.push(`Food Variety: ${preferences.foodVariety}`);
+    if (preferences.dietary?.length) parts.push(`Dietary: ${preferences.dietary.join(", ")}`);
+    if (preferences.cuisines?.length) parts.push(`Cuisines: ${preferences.cuisines.join(", ")}`);
+    if (preferences.startTime) parts.push(`Start Time: ${preferences.startTime}`);
+    if (preferences.endTime) parts.push(`End Time: ${preferences.endTime}`);
+    if (preferences.returnToStart) parts.push(`Return to Start: Yes`);
+    preferencesStr = parts.join("; ");
+  }
+
+  const prompt = `
     Create a detailed ${days}-day itinerary for a trip to ${destination}.
-    Preferences: ${preferences.join(", ")}.
+    Preferences: ${preferencesStr}.
     
     For EACH day, provide a structured plan with:
     - Theme/Title of the day
@@ -81,14 +96,14 @@ export const generateMultiDayItinerary = async (
     }
   `;
 
-    try {
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
-        const jsonStr = text.replace(/```json\n?|\n?```/g, "").trim();
-        return JSON.parse(jsonStr);
-    } catch (error) {
-        console.error("Error generating itinerary:", error);
-        return null;
-    }
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    const jsonStr = text.replace(/```json\n?|\n?```/g, "").trim();
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.error("Error generating itinerary:", error);
+    return null;
+  }
 };
