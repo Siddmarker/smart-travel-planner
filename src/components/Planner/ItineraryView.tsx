@@ -80,18 +80,44 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
         if (!trip.days.find(d => d.id === activeDayId)) {
             const newDay: DayPlan = {
                 id: activeDayId,
+                dayNumber: day.dayNumber,
                 date: day.date,
+                planningMode: 'manual',
+                status: 'partial',
+                morning: [],
+                afternoon: [],
+                evening: [],
                 items: [newItem]
             };
             // Insert in correct order (simplified: just append and sort or rely on builder to handle next render)
             // Better: Reconstruct all days from smartItinerary
             const allDays = smartItinerary.map(sd => {
                 if (sd.id === activeDayId) {
-                    return { id: sd.id, date: sd.date, items: [...sd.items, newItem] };
+                    return {
+                        id: sd.id,
+                        dayNumber: sd.dayNumber,
+                        date: sd.date,
+                        planningMode: 'manual' as const,
+                        status: 'partial' as const,
+                        morning: [],
+                        afternoon: [],
+                        evening: [],
+                        items: [...sd.items, newItem]
+                    };
                 }
                 // Return existing or empty
                 const existing = trip.days.find(td => td.id === sd.id);
-                return existing || { id: sd.id, date: sd.date, items: [] };
+                return existing || {
+                    id: sd.id,
+                    dayNumber: sd.dayNumber,
+                    date: sd.date,
+                    planningMode: 'manual' as const,
+                    status: 'empty' as const,
+                    morning: [],
+                    afternoon: [],
+                    evening: [],
+                    items: []
+                };
             });
             updateTrip(trip.id, { days: allDays });
         } else {
@@ -153,10 +179,30 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
                 if (!trip.days.find(d => d.id === dayId)) {
                     const allDays = smartItinerary.map(sd => {
                         if (sd.id === dayId) {
-                            return { id: sd.id, date: sd.date, items: [...sd.items, ...dayItinerary] };
+                            return {
+                                id: sd.id,
+                                dayNumber: sd.dayNumber,
+                                date: sd.date,
+                                planningMode: 'ai' as const,
+                                status: 'partial' as const,
+                                morning: [],
+                                afternoon: [],
+                                evening: [],
+                                items: [...sd.items, ...dayItinerary]
+                            };
                         }
                         const existing = trip.days.find(td => td.id === sd.id);
-                        return existing || { id: sd.id, date: sd.date, items: [] };
+                        return existing || {
+                            id: sd.id,
+                            dayNumber: sd.dayNumber,
+                            date: sd.date,
+                            planningMode: 'manual' as const,
+                            status: 'empty' as const,
+                            morning: [],
+                            afternoon: [],
+                            evening: [],
+                            items: []
+                        };
                     });
                     updateTrip(trip.id, { days: allDays });
                 } else {

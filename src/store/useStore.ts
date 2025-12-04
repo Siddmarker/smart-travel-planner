@@ -43,11 +43,16 @@ export const useStore = create<AppState>()(persist((set) => ({
                 lat: 48.8566,
                 lng: 2.3522,
             },
+            adminId: 'user-1',
+            joinCode: 'PARIS24',
+            planningMode: 'manual',
+            votingStatus: 'not_started',
+            includeDining: false,
             participants: [
-                // { id: 'user-1', name: 'Alex Johnson', email: 'alex@example.com', avatar: 'https://github.com/shadcn.png' },
-                { id: 'user-2', name: 'Sarah Smith', email: 'sarah@example.com' }
+                { userId: 'user-2', name: 'Sarah Smith', role: 'member', joinedAt: new Date().toISOString() }
             ],
             days: [],
+            totalDays: 7,
             budget: {
                 currency: 'EUR',
                 total: 2000,
@@ -64,10 +69,14 @@ export const useStore = create<AppState>()(persist((set) => ({
                 lat: 35.6762,
                 lng: 139.6503,
             },
-            participants: [
-                // { id: 'user-1', name: 'Alex Johnson', email: 'alex@example.com', avatar: 'https://github.com/shadcn.png' }
-            ],
+            adminId: 'user-1',
+            joinCode: 'TOKYO24',
+            planningMode: 'manual',
+            votingStatus: 'not_started',
+            includeDining: false,
+            participants: [],
             days: [],
+            totalDays: 10,
             budget: {
                 currency: 'JPY',
                 total: 300000,
@@ -172,20 +181,28 @@ export const useStore = create<AppState>()(persist((set) => ({
         trips: state.trips.map(trip => {
             if (trip.id === tripId) {
                 const updatedDays = [...trip.days];
+                // Ensure day exists
                 if (!updatedDays[dayIndex]) {
-                    updatedDays[dayIndex] = { id: crypto.randomUUID(), date: new Date().toISOString(), items: [] };
-                }
-                if (!updatedDays[dayIndex].items) {
-                    updatedDays[dayIndex].items = [];
+                    updatedDays[dayIndex] = {
+                        id: crypto.randomUUID(),
+                        dayNumber: dayIndex + 1,
+                        date: new Date().toISOString(),
+                        planningMode: 'manual',
+                        status: 'partial',
+                        morning: [],
+                        afternoon: [],
+                        evening: [],
+                        items: []
+                    };
                 }
 
-                updatedDays[dayIndex].items.push({
-                    id: crypto.randomUUID(),
-                    placeId: place.id,
-                    startTime: '09:00',
-                    endTime: '10:00',
-                    type: 'activity'
+                updatedDays[dayIndex].morning.push({
+                    ...place,
+                    timeSlot: 'morning',
+                    dayNumber: dayIndex + 1,
+                    addedAt: new Date()
                 });
+
                 return { ...trip, days: updatedDays };
             }
             return trip;

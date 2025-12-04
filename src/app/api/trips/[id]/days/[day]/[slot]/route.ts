@@ -39,6 +39,8 @@ export async function POST(
             return NextResponse.json({ error: 'Invalid time slot' }, { status: 400 });
         }
 
+        const timeSlot = slot as 'morning' | 'afternoon' | 'evening';
+
         const trip = await Trip.findById(id);
         if (!trip) {
             return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
@@ -52,12 +54,12 @@ export async function POST(
 
         // Add place to the slot
         // Check if already exists
-        const exists = dayPlan[slot].some((p: any) => p.googlePlaceId === place.id || p.googlePlaceId === place.googlePlaceId);
+        const exists = dayPlan[timeSlot].some((p: any) => p.googlePlaceId === place.id || p.googlePlaceId === place.googlePlaceId);
         if (exists) {
             return NextResponse.json({ error: 'Place already added to this slot' }, { status: 400 });
         }
 
-        dayPlan[slot].push({
+        dayPlan[timeSlot].push({
             googlePlaceId: place.id || place.googlePlaceId,
             name: place.name,
             address: place.address || place.formatted_address,
@@ -68,7 +70,7 @@ export async function POST(
             timeSlot: slot,
             dayNumber: dayNum,
             addedAt: new Date()
-        });
+        } as any);
 
         // Update status if needed
         if (dayPlan.morning.length > 0 && dayPlan.afternoon.length > 0 && dayPlan.evening.length > 0) {

@@ -1,5 +1,5 @@
 import { Place } from '@/types';
-import { searchPlaces, calculateDistance } from './googleMapsService';
+import { searchPlaces, calculateRealDistances } from './googleMapsService';
 
 interface DaySlotOptions {
     morning: Place[];
@@ -39,10 +39,7 @@ export class SmartPlaceService {
             // Search for places
             // We search for a general "tourist attraction" plus specific keywords if needed
             // Or just search broad and filter
-            let places = await searchPlaces('tourist attraction', location, 5000, 'tourist_attraction', {
-                minRating: this.MIN_RATING,
-                excludeRestaurants: false // We handle this manually
-            });
+            let places = await searchPlaces('tourist attraction', location, 5000, 'tourist_attraction');
 
             // Filter by time appropriateness (simple keyword match or category)
             // This is a simplified logic. In reality, we might search specifically for "breakfast" for morning.
@@ -61,7 +58,7 @@ export class SmartPlaceService {
             // Filter logic
             return places.filter(p => {
                 if (p.rating < this.MIN_RATING) return false;
-                if (p.reviewCount < this.MIN_REVIEWS) return false;
+                if ((p.reviewCount || 0) < this.MIN_REVIEWS) return false;
 
                 // Exclude agencies
                 if (p.rawTypes?.some((t: string) => t.includes('agency'))) return false;

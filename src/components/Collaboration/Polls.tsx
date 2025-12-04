@@ -162,7 +162,7 @@ export function Polls({ trip }: PollsProps) {
                                 )}
                             </div>
                             <p className="text-xs text-muted-foreground">
-                                Created by {trip.participants.find(p => p.id === poll.createdBy)?.name || 'Unknown'}
+                                Created by {trip.participants.find(p => p.userId === poll.createdBy)?.name || 'Unknown'}
                             </p>
                         </CardHeader>
                         <CardContent className="space-y-2">
@@ -191,10 +191,10 @@ export function Polls({ trip }: PollsProps) {
                                             <div className="flex items-center gap-2">
                                                 <div className="flex -space-x-1">
                                                     {option.votes.slice(0, 3).map(userId => {
-                                                        const user = trip.participants.find(p => p.id === userId);
+                                                        const user = trip.participants.find(p => p.userId === userId);
                                                         return user ? (
                                                             <Avatar key={userId} className="h-5 w-5 border border-white">
-                                                                <AvatarImage src={user.avatar} />
+                                                                <AvatarImage />
                                                                 <AvatarFallback className="text-[8px]">{user.name[0]}</AvatarFallback>
                                                             </Avatar>
                                                         ) : null;

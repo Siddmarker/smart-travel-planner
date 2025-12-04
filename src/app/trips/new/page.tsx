@@ -104,7 +104,13 @@ export default function NewTripPage() {
                 dayDate.setDate(startDate.getDate() + i);
                 initialDays.push({
                     id: uuidv4(),
+                    dayNumber: i + 1,
                     date: dayDate.toISOString(),
+                    planningMode: 'manual' as const,
+                    status: 'empty' as const,
+                    morning: [],
+                    afternoon: [],
+                    evening: [],
                     items: []
                 });
             }
@@ -114,12 +120,22 @@ export default function NewTripPage() {
                 name: formData.name,
                 startDate: formData.startDate,
                 endDate: formData.endDate,
+                totalDays: totalDays,
                 destination: {
                     name: formData.destination,
                     lat: destinationCoords.lat,
                     lng: destinationCoords.lng,
                 },
-                participants: [currentUser],
+                participants: [{
+                    userId: currentUser.id,
+                    name: currentUser.name,
+                    role: 'admin',
+                    joinedAt: new Date().toISOString()
+                }],
+                adminId: currentUser.id,
+                joinCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+                planningMode: 'manual',
+                votingStatus: 'not_started',
                 days: initialDays,
                 budget: {
                     currency: 'USD',

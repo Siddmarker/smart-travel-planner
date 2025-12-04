@@ -94,6 +94,9 @@ export interface Place {
   photoUrl?: string;
   address?: string;
   reviewCount?: number;
+  timeSlot?: 'morning' | 'afternoon' | 'evening';
+  dayNumber?: number;
+  addedAt?: Date | string;
 }
 
 export interface PlaceDetails extends Place {
@@ -281,6 +284,9 @@ export interface Trip {
     returnToStart: boolean;
     startTime: string;
     endTime: string;
+    foodVariety?: 'high' | 'medium' | 'low';
+    dietary?: string[];
+    cuisines?: string[];
   };
   categoryPreferences?: CategoryPreferences;
   review?: {

@@ -16,6 +16,10 @@ export interface IPlace {
     dayNumber: number;
     addedBy?: mongoose.Types.ObjectId;
     addedAt: Date;
+    votes?: {
+        up: mongoose.Types.ObjectId[];
+        down: mongoose.Types.ObjectId[];
+    };
 }
 
 export interface IDayPlan {
@@ -84,6 +88,10 @@ const PlaceSchema = new Schema<IPlace>({
     addedAt: {
         type: Date,
         default: Date.now
+    },
+    votes: {
+        up: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+        down: [{ type: Schema.Types.ObjectId, ref: 'User' }]
     }
 });
 
@@ -165,7 +173,7 @@ const TripSchema = new Schema<ITrip>({
 });
 
 // Generate join code before saving
-TripSchema.pre('save', function (this: ITrip, next: (err?: Error) => void) {
+TripSchema.pre('save', function (this: ITrip, next: any) {
     if (!this.joinCode) {
         this.joinCode = Math.random().toString(36).substring(2, 10).toUpperCase();
     }

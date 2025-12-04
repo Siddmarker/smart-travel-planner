@@ -48,13 +48,13 @@ export function Chat({ trip }: ChatProps) {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {trip.messages?.map((msg) => {
                     const isMe = msg.userId === currentUser?.id;
-                    const user = trip.participants.find(p => p.id === msg.userId);
+                    const user = trip.participants.find(p => p.userId === msg.userId);
 
                     return (
                         <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                             <div className={`flex gap-2 max-w-[80%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
                                 <Avatar className="h-8 w-8">
-                                    <AvatarImage src={user?.avatar} />
+                                    <AvatarImage />
                                     <AvatarFallback>{user?.name[0]}</AvatarFallback>
                                 </Avatar>
                                 <div>

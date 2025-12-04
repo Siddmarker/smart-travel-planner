@@ -40,8 +40,13 @@ export async function POST(
             return NextResponse.json({ error: 'Day not found' }, { status: 404 });
         }
 
+        if (!['morning', 'afternoon', 'evening'].includes(slot)) {
+            return NextResponse.json({ error: 'Invalid slot' }, { status: 400 });
+        }
+        const timeSlot = slot as 'morning' | 'afternoon' | 'evening';
+
         // Find the place in the slot
-        const place = dayPlan[slot].find((p: any) => p.googlePlaceId === placeId || p.id === placeId);
+        const place = dayPlan[timeSlot].find((p: any) => p.googlePlaceId === placeId || p.id === placeId);
         if (!place) {
             return NextResponse.json({ error: 'Place not found in slot' }, { status: 404 });
         }
@@ -52,14 +57,16 @@ export async function POST(
         }
 
         // Remove existing vote
-        place.votes.up = place.votes.up.filter((uid: string) => uid !== userId);
-        place.votes.down = place.votes.down.filter((uid: string) => uid !== userId);
+        place.votes.up = place.votes.up.filter((uid: any) => uid.toString() !== userId);
+        place.votes.down = place.votes.down.filter((uid: any) => uid.toString() !== userId);
+
+        const userObjectId = new mongoose.Types.ObjectId(userId);
 
         // Add new vote
         if (voteType === 'up') {
-            place.votes.up.push(userId);
+            place.votes.up.push(userObjectId);
         } else if (voteType === 'down') {
-            place.votes.down.push(userId);
+            place.votes.down.push(userObjectId);
         }
 
         await trip.save();

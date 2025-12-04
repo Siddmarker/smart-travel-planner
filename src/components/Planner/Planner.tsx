@@ -110,7 +110,13 @@ export function Planner({ trip }: PlannerProps) {
                 date.setDate(date.getDate() + (parseInt(dayNum) - 1));
                 return {
                     id: uuidv4(),
+                    dayNumber: parseInt(dayNum),
                     date: date.toISOString(),
+                    planningMode: 'ai' as const,
+                    status: 'complete' as const,
+                    morning: [],
+                    afternoon: [],
+                    evening: [],
                     items: items
                 };
             });

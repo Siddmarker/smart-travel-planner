@@ -54,9 +54,54 @@ export default function TripDashboard() {
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <DayPlanner key={day.dayNumber} day={day} />
-                ))}
+                    <h1 className="text-3xl font-bold">{currentTrip.name}</h1>
+                    <p className="text-muted-foreground">
+                        {new Date(currentTrip.startDate).toLocaleDateString()} - {new Date(currentTrip.endDate).toLocaleDateString()} • {currentTrip.destination.name}
+                    </p>
+                </div>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={handleCopyInvite}>
+                        <Share2 className="w-4 h-4 mr-2" />
+                        Invite
+                    </Button>
+                    {currentTrip.planningMode !== 'ai' && (
+                        <Button onClick={generateAIItinerary} disabled={loading}>
+                            <Sparkles className="w-4 h-4 mr-2" />
+                            Generate AI Itinerary
+                        </Button>
+                    )}
+                    {/* Admin Controls - Mocking admin check for now */}
+                    {currentTrip.votingStatus === 'not_started' && (
+                        <Button onClick={async () => {
+                            await fetch(`/api/trips/${currentTrip.id || currentTrip._id}/start-voting`, {
+                                method: 'POST',
+                                body: JSON.stringify({ userId: currentTrip.adminId }) // Mocking current user as admin
+                            });
+                            fetchTrip(id);
+                        }}>
+                            Start Voting
+                        </Button>
+                    )}
+                    {currentTrip.votingStatus === 'open' && (
+                        <Button onClick={async () => {
+                            await fetch(`/api/trips/${currentTrip.id || currentTrip._id}/finalize`, {
+                                method: 'POST',
+                                body: JSON.stringify({ userId: currentTrip.adminId })
+                            });
+                            fetchTrip(id);
+                        }} variant="destructive">
+                            Finalize Trip
+                        </Button>
+                    )}
                 </div>
             </div>
-            );
+
+            {/* Days Grid */}
+            <div className="grid gap-8">
+                {currentTrip.days.map((day) => (
+                    <DayPlanner key={day.dayNumber} day={day} />
+                ))}
+            </div>
+        </div>
+    );
 }

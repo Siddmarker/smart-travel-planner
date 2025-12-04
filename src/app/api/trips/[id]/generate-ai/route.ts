@@ -66,11 +66,12 @@ export async function POST(
                 if (place) {
                     currentDay.morning.push({
                         ...place,
+                        coordinates: { lat: place.lat, lng: place.lng },
                         googlePlaceId: place.id,
                         timeSlot: 'morning',
                         dayNumber: dayPlan.day,
                         addedAt: new Date()
-                    });
+                    } as any);
                 }
             }
 
@@ -80,11 +81,12 @@ export async function POST(
                 if (place) {
                     currentDay.afternoon.push({
                         ...place,
+                        coordinates: { lat: place.lat, lng: place.lng },
                         googlePlaceId: place.id,
                         timeSlot: 'afternoon',
                         dayNumber: dayPlan.day,
                         addedAt: new Date()
-                    });
+                    } as any);
                 }
             }
 
@@ -94,11 +96,12 @@ export async function POST(
                 if (place) {
                     currentDay.evening.push({
                         ...place,
+                        coordinates: { lat: place.lat, lng: place.lng },
                         googlePlaceId: place.id,
                         timeSlot: 'evening',
                         dayNumber: dayPlan.day,
                         addedAt: new Date()
-                    });
+                    } as any);
                 }
             }
 

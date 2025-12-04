@@ -14,7 +14,7 @@ export interface TimeSlot {
     suggestedActivities?: Place[];
 }
 
-export interface SmartDay extends DayPlan {
+export interface SmartDay extends Omit<DayPlan, 'status'> {
     dayNumber: number;
     timeSlots: TimeSlot[];
     isVisible: boolean;
@@ -74,7 +74,11 @@ export class SmartItineraryBuilder {
             needsAttention: true,
             isEmpty: true,
             status: 'NOT_STARTED',
-            progress: 0
+            progress: 0,
+            morning: [],
+            afternoon: [],
+            evening: [],
+            planningMode: 'ai'
         };
     }
 

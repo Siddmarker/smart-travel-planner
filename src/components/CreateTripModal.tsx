@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select as SelectUI, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStore } from '@/store/useStore';
-import { Place, TripCategory } from '@/types';
+import { Place, TripCategory, Trip } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import { useRouter } from 'next/navigation';
 import { Calendar, MapPin, DollarSign, Type, Tag, Sparkles } from 'lucide-react';
@@ -149,18 +149,49 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
 
         if (!currentUser) return;
 
-        const newTrip = {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+        const initialDays = [];
+        for (let i = 0; i < totalDays; i++) {
+            const dayDate = new Date(start);
+            dayDate.setDate(start.getDate() + i);
+            initialDays.push({
+                id: uuidv4(),
+                dayNumber: i + 1,
+                date: dayDate.toISOString(),
+                planningMode: 'manual' as const,
+                status: 'empty' as const,
+                morning: [],
+                afternoon: [],
+                evening: [],
+                items: []
+            });
+        }
+
+        const newTrip: Trip = {
             id: uuidv4(),
             name,
             startDate,
             endDate,
+            totalDays,
             destination: {
                 name: destination,
                 lat: destinationCoords.lat,
                 lng: destinationCoords.lng,
             },
-            participants: [currentUser],
-            days: [],
+            participants: [{
+                userId: currentUser.id,
+                name: currentUser.name,
+                role: 'admin',
+                joinedAt: new Date().toISOString()
+            }],
+            adminId: currentUser.id,
+            joinCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+            planningMode: 'manual',
+            votingStatus: 'not_started',
+            days: initialDays,
             budget: {
                 currency: 'USD',
                 total: Number(budget) || 0,
