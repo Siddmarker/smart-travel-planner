@@ -14,11 +14,11 @@ export interface IPlace {
     openingHours?: string[];
     timeSlot: 'morning' | 'afternoon' | 'evening';
     dayNumber: number;
-    addedBy?: mongoose.Types.ObjectId;
+    addedBy?: string;
     addedAt: Date;
     votes?: {
-        up: mongoose.Types.ObjectId[];
-        down: mongoose.Types.ObjectId[];
+        up: string[];
+        down: string[];
     };
 }
 
@@ -35,7 +35,7 @@ export interface IDayPlan {
 }
 
 export interface IParticipant {
-    userId: mongoose.Types.ObjectId;
+    userId: string;
     name: string;
     role: 'admin' | 'member';
     joinedAt: Date;
@@ -61,7 +61,7 @@ export interface ITrip extends Document {
         cuisines?: string[];
     };
     includeDining: boolean;
-    adminId: mongoose.Types.ObjectId;
+    adminId: string;
     joinCode: string;
     participants: IParticipant[];
     days: IDayPlan[];
@@ -89,7 +89,7 @@ const PlaceSchema = new Schema<IPlace>({
     },
     dayNumber: Number,
     addedBy: {
-        type: Schema.Types.ObjectId,
+        type: String,
         ref: 'User'
     },
     addedAt: {
@@ -97,8 +97,8 @@ const PlaceSchema = new Schema<IPlace>({
         default: Date.now
     },
     votes: {
-        up: [{ type: Schema.Types.ObjectId, ref: 'User' }],
-        down: [{ type: Schema.Types.ObjectId, ref: 'User' }]
+        up: [{ type: String, ref: 'User' }],
+        down: [{ type: String, ref: 'User' }]
     }
 });
 
@@ -149,8 +149,7 @@ const TripSchema = new Schema<ITrip>({
         default: false
     },
     adminId: {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
+        type: String,
         required: true
     },
     joinCode: {
@@ -160,8 +159,8 @@ const TripSchema = new Schema<ITrip>({
     },
     participants: [{
         userId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User'
+            type: String,
+            required: true
         },
         name: String,
         role: {
