@@ -79,7 +79,7 @@ export async function POST(request: Request) {
                 lat: body.destination.lat,
                 lng: body.destination.lng
             },
-            preferences: body.preferences || [],
+            preferences: body.preferences || {},
             includeDining: body.includeDining || false,
             adminId: body.adminId,
             participants: [{
@@ -125,9 +125,20 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true, trip: newTrip }, { status: 201 });
 
     } catch (error: any) {
-        console.error('Error creating trip:', error);
+        console.error('CRITICAL ERROR creating trip:', error);
+        console.error('Stack trace:', error.stack);
+
+        // Check for common issues
+        if (!process.env.MONGODB_URI) {
+            console.error('MONGODB_URI is missing!');
+        }
+
         return NextResponse.json(
-            { error: 'Failed to create trip', details: error.message },
+            {
+                error: 'Failed to create trip',
+                details: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            },
             { status: 500 }
         );
     }

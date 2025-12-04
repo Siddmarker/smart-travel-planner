@@ -108,14 +108,17 @@ export default function NewTripPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        console.log('handleSubmit called'); // Debug log
         setError(null);
 
         if (!currentUser) {
+            console.error('No current user');
             setError('You must be logged in to create a trip.');
             return;
         }
 
         if (!formData.name || !formData.destination || !formData.startDate || !formData.endDate) {
+            console.error('Validation failed', formData);
             setError('Please fill in all fields.');
             return;
         }
@@ -137,17 +140,42 @@ export default function NewTripPage() {
                     currency: 'USD',
                     total: 0,
                 },
+                preferences: {
+                    returnToStart: false,
+                    startTime: '09:00',
+                    endTime: '20:00',
+                    foodVariety: 'medium',
+                    dietary: [],
+                    cuisines: []
+                }
             };
 
+            console.log('Calling createTrip with:', tripData);
             const createdTrip = await createTrip(tripData);
+            console.log('createTrip result:', createdTrip);
+
             if (createdTrip) {
                 router.push(`/trips/${createdTrip.id}`);
+            } else {
+                console.error('createTrip returned null');
+                setError('Failed to create trip. Please try again.');
             }
         } catch (err: any) {
             console.error('Error creating trip:', err);
             setError(err.message || 'Failed to create trip. Please try again.');
         }
     };
+
+    // Debug Component
+    const DebugInfo = () => (
+        <div className="mt-4 p-4 bg-gray-100 rounded text-xs font-mono overflow-auto max-h-40">
+            <p><strong>Debug Info:</strong></p>
+            <p>User: {currentUser ? 'Logged In' : 'Not Logged In'}</p>
+            <p>Form Valid: {(!formData.name || !formData.destination || !formData.startDate || !formData.endDate) ? 'No' : 'Yes'}</p>
+            <p>Coords: {destinationCoords.lat}, {destinationCoords.lng}</p>
+            <pre>{JSON.stringify(formData, null, 2)}</pre>
+        </div>
+    );
 
     return (
         <div className="container mx-auto py-8 px-4 max-w-2xl">
@@ -162,7 +190,7 @@ export default function NewTripPage() {
                             <AlertDescription>{error}</AlertDescription>
                         </Alert>
                     )}
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                    <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="name">Trip Name</Label>
                             <Input
@@ -282,10 +310,15 @@ export default function NewTripPage() {
                                 />
                             </div>
                         </div>
-                        <Button type="submit" className="w-full">
+                        <Button
+                            type="button"
+                            className="w-full"
+                            onClick={handleSubmit}
+                        >
                             Create Trip
                         </Button>
                     </form>
+                    <DebugInfo />
                 </CardContent>
             </Card>
         </div>
