@@ -170,12 +170,77 @@ export default function NewTripPage() {
     const DebugInfo = () => (
         <div className="mt-4 p-4 bg-gray-100 rounded text-xs font-mono overflow-auto max-h-40">
             <p><strong>Debug Info:</strong></p>
-            <p>User: {currentUser ? 'Logged In' : 'Not Logged In'}</p>
+            <p>User Status: {currentUser ? 'Logged In' : 'Not Logged In'}</p>
+            <p>User ID: {currentUser?.id || 'N/A'}</p>
             <p>Form Valid: {(!formData.name || !formData.destination || !formData.startDate || !formData.endDate) ? 'No' : 'Yes'}</p>
             <p>Coords: {destinationCoords.lat}, {destinationCoords.lng}</p>
             <pre>{JSON.stringify(formData, null, 2)}</pre>
         </div>
     );
+
+    const TripCreationDebug = () => {
+        const [diagnostics, setDiagnostics] = useState<any>({});
+
+        const runDiagnostics = async () => {
+            const results: any = {};
+
+            // Test 1: Check localStorage (simulated via store)
+            results.userState = {
+                currentUser: currentUser ? 'Present' : 'Missing',
+                hasId: currentUser?.id ? 'Yes' : 'No'
+            };
+
+            // Test 2: Check API connectivity
+            try {
+                const ping = await fetch('/api/test-db');
+                results.apiConnectivity = await ping.json();
+            } catch (error: any) {
+                results.apiConnectivity = { error: error.message };
+            }
+
+            // Test 3: Test minimal creation
+            const testData = {
+                name: 'Diagnostic Trip',
+                location: 'Test Location',
+                startDate: new Date().toISOString(),
+                endDate: new Date(Date.now() + 86400000).toISOString(),
+                adminId: currentUser?.id || 'diagnostic-user',
+                adminName: currentUser?.name || 'Diagnostic User'
+            };
+
+            try {
+                const testResponse = await fetch('/api/trips/test-create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testData)
+                });
+                results.testCreation = await testResponse.json();
+            } catch (error: any) {
+                results.testCreation = { error: error.message };
+            }
+
+            setDiagnostics(results);
+            console.log('Diagnostics:', results);
+        };
+
+        return (
+            <div className="mt-8 p-4 bg-slate-100 rounded-lg border border-slate-200">
+                <h3 className="font-bold mb-2">🚨 Diagnostic Tools</h3>
+                <Button onClick={runDiagnostics} variant="outline" size="sm">Run Diagnostics</Button>
+
+                {Object.keys(diagnostics).length > 0 && (
+                    <div className="mt-4">
+                        <h4 className="font-semibold text-sm mb-1">Results:</h4>
+                        <pre className="bg-white p-2 rounded text-xs overflow-auto max-h-60">
+                            {JSON.stringify(diagnostics, null, 2)}
+                        </pre>
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     return (
         <div className="container mx-auto py-8 px-4 max-w-2xl">
@@ -319,6 +384,7 @@ export default function NewTripPage() {
                         </Button>
                     </form>
                     <DebugInfo />
+                    <TripCreationDebug />
                 </CardContent>
             </Card>
         </div>
