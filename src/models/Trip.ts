@@ -52,7 +52,14 @@ export interface ITrip extends Document {
         lat: number;
         lng: number;
     };
-    preferences: string[];
+    preferences: {
+        returnToStart: boolean;
+        startTime: string;
+        endTime: string;
+        foodVariety?: 'high' | 'medium' | 'low';
+        dietary?: string[];
+        cuisines?: string[];
+    };
     includeDining: boolean;
     adminId: mongoose.Types.ObjectId;
     joinCode: string;
@@ -126,7 +133,17 @@ const TripSchema = new Schema<ITrip>({
         lat: Number,
         lng: Number
     },
-    preferences: [String],
+    preferences: {
+        returnToStart: { type: Boolean, default: false },
+        startTime: String,
+        endTime: String,
+        foodVariety: {
+            type: String,
+            enum: ['high', 'medium', 'low']
+        },
+        dietary: [String],
+        cuisines: [String]
+    },
     includeDining: {
         type: Boolean,
         default: false
