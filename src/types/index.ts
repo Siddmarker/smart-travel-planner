@@ -88,6 +88,12 @@ export interface Place {
     platform?: 'Instagram' | 'TikTok' | 'YouTube';
   };
   tags?: string[]; // e.g., 'Rooftop', 'Live Music', 'Pet-Friendly'
+
+  // Compatibility fields for Trip Model
+  googlePlaceId?: string;
+  photoUrl?: string;
+  address?: string;
+  reviewCount?: number;
 }
 
 export interface PlaceDetails extends Place {
@@ -137,6 +143,10 @@ export interface FiltrationMetadata {
     credibilityScoring: number;
     categoryValidation: number;
     destinationRelevance: number;
+    // Trip specific fields
+    timeSlot?: 'morning' | 'afternoon' | 'evening';
+    dayNumber?: number;
+    addedAt?: string | Date;
   };
 }
 
@@ -205,8 +215,22 @@ export interface ItineraryItem {
 
 export interface DayPlan {
   id: string;
+  dayNumber: number;
   date: string; // ISO string
-  items: ItineraryItem[];
+  planningMode: 'ai' | 'manual';
+  status: 'empty' | 'partial' | 'complete';
+
+  // Time Slots
+  morning: Place[];
+  afternoon: Place[];
+  evening: Place[];
+
+  // Final Selections
+  finalMorning?: Place;
+  finalAfternoon?: Place;
+  finalEvening?: Place;
+
+  items: ItineraryItem[]; // Keeping for backward compatibility
 }
 
 export interface Poll {
@@ -219,7 +243,9 @@ export interface Poll {
 
 export interface Trip {
   id: string;
+  _id?: string; // For MongoDB compatibility
   name: string;
+  description?: string;
   destination: {
     name: string;
     lat: number;
@@ -227,8 +253,25 @@ export interface Trip {
   };
   startDate: string; // ISO string
   endDate: string; // ISO string
-  participants: User[];
+  totalDays: number;
+
+  // Admin & Group
+  adminId: string;
+  joinCode: string;
+  participants: {
+    userId: string;
+    name: string;
+    role: 'admin' | 'member';
+    joinedAt: string;
+  }[];
+
+  // Planning
+  planningMode: 'ai' | 'manual' | 'hybrid';
+  votingStatus: 'not_started' | 'open' | 'closed' | 'finalized';
+
   days: DayPlan[];
+
+  // Legacy/Compatibility fields (keeping for now to avoid breaking existing code immediately)
   budget: {
     currency: string;
     total: number;
@@ -248,6 +291,7 @@ export interface Trip {
   polls?: Poll[];
   messages?: ChatMessage[];
   bookings?: Booking[];
+  includeDining?: boolean;
 }
 
 export interface ChatMessage {
