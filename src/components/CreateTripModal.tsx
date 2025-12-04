@@ -135,46 +135,68 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
 
 
 
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        console.log('handleSubmit called');
+        setSubmitError(null);
 
-        if (!currentUser) return;
+        if (!currentUser) {
+            console.error('No current user found');
+            setSubmitError('You must be logged in to create a trip.');
+            return;
+        }
 
-        const tripData = {
-            name,
-            destination: {
-                name: destination,
-                lat: destinationCoords.lat,
-                lng: destinationCoords.lng,
-            },
-            startDate,
-            endDate,
-            adminId: currentUser.id,
-            adminName: currentUser.name,
-            planningMode: 'manual',
-            budget: {
-                currency: 'USD',
-                total: Number(budget) || 0,
-            },
-            preferences: {
-                returnToStart,
-                startTime,
-                endTime,
-                foodVariety,
-                dietary: dietaryOptions,
-                cuisines: selectedCuisines
-            },
-            categoryPreferences: selectedCategories.length > 0 ? {
-                categories: selectedCategories,
-                priorities: {}
-            } : undefined,
-        };
+        setIsSubmitting(true);
 
-        const createdTrip = await createTrip(tripData);
+        try {
+            const tripData = {
+                name,
+                destination: {
+                    name: destination,
+                    lat: destinationCoords.lat,
+                    lng: destinationCoords.lng,
+                },
+                startDate,
+                endDate,
+                adminId: currentUser.id,
+                adminName: currentUser.name,
+                planningMode: 'manual',
+                budget: {
+                    currency: 'USD',
+                    total: Number(budget) || 0,
+                },
+                preferences: {
+                    returnToStart,
+                    startTime,
+                    endTime,
+                    foodVariety,
+                    dietary: dietaryOptions,
+                    cuisines: selectedCuisines
+                },
+                categoryPreferences: selectedCategories.length > 0 ? {
+                    categories: selectedCategories,
+                    priorities: {}
+                } : undefined,
+            };
 
-        if (createdTrip) {
-            setOpen(false);
-            router.push(`/trips/${createdTrip.id}`);
+            console.log('Submitting trip data:', tripData);
+            const createdTrip = await createTrip(tripData);
+            console.log('Trip created:', createdTrip);
+
+            if (createdTrip) {
+                setOpen(false);
+                router.push(`/trips/${createdTrip.id}`);
+            } else {
+                setSubmitError('Failed to create trip. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error creating trip:', error);
+            setSubmitError('An error occurred while creating the trip.');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -492,11 +514,18 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                         </div>
                     </div>
 
-                    <DialogFooter className="mt-4 gap-2 sm:gap-0">
-                        <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button type="submit" className="w-full sm:w-auto">Create Trip</Button>
+                    <DialogFooter className="mt-4 gap-2 sm:gap-0 flex-col">
+                        {submitError && (
+                            <p className="text-sm text-red-500 mb-2 w-full text-center">{submitError}</p>
+                        )}
+                        <div className="flex gap-2 w-full sm:w-auto justify-end">
+                            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" className="w-full sm:w-auto" disabled={isSubmitting}>
+                                {isSubmitting ? 'Creating...' : 'Create Trip'}
+                            </Button>
+                        </div>
                     </DialogFooter>
                 </form>
             </DialogContent >
