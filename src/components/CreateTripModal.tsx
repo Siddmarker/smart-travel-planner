@@ -133,28 +133,7 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
         }
     };
 
-    const handleCurrentLocation = () => {
-        if (!navigator.geolocation) {
-            console.error('Geolocation is not supported by your browser');
-            return;
-        }
 
-        navigator.geolocation.getCurrentPosition(async (position) => {
-            const { latitude, longitude } = position.coords;
-            setDestinationCoords({ lat: latitude, lng: longitude });
-
-            try {
-                const address = await reverseGeocode(latitude, longitude);
-                if (address) {
-                    setDestination(address);
-                }
-            } catch (error) {
-                console.error('Error getting location:', error);
-            }
-        }, (error) => {
-            console.error('Error getting location:', error);
-        });
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
