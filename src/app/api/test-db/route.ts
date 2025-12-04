@@ -28,11 +28,28 @@ export async function GET() {
 
         const collectionNames = await mongoose.connection.db.listCollections().toArray();
 
+        // Safe env check (keys only)
+        const envKeys = Object.keys(process.env).filter(key =>
+            !key.toLowerCase().includes('secret') &&
+            !key.toLowerCase().includes('key') &&
+            !key.toLowerCase().includes('token') ||
+            key.startsWith('NEXT_PUBLIC_')
+        );
+
+        const criticalEnvVars = {
+            MONGODB_URI: !!process.env.MONGODB_URI,
+            GOOGLE_MAPS_API_KEY: !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || !!process.env.GOOGLE_MAPS_API_KEY,
+            GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
+            NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+        };
+
         return NextResponse.json({
             success: true,
             message: 'Database connected',
             state: stateMap[dbState] || dbState,
             collections: collectionNames.map(c => c.name),
+            envCheck: criticalEnvVars,
+            availableEnvKeys: envKeys
         });
     } catch (error: any) {
         return NextResponse.json({
