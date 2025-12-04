@@ -143,6 +143,13 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
         console.log('handleSubmit called');
         setSubmitError(null);
 
+        // Manual validation
+        if (!name || !destination || !startDate || !endDate) {
+            console.error('Validation failed:', { name, destination, startDate, endDate });
+            setSubmitError('Please fill in all required fields.');
+            return;
+        }
+
         if (!currentUser) {
             console.error('No current user found');
             setSubmitError('You must be logged in to create a trip.');
@@ -212,7 +219,7 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                         Enter the details below to start planning your next adventure.
                     </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={handleSubmit} className="grid gap-6 py-4">
+                <form onSubmit={handleSubmit} className="grid gap-6 py-4" noValidate>
                     <div className="grid gap-2">
                         <Label htmlFor="name" className="flex items-center gap-2 text-base">
                             <Type className="h-4 w-4 text-muted-foreground" />
