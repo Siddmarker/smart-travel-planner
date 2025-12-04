@@ -60,13 +60,11 @@ export async function POST(
         place.votes.up = place.votes.up.filter((uid: any) => uid.toString() !== userId);
         place.votes.down = place.votes.down.filter((uid: any) => uid.toString() !== userId);
 
-        const userObjectId = new mongoose.Types.ObjectId(userId);
-
         // Add new vote
         if (voteType === 'up') {
-            place.votes.up.push(userObjectId);
+            place.votes.up.push(userId);
         } else if (voteType === 'down') {
-            place.votes.down.push(userObjectId);
+            place.votes.down.push(userId);
         }
 
         await trip.save();
