@@ -189,11 +189,10 @@ const TripSchema = new Schema<ITrip>({
 });
 
 // Generate join code before saving
-TripSchema.pre('save', function (this: ITrip, next: any) {
+TripSchema.pre('save', async function (this: ITrip) {
     if (!this.joinCode) {
         this.joinCode = Math.random().toString(36).substring(2, 10).toUpperCase();
     }
-    next();
 });
 
 // Check if model exists before compiling to avoid OverwriteModelError in HMR
