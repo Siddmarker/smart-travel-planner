@@ -493,3 +493,23 @@ export async function enhancePlacesWithPhotosAndDistance(
     const placesWithDistance = await calculateRealDistances(userLocation, places);
     return placesWithDistance;
 }
+
+export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+    try {
+        await initGoogleMaps();
+        if (typeof window === 'undefined' || !window.google?.maps) return null;
+
+        const geocoder = new window.google.maps.Geocoder();
+        const response = await geocoder.geocode({ location: { lat, lng } });
+
+        if (response.results && response.results[0]) {
+            // Prefer city/locality level if possible, otherwise formatted_address
+            // For now, formatted_address is safest
+            return response.results[0].formatted_address;
+        }
+        return null;
+    } catch (error) {
+        console.error('Reverse geocoding failed:', error);
+        return null;
+    }
+}

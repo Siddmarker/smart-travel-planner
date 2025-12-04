@@ -12,12 +12,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { Sparkles, MapPin, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
-import { autocompletePlace, getPlaceDetails } from '@/lib/googleMapsService';
+import { autocompletePlace, getPlaceDetails, reverseGeocode } from '@/lib/googleMapsService';
 import { getDestinationSuggestions } from '@/lib/geminiService';
+import { useTrip } from '@/contexts/TripContext';
+import { Locate } from 'lucide-react';
 
 export default function NewTripPage() {
     const router = useRouter();
-    const addTrip = useStore((state) => state.addTrip);
+    const { createTrip } = useTrip();
     const currentUser = useStore((state) => state.currentUser);
 
     const [formData, setFormData] = useState({
@@ -79,7 +81,32 @@ export default function NewTripPage() {
         }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            setError('Geolocation is not supported by your browser');
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const { latitude, longitude } = position.coords;
+            setDestinationCoords({ lat: latitude, lng: longitude });
+
+            try {
+                const address = await reverseGeocode(latitude, longitude);
+                if (address) {
+                    setFormData(prev => ({ ...prev, destination: address }));
+                }
+            } catch (error) {
+                console.error('Error getting location:', error);
+                setError('Failed to get current location address.');
+            }
+        }, (error) => {
+            console.error('Error getting location:', error);
+            setError('Failed to get current location. Please check your permissions.');
+        });
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
 
@@ -94,60 +121,28 @@ export default function NewTripPage() {
         }
 
         try {
-            const startDate = new Date(formData.startDate);
-            const endDate = new Date(formData.endDate);
-            const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-            const initialDays = [];
-            for (let i = 0; i < totalDays; i++) {
-                const dayDate = new Date(startDate);
-                dayDate.setDate(startDate.getDate() + i);
-                initialDays.push({
-                    id: uuidv4(),
-                    dayNumber: i + 1,
-                    date: dayDate.toISOString(),
-                    planningMode: 'manual' as const,
-                    status: 'empty' as const,
-                    morning: [],
-                    afternoon: [],
-                    evening: [],
-                    items: []
-                });
-            }
-
-            const newTrip: Trip = {
-                id: uuidv4(),
+            const tripData = {
                 name: formData.name,
-                startDate: formData.startDate,
-                endDate: formData.endDate,
-                totalDays: totalDays,
                 destination: {
                     name: formData.destination,
                     lat: destinationCoords.lat,
                     lng: destinationCoords.lng,
                 },
-                participants: [{
-                    userId: currentUser.id,
-                    name: currentUser.name,
-                    role: 'admin',
-                    joinedAt: new Date().toISOString()
-                }],
+                startDate: formData.startDate,
+                endDate: formData.endDate,
                 adminId: currentUser.id,
-                joinCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+                adminName: currentUser.name,
                 planningMode: 'manual',
-                votingStatus: 'not_started',
-                days: initialDays,
                 budget: {
                     currency: 'USD',
                     total: 0,
-                    spent: 0,
                 },
             };
 
-            console.log('Creating trip:', newTrip);
-            addTrip(newTrip);
-            console.log('Trip created, navigating...');
-            router.push(`/trips/${newTrip.id}`);
+            const createdTrip = await createTrip(tripData);
+            if (createdTrip) {
+                router.push(`/trips/${createdTrip.id}`);
+            }
         } catch (err: any) {
             console.error('Error creating trip:', err);
             setError(err.message || 'Failed to create trip. Please try again.');
@@ -198,15 +193,28 @@ export default function NewTripPage() {
                                     </Button>
                                 )}
                             </div>
-                            <Input
-                                id="destination"
-                                placeholder="Where are you going?"
-                                required
-                                value={formData.destination}
-                                onChange={(e) => handleDestinationInput(e.target.value)}
-                                onBlur={() => setTimeout(() => setShowPredictions(false), 200)}
-                                onFocus={() => formData.destination.length > 2 && setShowPredictions(true)}
-                            />
+                            <div className="relative">
+                                <Input
+                                    id="destination"
+                                    placeholder="Where are you going?"
+                                    required
+                                    value={formData.destination}
+                                    onChange={(e) => handleDestinationInput(e.target.value)}
+                                    onBlur={() => setTimeout(() => setShowPredictions(false), 200)}
+                                    onFocus={() => formData.destination.length > 2 && setShowPredictions(true)}
+                                    className="pr-10"
+                                />
+                                <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full"
+                                    onClick={handleCurrentLocation}
+                                    title="Use current location"
+                                >
+                                    <Locate className="h-4 w-4" />
+                                </Button>
+                            </div>
                             {showPredictions && predictions.length > 0 && (
                                 <div className="absolute z-50 w-full top-[72px] bg-popover border rounded-md shadow-md max-h-60 overflow-auto">
                                     {predictions.map((prediction) => (

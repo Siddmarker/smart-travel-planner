@@ -13,8 +13,10 @@ import { useRouter } from 'next/navigation';
 import { Calendar, MapPin, DollarSign, Type, Tag, Sparkles } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
-import { autocompletePlace, getPlaceDetails } from '@/lib/googleMapsService';
+import { autocompletePlace, getPlaceDetails, reverseGeocode } from '@/lib/googleMapsService';
 import { getDestinationSuggestions } from '@/lib/geminiService';
+import { useTrip } from '@/contexts/TripContext';
+import { Locate } from 'lucide-react';
 
 interface CreateTripModalProps {
     children?: React.ReactNode;
@@ -42,8 +44,43 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
     const [dietaryOptions, setDietaryOptions] = useState<string[]>(['Non-Vegetarian', 'Egg', 'Vegetarian']);
     const [selectedCuisines, setSelectedCuisines] = useState<string[]>(['Indian', 'Chinese']);
 
-    const { addTrip, currentUser } = useStore();
+    const { createTrip } = useTrip();
+    const { currentUser } = useStore();
     const router = useRouter();
+
+    const handleCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            console.error('Geolocation is not supported by your browser');
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const { latitude, longitude } = position.coords;
+            setDestinationCoords({ lat: latitude, lng: longitude });
+
+            try {
+                const address = await reverseGeocode(latitude, longitude);
+                if (address) {
+                    setDestination(address);
+                }
+            } catch (error) {
+                console.error('Error getting location:', error);
+            }
+        }, (error) => {
+            console.error('Error getting location:', error);
+        });
+    };
+
+    // Removed duplicate router declaration
+
+    const TRIP_CATEGORIES = [
+        { value: 'relaxation', label: 'Relaxation', icon: '🧘' },
+        { value: 'adventure', label: 'Adventure', icon: '🧗' },
+        { value: 'cultural', label: 'Culture', icon: '🏛️' },
+        { value: 'food', label: 'Food', icon: '🍕' },
+        { value: 'nature', label: 'Nature', icon: '🌲' },
+        { value: 'shopping', label: 'Shopping', icon: '🛍️' },
+    ] as const;
 
     const handleAiSuggest = async () => {
         if (!currentUser || !('travelPreferences' in currentUser)) return;
@@ -59,43 +96,10 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
     };
 
     const handleDestinationInput = async (value: string) => {
-        // Smart Parsing for "N day trip to Destination"
-        const durationRegex = /(\d+)\s*day/i;
-        const match = value.match(durationRegex);
-
-        let searchTerm = value;
-        let detectedDuration = null;
-
-        if (match) {
-            const days = parseInt(match[1]);
-            if (days > 0 && days <= 30) {
-                detectedDuration = days;
-                // Remove the "N day" part to get the destination
-                // Also remove common words like "trip", "itinerary", "to", "in"
-                searchTerm = value
-                    .replace(durationRegex, '')
-                    .replace(/\b(trip|itinerary|vacation|holiday|to|in)\b/gi, '')
-                    .trim();
-
-                // Auto-set dates if duration detected
-                const start = new Date();
-                start.setDate(start.getDate() + 1); // Start tomorrow
-                const end = new Date(start);
-                end.setDate(start.getDate() + days - 1); // N days duration
-
-                setStartDate(start.toISOString().split('T')[0]);
-                setEndDate(end.toISOString().split('T')[0]);
-            }
-        }
-
-        setDestination(value); // Keep original input visible? Or clean it? Let's keep original for now but search with clean.
-
-        // If we extracted a cleaner search term, use that for autocomplete
-        const query = searchTerm.length > 0 ? searchTerm : value;
-
-        if (query.length > 2) {
+        setDestination(value);
+        if (value.length > 2) {
             try {
-                const results = await autocompletePlace(query);
+                const results = await autocompletePlace(value);
                 setPredictions(results);
                 setShowPredictions(true);
             } catch (error) {
@@ -121,100 +125,78 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
         }
     };
 
-    const TRIP_CATEGORIES: { value: TripCategory; label: string; icon: string }[] = [
-        { value: 'trekking', label: 'Trekking/Hiking', icon: '🥾' },
-        { value: 'food', label: 'Food & Dining', icon: '🍽️' },
-        { value: 'scenic_drives', label: 'Scenic Drives', icon: '🚗' },
-        { value: 'cultural', label: 'Cultural Sites', icon: '🏛️' },
-        { value: 'beaches', label: 'Beaches', icon: '🏖️' },
-        { value: 'adventure', label: 'Adventure Sports', icon: '🪂' },
-        { value: 'shopping', label: 'Shopping', icon: '🛍️' },
-        { value: 'nightlife', label: 'Nightlife', icon: '🌃' },
-        { value: 'historical', label: 'Historical', icon: '🏰' },
-        { value: 'wildlife', label: 'Wildlife', icon: '🦁' },
-        { value: 'religious', label: 'Religious', icon: '🕌' },
-        { value: 'markets', label: 'Local Markets', icon: '🏪' },
-    ];
-
     const toggleCategory = (category: TripCategory) => {
-        setSelectedCategories(prev =>
-            prev.includes(category)
-                ? prev.filter(c => c !== category)
-                : [...prev, category]
-        );
+        if (selectedCategories.includes(category)) {
+            setSelectedCategories(selectedCategories.filter(c => c !== category));
+        } else {
+            setSelectedCategories([...selectedCategories, category]);
+        }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            console.error('Geolocation is not supported by your browser');
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const { latitude, longitude } = position.coords;
+            setDestinationCoords({ lat: latitude, lng: longitude });
+
+            try {
+                const address = await reverseGeocode(latitude, longitude);
+                if (address) {
+                    setDestination(address);
+                }
+            } catch (error) {
+                console.error('Error getting location:', error);
+            }
+        }, (error) => {
+            console.error('Error getting location:', error);
+        });
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         if (!currentUser) return;
 
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-        const initialDays = [];
-        for (let i = 0; i < totalDays; i++) {
-            const dayDate = new Date(start);
-            dayDate.setDate(start.getDate() + i);
-            initialDays.push({
-                id: uuidv4(),
-                dayNumber: i + 1,
-                date: dayDate.toISOString(),
-                planningMode: 'manual' as const,
-                status: 'empty' as const,
-                morning: [],
-                afternoon: [],
-                evening: [],
-                items: []
-            });
-        }
-
-        const newTrip: Trip = {
-            id: uuidv4(),
+        const tripData = {
             name,
-            startDate,
-            endDate,
-            totalDays,
             destination: {
                 name: destination,
                 lat: destinationCoords.lat,
                 lng: destinationCoords.lng,
             },
-            participants: [{
-                userId: currentUser.id,
-                name: currentUser.name,
-                role: 'admin',
-                joinedAt: new Date().toISOString()
-            }],
+            startDate,
+            endDate,
             adminId: currentUser.id,
-            joinCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+            adminName: currentUser.name,
             planningMode: 'manual',
-            votingStatus: 'not_started',
-            days: initialDays,
             budget: {
                 currency: 'USD',
                 total: Number(budget) || 0,
-                spent: 0,
             },
             preferences: {
                 returnToStart,
                 startTime,
                 endTime,
-                // Enhanced preferences
                 foodVariety,
                 dietary: dietaryOptions,
                 cuisines: selectedCuisines
             },
             categoryPreferences: selectedCategories.length > 0 ? {
                 categories: selectedCategories,
-                priorities: {} // Default priorities
+                priorities: {}
             } : undefined,
         };
 
-        addTrip(newTrip);
-        setOpen(false);
-        router.push(`/trips/${newTrip.id}`);
+        const createdTrip = await createTrip(tripData);
+
+        if (createdTrip) {
+            setOpen(false);
+            router.push(`/trips/${createdTrip.id}`);
+        }
     };
 
     return (
@@ -264,16 +246,28 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                                 </Button>
                             )}
                         </div>
-                        <Input
-                            id="destination"
-                            value={destination}
-                            onChange={(e) => handleDestinationInput(e.target.value)}
-                            placeholder="e.g., Paris, France"
-                            required
-                            className="h-10"
-                            onBlur={() => setTimeout(() => setShowPredictions(false), 200)}
-                            onFocus={() => destination.length > 2 && setShowPredictions(true)}
-                        />
+                        <div className="relative">
+                            <Input
+                                id="destination"
+                                value={destination}
+                                onChange={(e) => handleDestinationInput(e.target.value)}
+                                placeholder="e.g., Paris, France"
+                                required
+                                className="h-10 pr-10"
+                                onBlur={() => setTimeout(() => setShowPredictions(false), 200)}
+                                onFocus={() => destination.length > 2 && setShowPredictions(true)}
+                            />
+                            <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full"
+                                onClick={handleCurrentLocation}
+                                title="Use current location"
+                            >
+                                <Locate className="h-4 w-4" />
+                            </Button>
+                        </div>
                         {showPredictions && predictions.length > 0 && (
                             <div className="absolute z-50 w-full top-[72px] bg-popover border rounded-md shadow-md max-h-60 overflow-auto">
                                 {predictions.map((prediction) => (

@@ -8,10 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Compass, MapPin, Star, TrendingUp, Sparkles } from 'lucide-react';
 import { Place } from '@/types';
-import { searchNearbyPlaces } from '@/lib/googleMapsService';
+import { searchNearbyPlaces, reverseGeocode } from '@/lib/googleMapsService';
 import { getDestinationSuggestions } from '@/lib/geminiService';
 import { useStore } from '@/store/useStore';
 import Link from 'next/link';
+import { Locate } from 'lucide-react';
 
 export function DiscoveryWidget() {
     const { currentUser } = useStore();
@@ -53,6 +54,35 @@ export function DiscoveryWidget() {
         }
     };
 
+    const handleCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            console.error('Geolocation is not supported by your browser');
+            return;
+        }
+
+        setLoading(true);
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const { latitude, longitude } = position.coords;
+
+            try {
+                // 1. Get address name
+                const address = await reverseGeocode(latitude, longitude);
+                if (address) setLocation(address);
+
+                // 2. Search nearby
+                const places = await searchNearbyPlaces({ lat: latitude, lng: longitude }, radius * 1000);
+                setTrendingPlaces(places.slice(0, 3));
+            } catch (error) {
+                console.error('Error getting location/places:', error);
+            } finally {
+                setLoading(false);
+            }
+        }, (error) => {
+            console.error('Error getting location:', error);
+            setLoading(false);
+        });
+    };
+
     const calculateDistance = (lat: number, lng: number) => {
         // Mock distance calculation
         return (Math.random() * 5 + 0.5).toFixed(1);
@@ -75,8 +105,17 @@ export function DiscoveryWidget() {
                                 placeholder="Where do you want to go?"
                                 value={location}
                                 onChange={(e) => setLocation(e.target.value)}
-                                className="w-full pl-12 pr-4 py-4 bg-white rounded-xl border-none focus:ring-2 focus:ring-blue-400 text-slate-900 placeholder:text-slate-400 text-lg shadow-sm transition-all"
+                                className="w-full pl-12 pr-12 py-4 bg-white rounded-xl border-none focus:ring-2 focus:ring-blue-400 text-slate-900 placeholder:text-slate-400 text-lg shadow-sm transition-all"
                             />
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full"
+                                onClick={handleCurrentLocation}
+                                title="Use current location"
+                            >
+                                <Locate className="h-4 w-4" />
+                            </Button>
                         </div>
                         <div className="flex items-center gap-2 bg-white rounded-xl px-4 py-2 min-w-[140px]">
                             <span className="text-sm text-slate-500 whitespace-nowrap">Radius:</span>
