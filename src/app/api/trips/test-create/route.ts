@@ -2,17 +2,13 @@ import { NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import Trip from '@/models/Trip';
 
+import dbConnect from '@/lib/db';
+
 const MONGODB_URI = process.env.MONGODB_URI;
 
 export async function POST(request: Request) {
     try {
-        if (!MONGODB_URI) {
-            throw new Error('MONGODB_URI is not defined');
-        }
-
-        if (mongoose.connection.readyState !== 1) {
-            await mongoose.connect(MONGODB_URI);
-        }
+        await dbConnect();
 
         const body = await request.json();
         console.log('=== TEST CREATE TRIP ===');

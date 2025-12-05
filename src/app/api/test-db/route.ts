@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 
+import dbConnect from '@/lib/db';
+
 const MONGODB_URI = process.env.MONGODB_URI;
 
 export async function GET() {
@@ -9,9 +11,7 @@ export async function GET() {
             return NextResponse.json({ success: false, error: 'MONGODB_URI is not defined' }, { status: 500 });
         }
 
-        if (mongoose.connection.readyState !== 1) {
-            await mongoose.connect(MONGODB_URI);
-        }
+        await dbConnect();
 
         const dbState = mongoose.connection.readyState;
         const stateMap = {
