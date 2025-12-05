@@ -30,6 +30,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     const createTrip = useCallback(async (data: any) => {
         setLoading(true);
         setError(null);
+        console.log('TripContext: createTrip called with data:', data);
         try {
             const response = await fetch('/api/trips', {
                 method: 'POST',
@@ -37,15 +38,19 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
                 body: JSON.stringify(data),
             });
 
+            console.log('TripContext: API response status:', response.status);
             const result = await response.json();
+            console.log('TripContext: API response result:', result);
 
             if (!response.ok) {
+                console.error('TripContext: API error:', result.error);
                 throw new Error(result.error || 'Failed to create trip');
             }
 
             setCurrentTrip(result.trip);
             return result.trip;
         } catch (err: any) {
+            console.error('TripContext: createTrip error:', err);
             setError(err.message);
             return null;
         } finally {

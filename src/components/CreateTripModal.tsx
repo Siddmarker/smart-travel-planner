@@ -140,18 +140,18 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log('handleSubmit called');
+        console.log('CreateTripModal: handleSubmit called');
         setSubmitError(null);
 
         // Manual validation
         if (!name || !destination || !startDate || !endDate) {
-            console.error('Validation failed:', { name, destination, startDate, endDate });
+            console.error('CreateTripModal: Validation failed:', { name, destination, startDate, endDate });
             setSubmitError('Please fill in all required fields.');
             return;
         }
 
         if (!currentUser) {
-            console.error('No current user found');
+            console.error('CreateTripModal: No current user found');
             setSubmitError('You must be logged in to create a trip.');
             return;
         }
@@ -189,19 +189,20 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                 } : undefined,
             };
 
-            console.log('Submitting trip data:', tripData);
+            console.log('CreateTripModal: Submitting trip data:', tripData);
             const createdTrip = await createTrip(tripData);
-            console.log('Trip created:', createdTrip);
+            console.log('CreateTripModal: Trip created:', createdTrip);
 
             if (createdTrip) {
                 setOpen(false);
                 router.push(`/trips/${createdTrip.id}`);
             } else {
+                console.error('CreateTripModal: createTrip returned null');
                 setSubmitError('Failed to create trip. Please try again.');
             }
-        } catch (error) {
-            console.error('Error creating trip:', error);
-            setSubmitError('An error occurred while creating the trip.');
+        } catch (error: any) {
+            console.error('CreateTripModal: Error creating trip:', error);
+            setSubmitError(error.message || 'An error occurred while creating the trip.');
         } finally {
             setIsSubmitting(false);
         }

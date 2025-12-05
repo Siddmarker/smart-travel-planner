@@ -108,17 +108,18 @@ export default function NewTripPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log('handleSubmit called'); // Debug log
+        console.log('NewTripPage: handleSubmit called');
         setError(null);
 
         if (!currentUser) {
-            console.error('No current user');
+            console.error('NewTripPage: No current user found');
             setError('You must be logged in to create a trip.');
             return;
         }
 
+        console.log('NewTripPage: Form Data:', formData);
         if (!formData.name || !formData.destination || !formData.startDate || !formData.endDate) {
-            console.error('Validation failed', formData);
+            console.error('NewTripPage: Validation failed', formData);
             setError('Please fill in all fields.');
             return;
         }
@@ -150,18 +151,19 @@ export default function NewTripPage() {
                 }
             };
 
-            console.log('Calling createTrip with:', tripData);
+            console.log('NewTripPage: Calling createTrip with:', tripData);
             const createdTrip = await createTrip(tripData);
-            console.log('createTrip result:', createdTrip);
+            console.log('NewTripPage: createTrip result:', createdTrip);
 
             if (createdTrip) {
+                console.log('NewTripPage: Trip created successfully, redirecting to:', `/trips/${createdTrip.id}`);
                 router.push(`/trips/${createdTrip.id}`);
             } else {
-                console.error('createTrip returned null');
+                console.error('NewTripPage: createTrip returned null');
                 setError('Failed to create trip. Please try again.');
             }
         } catch (err: any) {
-            console.error('Error creating trip:', err);
+            console.error('NewTripPage: Error creating trip:', err);
             setError(err.message || 'Failed to create trip. Please try again.');
         }
     };
