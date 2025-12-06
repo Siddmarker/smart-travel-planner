@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { SignupData, AuthResponse } from '@/services/auth';
 import { useStore } from '@/store/useStore';
 
@@ -26,9 +26,15 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-    const { currentUser, signup: storeSignup, logout: storeLogout, setCurrentUser } = useStore();
-    const [loading, setLoading] = useState(false);
+    const { currentUser, signup: storeSignup, logout: storeLogout, setCurrentUser, checkAuth } = useStore();
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        // Hydrate/Check auth state on mount
+        checkAuth();
+        setLoading(false);
+    }, [checkAuth]);
 
     // Map store state to context
     // Cast currentUser to User type expected by context consumers

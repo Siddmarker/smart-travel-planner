@@ -7,7 +7,7 @@ export default function AuthCheck({ children }: { children: React.ReactNode }) {
     const [isAuthorized, setIsAuthorized] = useState(false);
 
     useEffect(() => {
-        const token = localStorage.getItem('authToken');
+        const token = localStorage.getItem('travel_planner_token');
         if (!token) {
             router.push('/login');
         } else {
