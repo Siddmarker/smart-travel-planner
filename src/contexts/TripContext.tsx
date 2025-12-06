@@ -44,7 +44,11 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
             if (!response.ok) {
                 console.error('TripContext: API error:', result.error);
-                throw new Error(result.error || 'Failed to create trip');
+                // Include details if available to help debug production issues
+                const errorMessage = result.details
+                    ? `${result.error}: ${result.details}`
+                    : (result.error || 'Failed to create trip');
+                throw new Error(errorMessage);
             }
 
             setCurrentTrip(result.trip);
