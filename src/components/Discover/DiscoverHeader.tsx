@@ -1,11 +1,11 @@
 'use client';
 
-import { autocompletePlace, getPlaceDetails } from '@/lib/googleMapsService';
+import { autocompletePlace, getPlaceDetails, reverseGeocode } from '@/lib/googleMapsService';
 
 import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { MapPin, Navigation } from 'lucide-react';
+import { MapPin, Navigation, Locate } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface DiscoverHeaderProps {
@@ -24,7 +24,8 @@ export function DiscoverHeader({ onSearch, onLocationChange, onRadiusChange }: D
         setLocation(value);
         if (value.length > 2) {
             try {
-                const results = await autocompletePlace(value);
+                // Pass empty array to remove (cities) restriction, allowing area/neighborhood search
+                const results = await autocompletePlace(value, []);
                 setPredictions(results);
                 setShowPredictions(true);
             } catch (error) {
@@ -34,6 +35,36 @@ export function DiscoverHeader({ onSearch, onLocationChange, onRadiusChange }: D
             setPredictions([]);
             setShowPredictions(false);
         }
+    };
+
+    const handleCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            alert('Geolocation is not supported by your browser');
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const { latitude, longitude } = position.coords;
+            // Immediate update with coords
+            onLocationChange?.("Current Location", { lat: latitude, lng: longitude });
+
+            try {
+                const address = await reverseGeocode(latitude, longitude);
+                if (address) {
+                    setLocation(address);
+                    // Update again with proper address name
+                    onLocationChange?.(address, { lat: latitude, lng: longitude });
+                } else {
+                    setLocation(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+                }
+            } catch (error) {
+                console.error('Error getting location:', error);
+                setLocation(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+            }
+        }, (error) => {
+            console.error('Error getting location:', error);
+            alert('Unable to retrieve your location. Please check your permissions.');
+        });
     };
 
     const handlePredictionSelect = async (placeId: string, description: string) => {
@@ -93,14 +124,23 @@ export function DiscoverHeader({ onSearch, onLocationChange, onRadiusChange }: D
                     <div className="relative">
                         <Input
                             id="location-input"
-                            placeholder="Enter location (e.g., Paris, France)"
+                            placeholder="Enter location or area..."
                             value={location}
                             onChange={(e) => handleLocationInput(e.target.value)}
                             onKeyPress={(e) => e.key === 'Enter' && handleLocationSubmit()}
-                            className="w-full"
+                            className="w-full pr-10"
                             onBlur={() => setTimeout(() => setShowPredictions(false), 200)}
                             onFocus={() => location.length > 2 && setShowPredictions(true)}
                         />
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-muted-foreground hover:text-primary"
+                            onClick={handleCurrentLocation}
+                            title="Use current location"
+                        >
+                            <Locate className="h-4 w-4" />
+                        </Button>
                         {showPredictions && predictions.length > 0 && (
                             <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-60 overflow-auto">
                                 {predictions.map((prediction) => (

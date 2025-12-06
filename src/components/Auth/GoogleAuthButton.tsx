@@ -1,5 +1,5 @@
-'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/store/useStore';
 import { setAuthToken, saveUser } from '@/lib/auth';
@@ -26,6 +26,7 @@ export function GoogleAuthButton({
     const [isGoogleLoaded, setIsGoogleLoaded] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [initError, setInitError] = useState<string | null>(null);
+    const router = useRouter();
     const { login } = useAuth();
     const { setCurrentUser } = useStore();
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
@@ -66,7 +67,7 @@ export function GoogleAuthButton({
                 if (onSuccess) {
                     onSuccess(data.user);
                 } else {
-                    window.location.href = data.redirectTo || '/dashboard';
+                    router.push(data.redirectTo || '/dashboard');
                 }
             } else {
                 const errorMsg = data.details || data.error || 'Login failed';

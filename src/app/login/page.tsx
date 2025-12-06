@@ -111,7 +111,7 @@ export default function LoginPage() {
                     </div>
 
                     <div className="flex justify-center">
-                        <GoogleAuthButton />
+                        <GoogleAuthButton onSuccess={() => router.push('/dashboard')} />
                     </div>
                 </CardContent>
 

@@ -369,8 +369,15 @@ export async function autocompletePlace(input: string, types?: string[]): Promis
 
             const request: google.maps.places.AutocompletionRequest = {
                 input,
-                types: types || ['(cities)'],
             };
+
+            // Default to (cities) only if types is explicitly undefined (not passed)
+            // If types is [] (empty array), we leave request.types undefined to search ALL types
+            if (types === undefined) {
+                request.types = ['(cities)'];
+            } else if (types.length > 0) {
+                request.types = types;
+            }
 
             service.getPlacePredictions(request, (predictions, status) => {
                 if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
