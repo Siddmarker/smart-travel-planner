@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/store/useStore';
-import { setAuthToken } from '@/lib/auth';
+import { setAuthToken, saveUser } from '@/lib/auth';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 
@@ -48,6 +48,13 @@ export function GoogleAuthButton({
 
                 // Update Zustand Store (Main State)
                 setAuthToken(data.user.id);
+                // Persist user to localStorage so checkAuth works on reload
+                // data.user comes from API, and saveUser handles client-side storage
+                saveUser({
+                    ...data.user,
+                    password: '', // API doesn't return password, set empty
+                });
+
                 setCurrentUser({
                     id: data.user.id,
                     name: data.user.name,
