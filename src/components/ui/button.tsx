@@ -39,9 +39,7 @@ export interface ButtonProps
   asChild?: boolean
 }
 
-// ----------------------------------------------------------------------
-// CRITICAL FIX: The 'ref' argument here makes the click work in Dialogs
-// ----------------------------------------------------------------------
+// FIX 1: 'forwardRef' is added here. This allows the DialogTrigger to control the button.
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button"
@@ -55,9 +53,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   }
 )
 
-// ----------------------------------------------------------------------
-// FIX: This line prevents the "missing display name" build error
-// ----------------------------------------------------------------------
+// FIX 2: This line satisfies the build system's "display name" requirement.
 Button.displayName = "Button"
 
 export { Button, buttonVariants }
