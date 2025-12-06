@@ -39,6 +39,9 @@ export interface ButtonProps
   asChild?: boolean
 }
 
+// -------------------------------------------------------------------------
+// FIX: Using forwardRef is REQUIRED for the button to work inside Dialogs
+// -------------------------------------------------------------------------
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button"
@@ -51,6 +54,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     )
   }
 )
+// -------------------------------------------------------------------------
+// FIX: This line solves the "Missing display name" error for the Button
+// -------------------------------------------------------------------------
 Button.displayName = "Button"
 
 export { Button, buttonVariants }
