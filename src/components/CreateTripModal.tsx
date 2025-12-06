@@ -30,19 +30,11 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [budget, setBudget] = useState('');
-    const [returnToStart, setReturnToStart] = useState(false);
-    const [startTime, setStartTime] = useState('09:00');
-    const [endTime, setEndTime] = useState('20:00');
     const [selectedCategories, setSelectedCategories] = useState<TripCategory[]>([]);
     const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
     const [showPredictions, setShowPredictions] = useState(false);
     const [aiSuggestions, setAiSuggestions] = useState<Place[]>([]);
     const [aiLoading, setAiLoading] = useState(false);
-
-    // Enhanced Food Preferences
-    const [foodVariety, setFoodVariety] = useState<'high' | 'medium' | 'low'>('medium');
-    const [dietaryOptions, setDietaryOptions] = useState<string[]>(['Non-Vegetarian', 'Egg', 'Vegetarian']);
-    const [selectedCuisines, setSelectedCuisines] = useState<string[]>(['Indian', 'Chinese']);
 
     const { createTrip } = useTrip();
     const { currentUser } = useStore();
@@ -176,12 +168,12 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                     total: Number(budget) || 0,
                 },
                 preferences: {
-                    returnToStart,
-                    startTime,
-                    endTime,
-                    foodVariety,
-                    dietary: dietaryOptions,
-                    cuisines: selectedCuisines
+                    returnToStart: false,
+                    startTime: '09:00',
+                    endTime: '20:00',
+                    foodVariety: 'medium',
+                    dietary: ['Non-Vegetarian'], // Default
+                    cuisines: []
                 },
                 categoryPreferences: selectedCategories.length > 0 ? {
                     categories: selectedCategories,
@@ -215,7 +207,7 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
             </DialogTrigger>
             <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle className="text-2xl font-bold text-primary">Plan a New Trip</DialogTitle>
+                    <DialogTitle className="text-2xl font-bold text-rose-500">Plan a New Trip</DialogTitle>
                     <DialogDescription>
                         Enter the details below to start planning your next adventure.
                     </DialogDescription>
@@ -404,123 +396,7 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                         )}
                     </div>
 
-                    <div className="border-t pt-4 mt-2">
-                        <h4 className="font-medium mb-3">Optimization Preferences</h4>
-                        <div className="grid grid-cols-2 gap-4 mb-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="startTime">Start Time</Label>
-                                <Input
-                                    id="startTime"
-                                    type="time"
-                                    value={startTime}
-                                    onChange={(e) => setStartTime(e.target.value)}
-                                />
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="endTime">End Time</Label>
-                                <Input
-                                    id="endTime"
-                                    type="time"
-                                    value={endTime}
-                                    onChange={(e) => setEndTime(e.target.value)}
-                                />
-                            </div>
-                        </div>
-                        <div className="space-y-1.5">
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    id="returnToStart"
-                                    checked={returnToStart}
-                                    onChange={(e) => setReturnToStart(e.target.checked)}
-                                    className="h-4 w-4 rounded border-gray-300"
-                                />
-                                <Label htmlFor="returnToStart" className="font-normal cursor-pointer">
-                                    Return to starting point after the trip
-                                </Label>
-                            </div>
-                            {returnToStart && (
-                                <p className="text-xs text-muted-foreground ml-6">
-                                    ⓘ We'll calculate the best route back to your origin
-                                </p>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* FOOD PREFERENCES SECTION */}
-                    <div className="border-t pt-4 mt-2">
-                        <h4 className="font-medium mb-3 flex items-center gap-2">
-                            <span>🍽️</span> Food Preferences (Multi-day trips)
-                        </h4>
-
-                        {/* Variety Preference */}
-                        <div className="grid gap-2 mb-4">
-                            <Label htmlFor="foodVariety">Food Variety Across Days</Label>
-                            <SelectUI
-                                value={foodVariety}
-                                onValueChange={(val: 'high' | 'medium' | 'low') => setFoodVariety(val)}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select variety preference" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="high">High Variety (Different cuisines each day)</SelectItem>
-                                    <SelectItem value="medium">Medium Variety</SelectItem>
-                                    <SelectItem value="low">Same preferences daily</SelectItem>
-                                </SelectContent>
-                            </SelectUI>
-                        </div>
-
-                        {/* Dietary Options */}
-                        <div className="mb-4">
-                            <Label className="mb-2 block">Dietary Options to Include</Label>
-                            <div className="grid grid-cols-2 gap-2">
-                                {['Non-Vegetarian', 'Egg', 'Vegetarian', 'Vegan'].map((option) => (
-                                    <div key={option} className="flex items-center space-x-2">
-                                        <Checkbox
-                                            id={`diet-${option}`}
-                                            checked={dietaryOptions.includes(option)}
-                                            onCheckedChange={(checked) => {
-                                                if (checked) {
-                                                    setDietaryOptions([...dietaryOptions, option]);
-                                                } else {
-                                                    setDietaryOptions(dietaryOptions.filter(d => d !== option));
-                                                }
-                                            }}
-                                        />
-                                        <Label htmlFor={`diet-${option}`} className="font-normal cursor-pointer">
-                                            {option}
-                                        </Label>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Cuisines */}
-                        <div>
-                            <Label className="mb-2 block">Preferred Cuisines</Label>
-                            <div className="grid grid-cols-2 gap-2">
-                                {['Indian', 'Chinese', 'Italian', 'Mexican', 'Continental', 'Thai'].map((cuisine) => (
-                                    <div key={cuisine} className="flex items-center space-x-2">
-                                        <Checkbox
-                                            id={`cuisine-${cuisine}`}
-                                            checked={selectedCuisines.includes(cuisine)}
-                                            onCheckedChange={(checked) => {
-                                                if (checked) {
-                                                    setSelectedCuisines([...selectedCuisines, cuisine]);
-                                                } else {
-                                                    setSelectedCuisines(selectedCuisines.filter(c => c !== cuisine));
-                                                }
-                                            }}
-                                        />
-                                        <Label htmlFor={`cuisine-${cuisine}`} className="font-normal cursor-pointer">
-                                            {cuisine}
-                                        </Label>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
+                    {/* Optimization and Food Preferences removed as per user request to match screenshot */}
 
                     <DialogFooter className="mt-4 gap-2 sm:gap-0 flex-col">
                         {submitError && (
