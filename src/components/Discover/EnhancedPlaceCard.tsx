@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Star, MapPin, Plus, Heart, Share2, TrendingUp, Clock, Phone, Utensils } from 'lucide-react';
+import { BookingPriceDisplay } from '../Booking/BookingPriceDisplay';
 
 interface EnhancedPlaceCardProps {
     place: Place;
@@ -21,9 +22,14 @@ export function EnhancedPlaceCard({ place, onAddToTrip, onSavePlace }: EnhancedP
         window.open(`https://www.google.com/maps/dir//${destLat},${destLng}`, '_blank');
     };
 
+    const isAccommodation = place.category === 'hotel' ||
+        place.rawTypes?.includes('lodging') ||
+        place.rawTypes?.includes('campground') ||
+        place.categoryTags?.includes('stay');
+
     return (
-        <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 border-none bg-white dark:bg-slate-900 group">
-            <div className="flex flex-col md:flex-row h-full">
+        <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 border-none bg-white dark:bg-slate-900 group h-full flex flex-col">
+            <div className="flex flex-col md:flex-row flex-grow">
                 {/* Image Section */}
                 <div className="relative w-full md:w-48 h-48 md:h-auto flex-shrink-0 overflow-hidden">
                     <img
@@ -104,6 +110,13 @@ export function EnhancedPlaceCard({ place, onAddToTrip, onSavePlace }: EnhancedP
                                     <span>{place.popularDish.name}</span>
                                     <span className="opacity-70">(₹{place.popularDish.price})</span>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Booking Prices - Integrated Here */}
+                        {isAccommodation && (
+                            <div className="mb-3">
+                                <BookingPriceDisplay place={place} />
                             </div>
                         )}
 

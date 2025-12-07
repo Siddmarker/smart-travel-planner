@@ -148,6 +148,40 @@ const dynamicFilters: Record<string, Record<string, FilterConfig>> = {
                 { label: 'Market', value: 'market' }
             ]
         }
+    },
+    'stay': {
+        'establishmentType': {
+            type: 'checkbox',
+            label: 'Property Type',
+            options: [
+                { label: 'Resort', value: 'resort' },
+                { label: 'Homestay', value: 'homestay' },
+                { label: 'Lodge', value: 'lodge' },
+                { label: 'Hotel', value: 'hotel' },
+                { label: 'Villa', value: 'villa' }
+            ]
+        },
+        'features': {
+            type: 'checkbox',
+            label: 'Amenities',
+            options: [
+                { label: 'Pool', value: 'pool' },
+                { label: 'Spa', value: 'spa' },
+                { label: 'WiFi', value: 'wifi' },
+                { label: 'Parking', value: 'parking' },
+                { label: 'Restaurant', value: 'restaurant' }
+            ]
+        },
+        'price': {
+            type: 'radio',
+            label: 'Price Range',
+            options: [
+                { label: 'Any', value: 'any' },
+                { label: 'Budget', value: 1 },
+                { label: 'Moderate', value: 2 },
+                { label: 'Luxury', value: 3 }
+            ]
+        }
     }
 };
 

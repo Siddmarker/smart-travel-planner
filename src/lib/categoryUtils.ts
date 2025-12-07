@@ -57,6 +57,11 @@ export const categoryMapping: Record<string, CategoryConfig> = {
         apiTypes: ['park', 'natural_feature', 'point_of_interest', 'tourist_attraction'],
         keywords: ['offroad', 'off-road', 'dirt bike', 'atv', '4x4', 'motocross', 'enduro', 'trail', 'track', 'adventure'],
         exclude: ['store', 'rental', 'shop', 'repair', 'school', 'training']
+    },
+    'stay': {
+        apiTypes: ['lodging', 'campground'],
+        keywords: ['hotel', 'resort', 'homestay', 'lodge', 'guesthouse', 'inn', 'stay', 'accommodation', 'villa', 'cottage', 'hostel'],
+        exclude: ['restaurant', 'bar', 'gym', 'spa', 'airport'] // Exclude amenities that might be standalone
     }
 };
 

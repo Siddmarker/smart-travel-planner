@@ -9,7 +9,7 @@ export interface DiscoveryCategory {
 export const discoveryCategories: DiscoveryCategory[] = [
     { id: 'food', name: 'Food & Dining', icon: '🍽️' },
     { id: 'attraction', name: 'Attractions', icon: '🏛️' },
-    { id: 'hotel', name: 'Hotels', icon: '🏨' },
+    { id: 'stay', name: 'Stays', icon: '🏨' },
     { id: 'activity', name: 'Activities', icon: '🎯' },
     { id: 'hiking', name: 'Hiking', icon: '🥾' },
     { id: 'nature', name: 'Nature', icon: '🌲' },
