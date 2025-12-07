@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { SocialTrends } from '@/components/Discover/SocialTrends';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChevronDown } from 'lucide-react';
+import { mockAccommodations } from '@/data/mockAccommodations';
 
 export default function DiscoverPage() {
     const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -186,9 +187,33 @@ export default function DiscoverPage() {
         try {
             let results: Place[] = [];
 
+
+
             if (categoryId === 'hiking') {
                 // Use strict hiking search
                 results = await searchHikingPlaces(currentLocationName, locationCoords || undefined, currentRadius);
+            } else if (categoryId === 'stay') {
+                // Use MOCK DATA for Stays to ensure consistent demo experience with specific types (Resort, etc)
+                // In a real app with paid API, searchNearbyPlaces(..., 'lodging') would work
+                const mockStays: Place[] = mockAccommodations.map(acc => ({
+                    id: acc.id,
+                    name: acc.name,
+                    category: 'stay',
+                    description: acc.description,
+                    image: acc.images[0],
+                    rating: acc.rating,
+                    reviews: acc.reviewCount,
+                    lat: acc.location.lat,
+                    lng: acc.location.lng,
+                    priceLevel: acc.pricing.basePrice > 300 ? 4 : acc.pricing.basePrice > 150 ? 3 : 2,
+                    distance: { text: '2.5 km', value: 2500 }, // Mock distance
+                    rawTypes: [acc.type, 'lodging', 'stay'],
+                    tags: [acc.type, ...acc.amenities],
+                    dietaryOptions: [],
+                }));
+                // Simulate async API call
+                await new Promise(resolve => setTimeout(resolve, 600));
+                results = mockStays;
             } else {
                 // Standard search for other categories
                 if (locationCoords) {

@@ -257,15 +257,15 @@ function convertGooglePlaceToPlace(googlePlace: google.maps.places.PlaceResult):
 }
 
 function mapGoogleTypeToCategory(type: string): 'food' | 'attraction' | 'hotel' | 'activity' | 'hiking' | 'nature' | 'shopping' | 'nightlife' | 'culture' {
-    const typeMap: Record<string, 'food' | 'attraction' | 'hotel' | 'activity' | 'hiking' | 'nature' | 'shopping' | 'nightlife' | 'culture'> = {
+    const typeMap: Record<string, 'food' | 'attraction' | 'stay' | 'activity' | 'hiking' | 'nature' | 'shopping' | 'nightlife' | 'culture'> = {
         restaurant: 'food',
         cafe: 'food',
         bar: 'food',
         food: 'food',
         meal_takeaway: 'food',
         meal_delivery: 'food',
-        lodging: 'hotel',
-        hotel: 'hotel',
+        lodging: 'stay',
+        hotel: 'stay',
         tourist_attraction: 'attraction',
         museum: 'culture',
         art_gallery: 'culture',
@@ -293,6 +293,7 @@ export function mapCategoryToGoogleType(category: string): string {
     const categoryMap: Record<string, string> = {
         food: 'restaurant',
         attraction: 'tourist_attraction',
+        stay: 'lodging',
         hotel: 'lodging',
         activity: 'amusement_park',
         hiking: 'park',

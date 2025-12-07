@@ -23,6 +23,7 @@ export function EnhancedPlaceCard({ place, onAddToTrip, onSavePlace }: EnhancedP
     };
 
     const isAccommodation = place.category === 'hotel' ||
+        place.category === 'stay' ||
         place.rawTypes?.includes('lodging') ||
         place.rawTypes?.includes('campground') ||
         place.categoryTags?.includes('stay');
