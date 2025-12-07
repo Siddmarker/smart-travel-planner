@@ -205,19 +205,6 @@ export default function DiscoverPage() {
                 }
             }
 
-            // Apply Advanced Filtration Pipeline
-            const { filteredPlaces, metadata } = applyDiscoveryFiltrationPipeline(results, currentLocationName, categoryId);
-            setFiltrationMetadata(metadata);
-
-            // Enhance with distance and photos if we have coords
-            if (locationCoords && filteredPlaces.length > 0) {
-                results = await enhanceDiscoveryPlaces(filteredPlaces, locationCoords);
-                // Sort by credibility score then distance
-                results.sort((a, b) => (b.credibilityScore?.total || 0) - (a.credibilityScore?.total || 0));
-            } else {
-                results = filteredPlaces;
-            }
-
             setCategoryResults(results); // Store base results for re-filtering
             setFilteredPlaces(results); // Update Trending tab
 
@@ -265,30 +252,29 @@ export default function DiscoverPage() {
             return filterValues.every(val => placeOptions.includes(val));
         }
 
-        // 2. Establishment Type (OR logic usually, but user asked for ALL? "Veg + Jain + Cafe")
-        // "Veg + Jain" is Dietary. "Cafe" is Establishment.
-        // Across categories is AND.
-        // Within Establishment: "Cafe" + "Bakery". A place can be both.
-        // "Fine Dining" + "Street Food". Unlikely.
-        // If I select multiple, I probably want to expand results (OR).
-        // BUT, if I select "Rooftop" and "Cafe", I want a Rooftop Cafe (AND).
-        // Let's stick to OR for Establishment types to be safe, unless it's a "Feature".
-        // Wait, "Rooftop" is under "Establishment Type" in the user's prompt?
-        // No, user prompt: "Establishment Type: Local Famous, International, Street Food, Cafes".
-        // "Trending/Social: Instagram, TikTok...".
-        // Let's use OR for Establishment Type (e.g. show me Cafes OR Bakeries).
+        // 2. Establishment Type
         if (filterKey === 'establishmentType') {
             const placeTypes = [...(place.rawTypes || []), ...(place.tags || [])].map(t => t.toLowerCase());
+            const placeName = place.name.toLowerCase();
+
             // Map filter values to lowercase for comparison
             return filterValues.some(val => {
                 const v = val.toLowerCase();
                 // Special handling for 'Cafe' vs 'Cafes'
                 if (v === 'cafe') return placeTypes.some(t => t.includes('cafe') || t.includes('coffee'));
+
+                // Enhanced matching for Stays
+                if (v === 'resort') return placeTypes.some(t => t.includes('resort')) || placeName.includes('resort');
+                if (v === 'homestay') return placeTypes.some(t => t.includes('homestay') || t.includes('guest house') || t.includes('bnb')) || placeName.includes('homestay') || placeName.includes('villa') || placeName.includes('cottage');
+                if (v === 'lodge') return placeTypes.some(t => t.includes('lodge') || t.includes('lodging')) || placeName.includes('lodge');
+                if (v === 'hotel') return placeTypes.some(t => t.includes('hotel')) || placeName.includes('hotel');
+                if (v === 'villa') return placeTypes.some(t => t.includes('villa')) || placeName.includes('villa');
+
                 return placeTypes.some(t => t.includes(v));
             });
         }
 
-        // 3. Cuisine (OR logic - show me Italian OR Chinese)
+        // 3. Cuisine (OR logic)
         if (filterKey === 'cuisine') {
             const placeTags = [...(place.tags || []), ...(place.rawTypes || [])].map(t => t.toLowerCase());
             return filterValues.some(val => {
@@ -302,10 +288,10 @@ export default function DiscoverPage() {
             // Check social stats or tags
             if (filterValues.includes('Trending') && place.socialStats?.trending) return true;
             // For others, check tags
-            return false; // Placeholder as we only have 'trending' mock data
+            return false;
         }
 
-        // 5. Features (AND logic - must have Wifi AND Parking)
+        // 5. Features (AND logic)
         if (filterKey === 'features') {
             const placeTags = [...(place.tags || []), ...(place.rawTypes || [])].map(t => t.toLowerCase());
             return filterValues.every(val => {
@@ -328,7 +314,6 @@ export default function DiscoverPage() {
             results = results.filter(p => p.priceLevel === Number(activeFilters.price));
         }
         if (activeFilters.rating && activeFilters.rating !== 'any') {
-            // Handle 'any' case if passed
             const minRating = Number(activeFilters.rating);
             if (!isNaN(minRating)) {
                 results = results.filter(p => (p.rating || 0) >= minRating);
@@ -365,8 +350,18 @@ export default function DiscoverPage() {
 
         setFilteredPlaces(results);
 
+        // Update analytics metadata to reflect visible results
+        if (filtrationMetadata) {
+            setFiltrationMetadata({
+                ...filtrationMetadata,
+                filteredCount: results.length,
+                filtrationRate: filtrationMetadata.originalCount > 0
+                    ? Math.round(((filtrationMetadata.originalCount - results.length) / filtrationMetadata.originalCount) * 100)
+                    : 0
+            });
+        }
+
         // Also apply filters to Nearby and Hidden Gems tabs
-        // Note: For Nearby, we might want to re-sort by distance, but filtering is priority
         setNearbyPlacesList(results);
 
         // For Hidden Gems, maintain the rating/review criteria
