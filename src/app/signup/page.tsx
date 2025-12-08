@@ -104,9 +104,10 @@ export default function SignupPage() {
     };
 
     const handleGoogleSignup = async () => {
-        // Implement Google Signup logic if needed, or keep existing
-        // For now, focusing on the requested manual signup fix
-        console.log('Google signup clicked');
+        // GoogleAuthButton already handles the state update
+        // We just need to redirect
+        console.log('Google signup successful, redirecting to dashboard');
+        router.push('/dashboard');
     };
 
     return (
