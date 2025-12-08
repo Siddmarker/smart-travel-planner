@@ -62,7 +62,8 @@ export async function POST(request: Request) {
             }],
             days,
             planningMode: body.planningMode || 'manual',
-            votingStatus: 'not_started'
+            votingStatus: 'not_started',
+            categoryPreferences: body.categoryPreferences,
         });
 
         // If AI mode, generate itinerary

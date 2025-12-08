@@ -48,7 +48,7 @@ export const categoryMapping: Record<string, CategoryConfig> = {
         keywords: ['club', 'bar', 'pub', 'lounge', 'nightlife'],
         exclude: ['park', 'school']
     },
-    'culture': {
+    'cultural': {
         apiTypes: ['museum', 'art_gallery', 'library', 'church', 'hindu_temple', 'mosque', 'synagogue'],
         keywords: ['museum', 'art', 'history', 'culture', 'temple', 'gallery'],
         exclude: ['night_club', 'bar']

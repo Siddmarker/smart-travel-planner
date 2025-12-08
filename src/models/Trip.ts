@@ -67,6 +67,10 @@ export interface ITrip extends Document {
     days: IDayPlan[];
     planningMode: 'ai' | 'manual' | 'hybrid';
     votingStatus: 'not_started' | 'open' | 'closed' | 'finalized';
+    categoryPreferences?: {
+        categories: string[];
+        priorities: Record<string, number>;
+    };
     createdAt: Date;
     updatedAt: Date;
 }
@@ -183,6 +187,10 @@ const TripSchema = new Schema<ITrip>({
         type: String,
         enum: ['not_started', 'open', 'closed', 'finalized'],
         default: 'not_started'
+    },
+    categoryPreferences: {
+        categories: [String],
+        priorities: { type: Map, of: Number }
     }
 }, {
     timestamps: true
