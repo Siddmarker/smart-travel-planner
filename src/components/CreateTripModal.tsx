@@ -118,11 +118,13 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
     };
 
     const toggleCategory = (category: TripCategory) => {
-        if (selectedCategories.includes(category)) {
-            setSelectedCategories(selectedCategories.filter(c => c !== category));
-        } else {
-            setSelectedCategories([...selectedCategories, category]);
-        }
+        setSelectedCategories(prev => {
+            if (prev.includes(category)) {
+                return prev.filter(c => c !== category);
+            } else {
+                return [...prev, category];
+            }
+        });
     };
 
 
@@ -187,7 +189,13 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
 
             if (createdTrip) {
                 setOpen(false);
-                router.push(`/trips/${createdTrip.id}`);
+                const tripId = createdTrip.id || createdTrip._id;
+                if (tripId) {
+                    router.push(`/trips/${tripId}`);
+                } else {
+                    console.error('CreateTripModal: Trip created but no ID found:', createdTrip);
+                    setSubmitError('Trip created but failed to redirect. Please check your trips list.');
+                }
             } else {
                 console.error('CreateTripModal: createTrip returned null');
                 setSubmitError('Failed to create trip. Please try again.');
@@ -369,24 +377,21 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                         </p>
                         <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border rounded-md p-2">
                             {TRIP_CATEGORIES.map((cat) => (
-                                <div
+                                <label
                                     key={cat.value}
-                                    className="flex items-center space-x-2 p-2 rounded hover:bg-accent cursor-pointer"
-                                    onClick={() => toggleCategory(cat.value)}
+                                    htmlFor={cat.value}
+                                    className="flex items-center space-x-2 p-2 rounded hover:bg-accent cursor-pointer transition-colors"
                                 >
                                     <Checkbox
                                         id={cat.value}
                                         checked={selectedCategories.includes(cat.value)}
                                         onCheckedChange={() => toggleCategory(cat.value)}
                                     />
-                                    <label
-                                        htmlFor={cat.value}
-                                        className="text-sm cursor-pointer flex items-center gap-1"
-                                    >
+                                    <span className="text-sm flex items-center gap-1 select-none">
                                         <span>{cat.icon}</span>
                                         <span>{cat.label}</span>
-                                    </label>
-                                </div>
+                                    </span>
+                                </label>
                             ))}
                         </div>
                         {selectedCategories.length > 0 && (

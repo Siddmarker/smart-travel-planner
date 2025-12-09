@@ -193,7 +193,9 @@ const TripSchema = new Schema<ITrip>({
         priorities: { type: Map, of: Number }
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 
 // Generate join code before saving
