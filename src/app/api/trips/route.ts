@@ -110,11 +110,25 @@ export async function POST(request: Request) {
             console.error('MONGODB_URI is missing!');
         }
 
+        // Handle Mongoose Validation Errors specifically
+        if (error.name === 'ValidationError') {
+            const validationErrors = Object.values(error.errors).map((err: any) => err.message);
+            return NextResponse.json(
+                {
+                    error: 'Validation Failed',
+                    details: validationErrors,
+                    _debug: error.message
+                },
+                { status: 400 }
+            );
+        }
+
         return NextResponse.json(
             {
                 error: 'Failed to create trip',
                 details: error.message,
-                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+                // Only leak stack in dev, but leaking message is helpful here
+                _debug_stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
             },
             { status: 500 }
         );
