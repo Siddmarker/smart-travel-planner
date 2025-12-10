@@ -42,7 +42,8 @@ export class SmartItineraryBuilder {
 
         // Map existing days by date string (YYYY-MM-DD) for easy lookup
         const existingDaysMap = new Map<string, DayPlan>();
-        this.trip.days.forEach(day => {
+        const days = this.trip.itinerary?.days || [];
+        days.forEach(day => {
             const dateKey = new Date(day.date).toISOString().split('T')[0];
             existingDaysMap.set(dateKey, day);
         });

@@ -51,7 +51,10 @@ export const useStore = create<AppState>()(persist((set) => ({
             participants: [
                 { userId: 'user-2', name: 'Sarah Smith', role: 'member', joinedAt: new Date().toISOString() }
             ],
-            days: [],
+            itinerary: {
+                source: 'manual',
+                days: []
+            },
             totalDays: 7,
             budget: {
                 currency: 'EUR',
@@ -75,7 +78,10 @@ export const useStore = create<AppState>()(persist((set) => ({
             votingStatus: 'not_started',
             includeDining: false,
             participants: [],
-            days: [],
+            itinerary: {
+                source: 'manual',
+                days: []
+            },
             totalDays: 10,
             budget: {
                 currency: 'JPY',
@@ -180,7 +186,9 @@ export const useStore = create<AppState>()(persist((set) => ({
     addPlaceToTrip: (tripId, place, dayIndex) => set((state) => ({
         trips: state.trips.map(trip => {
             if (trip.id === tripId) {
-                const updatedDays = [...trip.days];
+                const updatedItinerary = { ...trip.itinerary };
+                const updatedDays = updatedItinerary.days ? [...updatedItinerary.days] : [];
+
                 // Ensure day exists
                 if (!updatedDays[dayIndex]) {
                     updatedDays[dayIndex] = {
@@ -203,7 +211,8 @@ export const useStore = create<AppState>()(persist((set) => ({
                     addedAt: new Date()
                 });
 
-                return { ...trip, days: updatedDays };
+                updatedItinerary.days = updatedDays;
+                return { ...trip, itinerary: updatedItinerary };
             }
             return trip;
         })

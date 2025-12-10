@@ -268,11 +268,12 @@ export interface Trip {
     joinedAt: string;
   }[];
 
-  // Planning
-  planningMode: 'ai' | 'manual' | 'hybrid';
-  votingStatus: 'not_started' | 'open' | 'closed' | 'finalized';
-
-  days: DayPlan[];
+  itinerary?: {
+    source: 'ai' | 'manual' | 'hybrid';
+    days: DayPlan[];
+    generatedAt?: Date | string;
+  };
+  // days: DayPlan[]; // Deprecated, moved to itinerary
 
   // Legacy/Compatibility fields (keeping for now to avoid breaking existing code immediately)
   budget: {

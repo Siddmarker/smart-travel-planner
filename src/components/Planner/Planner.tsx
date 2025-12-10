@@ -26,7 +26,7 @@ type PlanningPhase = 'initial' | 'preferences' | 'voting' | 'result';
 
 export function Planner({ trip }: PlannerProps) {
     const { updateTrip, places } = useStore();
-    const [planningPhase, setPlanningPhase] = useState<PlanningPhase>(trip.days.length > 0 ? 'result' : 'initial');
+    const [planningPhase, setPlanningPhase] = useState<PlanningPhase>((trip.itinerary?.days && trip.itinerary.days.length > 0) ? 'result' : 'initial');
     const [showPreferences, setShowPreferences] = useState(false);
     const [votingData, setVotingData] = useState<any>(null);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -121,7 +121,7 @@ export function Planner({ trip }: PlannerProps) {
                 };
             });
 
-            updateTrip(trip.id, { days: newDays });
+            updateTrip(trip.id, { itinerary: { ...trip.itinerary, days: newDays } } as Partial<Trip>);
             setPlanningPhase('result');
         } catch (error) {
             console.error("Error optimizing itinerary:", error);
@@ -190,7 +190,7 @@ export function Planner({ trip }: PlannerProps) {
                 </div>
 
                 <TabsContent value="itinerary" className="flex-1 mt-0 overflow-hidden">
-                    {planningPhase === 'initial' && trip.days.length === 0 ? (
+                    {planningPhase === 'initial' && (!trip.itinerary?.days || trip.itinerary.days.length === 0) ? (
                         <div className="h-full flex flex-col items-center justify-center space-y-4 text-center p-8">
                             <div className="bg-primary/10 p-6 rounded-full">
                                 <MapIcon className="w-12 h-12 text-primary" />

@@ -10,6 +10,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const { id } = await params;
         await dbConnect();
 
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return NextResponse.json({ error: 'Invalid Trip ID' }, { status: 404 });
+        }
+
         // Populate participants with user details
         const trip = await Trip.findById(id).populate('participants.userId', 'name email avatar');
 

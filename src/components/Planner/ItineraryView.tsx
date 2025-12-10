@@ -69,15 +69,16 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
         };
 
         // Update Trip
-        const updatedDays = trip.days.map(d => {
+        const currentDays = trip.itinerary?.days || [];
+        const updatedDays = currentDays.map(d => {
             if (d.id === activeDayId) {
                 return { ...d, items: [...d.items, newItem] };
             }
             return d;
         });
 
-        // If day didn't exist in trip.days (was auto-generated), we need to add it
-        if (!trip.days.find(d => d.id === activeDayId)) {
+        // If day didn't exist in trip.itinerary.days (was auto-generated), we need to add it
+        if (!currentDays.find(d => d.id === activeDayId)) {
             const newDay: DayPlan = {
                 id: activeDayId,
                 dayNumber: day.dayNumber,
@@ -89,39 +90,17 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
                 evening: [],
                 items: [newItem]
             };
-            // Insert in correct order (simplified: just append and sort or rely on builder to handle next render)
-            // Better: Reconstruct all days from smartItinerary
+            // Insert in correct order (simplified)
             const allDays = smartItinerary.map(sd => {
                 if (sd.id === activeDayId) {
-                    return {
-                        id: sd.id,
-                        dayNumber: sd.dayNumber,
-                        date: sd.date,
-                        planningMode: 'manual' as const,
-                        status: 'partial' as const,
-                        morning: [],
-                        afternoon: [],
-                        evening: [],
-                        items: [...sd.items, newItem]
-                    };
+                    return { ...sd, items: [...sd.items, newItem], planningMode: 'manual' as const, status: 'partial' as const };
                 }
-                // Return existing or empty
-                const existing = trip.days.find(td => td.id === sd.id);
-                return existing || {
-                    id: sd.id,
-                    dayNumber: sd.dayNumber,
-                    date: sd.date,
-                    planningMode: 'manual' as const,
-                    status: 'empty' as const,
-                    morning: [],
-                    afternoon: [],
-                    evening: [],
-                    items: []
-                };
+                const existing = currentDays.find(td => td.id === sd.id);
+                return existing || { ...sd, planningMode: 'manual' as const, status: 'empty' as const, items: [] };
             });
-            updateTrip(trip.id, { days: allDays });
+            updateTrip(trip.id, { itinerary: { ...trip.itinerary, days: allDays } } as Partial<Trip>);
         } else {
-            updateTrip(trip.id, { days: updatedDays });
+            updateTrip(trip.id, { itinerary: { ...trip.itinerary, days: updatedDays } } as Partial<Trip>);
         }
 
         setIsAddActivityOpen(false);
@@ -167,46 +146,27 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
             const dayItinerary = result[1];
 
             if (dayItinerary && dayItinerary.length > 0) {
+                const currentDays = trip.itinerary?.days || [];
                 // Update the trip with new items
-                const updatedDays = trip.days.map(d => {
+                const updatedDays = currentDays.map(d => {
                     if (d.id === dayId) {
                         return { ...d, items: [...d.items, ...dayItinerary] };
                     }
                     return d;
                 });
 
-                // If day didn't exist in trip.days (was auto-generated), we need to add it
-                if (!trip.days.find(d => d.id === dayId)) {
+                // If day didn't exist in trip.itinerary.days (was auto-generated), we need to add it
+                if (!currentDays.find(d => d.id === dayId)) {
                     const allDays = smartItinerary.map(sd => {
                         if (sd.id === dayId) {
-                            return {
-                                id: sd.id,
-                                dayNumber: sd.dayNumber,
-                                date: sd.date,
-                                planningMode: 'ai' as const,
-                                status: 'partial' as const,
-                                morning: [],
-                                afternoon: [],
-                                evening: [],
-                                items: [...sd.items, ...dayItinerary]
-                            };
+                            return { ...sd, planningMode: 'ai' as const, status: 'partial' as const, items: [...sd.items, ...dayItinerary] };
                         }
-                        const existing = trip.days.find(td => td.id === sd.id);
-                        return existing || {
-                            id: sd.id,
-                            dayNumber: sd.dayNumber,
-                            date: sd.date,
-                            planningMode: 'manual' as const,
-                            status: 'empty' as const,
-                            morning: [],
-                            afternoon: [],
-                            evening: [],
-                            items: []
-                        };
+                        const existing = currentDays.find(td => td.id === sd.id);
+                        return existing || { ...sd, planningMode: 'manual' as const, status: 'empty' as const, items: [] };
                     });
-                    updateTrip(trip.id, { days: allDays });
+                    updateTrip(trip.id, { itinerary: { ...trip.itinerary, days: allDays } } as Partial<Trip>);
                 } else {
-                    updateTrip(trip.id, { days: updatedDays });
+                    updateTrip(trip.id, { itinerary: { ...trip.itinerary, days: updatedDays } } as Partial<Trip>);
                 }
             }
         } catch (error) {
@@ -399,13 +359,14 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
                                                                     place={place}
                                                                     onDelete={() => {
                                                                         // Implement delete
-                                                                        const newDays = trip.days.map(d => {
+                                                                        const currentDays = trip.itinerary?.days || [];
+                                                                        const newDays = currentDays.map(d => {
                                                                             if (d.id === day.id) {
                                                                                 return { ...d, items: d.items.filter(i => i.id !== item.id) };
                                                                             }
                                                                             return d;
                                                                         });
-                                                                        updateTrip(trip.id, { days: newDays });
+                                                                        updateTrip(trip.id, { itinerary: { ...trip.itinerary, days: newDays } } as Partial<Trip>);
                                                                     }}
                                                                 />
                                                             );
