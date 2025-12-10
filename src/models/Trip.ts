@@ -199,15 +199,16 @@ const TripSchema = new Schema<ITrip>({
 });
 
 // Pre-save hooks
-TripSchema.pre('save', function (this: ITrip, next) {
-    if (this.dates.start && this.dates.end) {
-        const diff = new Date(this.dates.end).getTime() - new Date(this.dates.start).getTime();
-        this.dates.totalDays = Math.ceil(diff / (1000 * 60 * 60 * 24));
+TripSchema.pre('save', function (this: any, next: any) {
+    const doc = this as ITrip;
+    if (doc.dates.start && doc.dates.end) {
+        const diff = new Date(doc.dates.end).getTime() - new Date(doc.dates.start).getTime();
+        doc.dates.totalDays = Math.ceil(diff / (1000 * 60 * 60 * 24));
     }
 
-    if (this.isNew) {
-        this.links = this.links || {};
-        this.links.joinLink = `trip-join-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    if (doc.isNew) {
+        doc.links = doc.links || {};
+        doc.links.joinLink = `trip-join-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     }
     next();
 });

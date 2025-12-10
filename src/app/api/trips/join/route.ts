@@ -27,7 +27,8 @@ export async function POST(request: Request) {
         }
 
         // Find trip by join code
-        const trip = await Trip.findOne({ joinCode: code });
+        // Find trip by join link/code
+        const trip = await Trip.findOne({ 'links.joinLink': { $regex: code, $options: 'i' } });
 
         if (!trip) {
             return NextResponse.json({ error: 'Invalid join code' }, { status: 404 });
@@ -41,11 +42,18 @@ export async function POST(request: Request) {
 
         // Add participant
         trip.participants.push({
-            userId,
+            userId: new mongoose.Types.ObjectId(userId),
             name,
             role: 'member',
-            joinedAt: new Date()
-        });
+            status: 'joined',
+            invitedAt: new Date(),
+            permissions: {
+                canEditTrip: false,
+                canInvite: false,
+                canManageExpenses: true,
+                canModifyItinerary: false
+            }
+        } as any);
 
         await trip.save();
 
