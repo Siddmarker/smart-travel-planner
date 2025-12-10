@@ -60,7 +60,11 @@ export async function POST(request: Request) {
                 role: 'admin',
                 joinedAt: new Date()
             }],
-            days,
+            itinerary: {
+                source: body.planningMode === 'ai' ? 'ai' : 'manual',
+                days: days,
+                generatedAt: new Date()
+            },
             planningMode: body.planningMode || 'manual',
             votingStatus: 'not_started',
             categoryPreferences: body.categoryPreferences,

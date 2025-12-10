@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import Trip from '@/models/Trip';
 import User from '@/models/User'; // Ensure User is registered to prevent Schema errors in population
+import dbConnect from '@/lib/db';
+
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id } = await params;
-        if (!mongoose.connection.readyState) await mongoose.connect(process.env.MONGODB_URI!);
+        await dbConnect();
 
         // Populate participants with user details
         const trip = await Trip.findById(id).populate('participants.userId', 'name email avatar');
@@ -23,7 +25,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     try {
         const body = await req.json();
         const { id } = await params;
-        if (!mongoose.connection.readyState) await mongoose.connect(process.env.MONGODB_URI!);
+        await dbConnect();
 
         const trip = await Trip.findByIdAndUpdate(id, body, { new: true, runValidators: true });
 
@@ -36,7 +38,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id } = await params;
-        if (!mongoose.connection.readyState) await mongoose.connect(process.env.MONGODB_URI!);
+        await dbConnect();
 
         await Trip.findByIdAndDelete(id);
 
