@@ -1,196 +1,196 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-export interface IPlace {
-    googlePlaceId: string;
-    name: string;
-    address: string;
-    coordinates: {
-        lat: number;
-        lng: number;
-    };
-    rating: number;
-    reviewCount: number;
-    photoUrl?: string;
-    openingHours?: string[];
-    timeSlot: 'morning' | 'afternoon' | 'evening';
-    dayNumber: number;
-    addedBy?: string;
-    addedAt: Date;
-    votes?: {
-        up: string[];
-        down: string[];
-    };
-}
-
-export interface IDayPlan {
-    dayNumber: number;
-    planningMode: 'ai' | 'manual';
-    morning: IPlace[];
-    afternoon: IPlace[];
-    evening: IPlace[];
-    finalMorning?: IPlace;
-    finalAfternoon?: IPlace;
-    finalEvening?: IPlace;
-    status: 'empty' | 'partial' | 'complete';
-}
-
-export interface IParticipant {
-    userId: string;
-    name: string;
-    role: 'admin' | 'member';
-    joinedAt: Date;
-}
-
+// Interface definitions
 export interface ITrip extends Document {
     name: string;
     description?: string;
-    startDate: Date;
-    endDate: Date;
-    totalDays: number;
-    location: string;
-    coordinates: {
-        lat: number;
-        lng: number;
+    destination: {
+        mainLocation: {
+            address: string;
+            coordinates: { lat: number; lng: number };
+            placeId?: string;
+            timezone?: string;
+        };
+        tripType: 'round' | 'one-way';
+        startingPoint?: { lat: number; lng: number };
+        endingPoint?: { lat: number; lng: number };
     };
+    dates: {
+        start: Date;
+        end: Date;
+        totalDays?: number;
+        flexible: boolean;
+    };
+    participants: {
+        userId: mongoose.Types.ObjectId;
+        name?: string;
+        email?: string;
+        role: 'admin' | 'co-admin' | 'member';
+        status: 'invited' | 'joined' | 'declined' | 'pending';
+        joinedAt?: Date;
+        invitedAt: Date;
+        permissions: {
+            canEditTrip: boolean;
+            canInvite: boolean;
+            canManageExpenses: boolean;
+            canModifyItinerary: boolean;
+        };
+    }[];
     preferences: {
-        returnToStart: boolean;
-        startTime: string;
-        endTime: string;
-        foodVariety?: 'high' | 'medium' | 'low';
-        dietary?: string[];
-        cuisines?: string[];
-    };
-    includeDining: boolean;
-    adminId: string;
-    joinCode: string;
-    participants: IParticipant[];
-    days: IDayPlan[];
-    planningMode: 'ai' | 'manual' | 'hybrid';
-    votingStatus: 'not_started' | 'open' | 'closed' | 'finalized';
-    categoryPreferences?: {
+        budget: {
+            range: 'low' | 'medium' | 'high' | 'luxury';
+            amount?: number;
+            currency: string;
+            perPerson: boolean;
+        };
+        groupType: 'family' | 'friends' | 'solo' | 'couple' | 'business';
         categories: string[];
-        priorities: Record<string, number>;
+        ageGroup?: 'kids' | 'teen' | 'young' | 'adults' | 'senior' | 'mixed';
+        advanced?: any;
     };
-    createdAt: Date;
-    updatedAt: Date;
+    itinerary: {
+        source: 'ai' | 'manual' | 'hybrid' | 'template';
+        generatedAt?: Date;
+        days: any[]; // Using any for complexity reduction in schema definition, ideally defined interface
+        optimizedRoute?: any;
+    };
+    voting: {
+        enabled: boolean;
+        type: 'simple' | 'ranked_choice' | 'weighted';
+        [key: string]: any;
+    };
+    status: {
+        current: 'planning' | 'voting' | 'booking' | 'active' | 'completed' | 'cancelled';
+        progress: number;
+        [key: string]: any;
+    };
+    settings: {
+        groupChatEnabled: boolean;
+        votingEnabled: boolean;
+        allowReVoting: boolean;
+        allowAdminTransfer: boolean;
+        isPublic: boolean;
+        [key: string]: any;
+    };
+    links: {
+        joinLink: string;
+        adminLink: string;
+        shareableLink: string;
+    };
+    metadata: {
+        createdBy: mongoose.Types.ObjectId;
+        createdAt: Date;
+        updatedAt: Date;
+        [key: string]: any;
+    };
 }
 
-const PlaceSchema = new Schema<IPlace>({
-    googlePlaceId: String,
-    name: String,
-    address: String,
-    coordinates: {
-        lat: Number,
-        lng: Number
-    },
-    rating: Number,
-    reviewCount: Number,
-    photoUrl: String,
-    openingHours: [String],
-    timeSlot: {
-        type: String,
-        enum: ['morning', 'afternoon', 'evening']
-    },
-    dayNumber: Number,
-    addedBy: {
-        type: String,
-        ref: 'User'
-    },
-    addedAt: {
-        type: Date,
-        default: Date.now
-    },
-    votes: {
-        up: [{ type: String, ref: 'User' }],
-        down: [{ type: String, ref: 'User' }]
-    }
-});
-
-const DayPlanSchema = new Schema<IDayPlan>({
-    dayNumber: Number,
-    planningMode: {
-        type: String,
-        enum: ['ai', 'manual'],
-        default: 'manual'
-    },
-    morning: [PlaceSchema],
-    afternoon: [PlaceSchema],
-    evening: [PlaceSchema],
-    finalMorning: PlaceSchema,
-    finalAfternoon: PlaceSchema,
-    finalEvening: PlaceSchema,
-    status: {
-        type: String,
-        enum: ['empty', 'partial', 'complete'],
-        default: 'empty'
-    }
-});
-
 const TripSchema = new Schema<ITrip>({
-    name: { type: String, required: true },
-    description: String,
-    startDate: Date,
-    endDate: Date,
-    totalDays: Number,
-    location: String,
-    coordinates: {
-        lat: Number,
-        lng: Number
+    name: {
+        type: String,
+        required: [true, 'Trip name is required'],
+        trim: true,
+        maxlength: [100, 'Trip name cannot exceed 100 characters']
     },
-    preferences: {
-        returnToStart: { type: Boolean, default: false },
-        startTime: String,
-        endTime: String,
-        foodVariety: {
-            type: String,
-            enum: ['high', 'medium', 'low']
+    description: {
+        type: String,
+        trim: true,
+        maxlength: [500, 'Description cannot exceed 500 characters']
+    },
+    destination: {
+        mainLocation: {
+            address: { type: String, required: true },
+            coordinates: {
+                lat: { type: Number, required: true },
+                lng: { type: Number, required: true }
+            },
+            placeId: String,
+            timezone: String
         },
-        dietary: [String],
-        cuisines: [String]
+        tripType: {
+            type: String,
+            enum: ['round', 'one-way'],
+            default: 'round'
+        },
+        startingPoint: { lat: Number, lng: Number },
+        endingPoint: { lat: Number, lng: Number }
     },
-    includeDining: {
-        type: Boolean,
-        default: false
-    },
-    adminId: {
-        type: String,
-        required: true
-    },
-    joinCode: {
-        type: String,
-        unique: true,
-        // required: true - handled in pre-save
+    dates: {
+        start: { type: Date, required: true },
+        end: { type: Date, required: true },
+        totalDays: Number,
+        flexible: { type: Boolean, default: false }
     },
     participants: [{
-        userId: {
-            type: String,
-            required: true
-        },
+        userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
         name: String,
-        role: {
-            type: String,
-            enum: ['admin', 'member'],
-            default: 'member'
-        },
-        joinedAt: {
-            type: Date,
-            default: Date.now
+        email: String,
+        role: { type: String, enum: ['admin', 'co-admin', 'member'], default: 'member' },
+        status: { type: String, enum: ['invited', 'joined', 'declined', 'pending'], default: 'invited' },
+        joinedAt: Date,
+        invitedAt: { type: Date, default: Date.now },
+        permissions: {
+            canEditTrip: { type: Boolean, default: false },
+            canInvite: { type: Boolean, default: false },
+            canManageExpenses: { type: Boolean, default: false },
+            canModifyItinerary: { type: Boolean, default: false }
         }
     }],
-    days: [DayPlanSchema],
-    planningMode: {
-        type: String,
-        enum: ['ai', 'manual', 'hybrid'],
-        default: 'manual'
-    },
-    votingStatus: {
-        type: String,
-        enum: ['not_started', 'open', 'closed', 'finalized'],
-        default: 'not_started'
-    },
-    categoryPreferences: {
+    preferences: {
+        budget: {
+            range: { type: String, enum: ['low', 'medium', 'high', 'luxury'], default: 'medium' },
+            amount: Number,
+            currency: { type: String, default: 'INR' },
+            perPerson: { type: Boolean, default: false }
+        },
+        groupType: { type: String, enum: ['family', 'friends', 'solo', 'couple', 'business'], required: true },
         categories: [String],
-        priorities: { type: Map, of: Number }
+        ageGroup: { type: String, enum: ['kids', 'teen', 'young', 'adults', 'senior', 'mixed'] },
+        advanced: Schema.Types.Mixed
+    },
+    itinerary: {
+        source: { type: String, enum: ['ai', 'manual', 'hybrid', 'template'], default: 'manual' },
+        generatedAt: Date,
+        days: [Schema.Types.Mixed], // Flexible schema for days as they are complex
+        optimizedRoute: Schema.Types.Mixed
+    },
+    voting: {
+        enabled: { type: Boolean, default: false },
+        type: { type: String, enum: ['simple', 'ranked_choice', 'weighted'], default: 'simple' },
+        schedule: { start: Date, end: Date, duration: Number },
+        rules: Schema.Types.Mixed,
+        categories: [Schema.Types.Mixed],
+        votes: { type: Map, of: Object },
+        results: Object
+    },
+    status: {
+        current: { type: String, enum: ['planning', 'voting', 'booking', 'active', 'completed', 'cancelled'], default: 'planning' },
+        progress: { type: Number, default: 0 },
+        timeline: Object,
+        checklist: [Schema.Types.Mixed]
+    },
+    settings: {
+        groupChatEnabled: { type: Boolean, default: false },
+        votingEnabled: { type: Boolean, default: false },
+        allowReVoting: { type: Boolean, default: true },
+        allowAdminTransfer: { type: Boolean, default: true },
+        isPublic: { type: Boolean, default: false },
+        privacy: Object,
+        notifications: Object
+    },
+    links: {
+        joinLink: String,
+        adminLink: String,
+        shareableLink: String,
+        votingLink: String,
+        chatLink: String
+    },
+    metadata: {
+        createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        createdAt: { type: Date, default: Date.now },
+        updatedAt: { type: Date, default: Date.now },
+        version: { type: Number, default: 1 },
+        lastActive: Date
     }
 }, {
     timestamps: true,
@@ -198,14 +198,20 @@ const TripSchema = new Schema<ITrip>({
     toObject: { virtuals: true }
 });
 
-// Generate join code before saving
-TripSchema.pre('save', async function (this: ITrip) {
-    if (!this.joinCode) {
-        this.joinCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+// Pre-save hooks
+TripSchema.pre('save', function (this: ITrip, next) {
+    if (this.dates.start && this.dates.end) {
+        const diff = new Date(this.dates.end).getTime() - new Date(this.dates.start).getTime();
+        this.dates.totalDays = Math.ceil(diff / (1000 * 60 * 60 * 24));
     }
+
+    if (this.isNew) {
+        this.links = this.links || {};
+        this.links.joinLink = `trip-join-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+    next();
 });
 
-// Check if model exists before compiling to avoid OverwriteModelError in HMR
 const Trip: Model<ITrip> = mongoose.models.Trip || mongoose.model<ITrip>('Trip', TripSchema);
 
 export default Trip;
