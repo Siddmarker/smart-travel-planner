@@ -217,7 +217,7 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
 
     if (viewMode === 'smart') {
         const userPreferences: UserPreferences = {
-            trip_duration: trip.days.length,
+            trip_duration: trip.itinerary?.days.length || 0,
             budget: 'medium',
             categories: ['attraction', 'food', 'culture'],
             dietary: [],
@@ -245,7 +245,7 @@ export function ItineraryView({ trip }: ItineraryViewProps) {
                             destination: trip.destination.name || 'Destination',
                             startDate: trip.startDate,
                             endDate: trip.endDate,
-                            totalDays: trip.days.length
+                            totalDays: trip.itinerary?.days.length || 0
                         }}
                         userPreferences={userPreferences}
                     />
