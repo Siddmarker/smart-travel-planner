@@ -186,7 +186,7 @@ export const useStore = create<AppState>()(persist((set) => ({
     addPlaceToTrip: (tripId, place, dayIndex) => set((state) => ({
         trips: state.trips.map(trip => {
             if (trip.id === tripId) {
-                const updatedItinerary = { ...trip.itinerary };
+                const updatedItinerary = trip.itinerary ? { ...trip.itinerary } : { source: 'manual' as const, days: [] };
                 const updatedDays = updatedItinerary.days ? [...updatedItinerary.days] : [];
 
                 // Ensure day exists
