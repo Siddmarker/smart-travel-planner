@@ -39,6 +39,7 @@ async function dbConnect() {
                 uri.searchParams.delete('appName');
                 validUri = uri.toString();
             }
+
         } catch (error) {
             console.error('Error validating MONGODB_URI format:', error);
             // Fallback to original if parsing fails
