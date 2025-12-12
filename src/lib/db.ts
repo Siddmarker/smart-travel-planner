@@ -21,8 +21,14 @@ if (!cached) {
 
 async function dbConnect() {
     if (cached.conn) {
-        console.log('dbConnect: Using cached connection');
-        return cached.conn;
+        if (cached.conn.connection.readyState === 1) {
+            console.log('dbConnect: Using cached and active connection');
+            return cached.conn;
+        } else {
+            console.log('dbConnect: Cached connection exists but is not ready (state: ' + cached.conn.connection.readyState + '). Reconnecting...');
+            cached.promise = null; // Reset promise to force new connection
+            // We don't nullify cached.conn yet, will be overwritten
+        }
     }
 
     if (!cached.promise) {
