@@ -40,23 +40,32 @@ export async function POST(request: Request) {
         }
 
         // Create Trip
+        // Create Trip
         const newTrip = new Trip({
             name: body.name,
             description: body.description,
-            startDate,
-            endDate,
-            totalDays,
-            location: body.destination.name,
-            coordinates: {
-                lat: body.destination.lat,
-                lng: body.destination.lng
+            destination: {
+                mainLocation: {
+                    address: body.destination.name,
+                    coordinates: {
+                        lat: body.destination.lat,
+                        lng: body.destination.lng
+                    },
+                    placeId: body.destination.placeId
+                },
+                tripType: 'round'
             },
-            preferences: body.preferences || {},
-            includeDining: body.includeDining || false,
-            // adminId: body.adminId, // Removed: Not in schema
+            dates: {
+                start: startDate,
+                end: endDate,
+                totalDays
+            },
+            preferences: body.preferences || {
+                groupType: 'friends' // Default
+            },
             participants: [{
                 userId: body.adminId,
-                name: body.adminName || 'Admin', // Should be fetched from user profile ideally
+                name: body.adminName || 'Admin',
                 role: 'admin',
                 joinedAt: new Date()
             }],
@@ -65,9 +74,6 @@ export async function POST(request: Request) {
                 days: days,
                 generatedAt: new Date()
             },
-            planningMode: body.planningMode || 'manual',
-            votingStatus: 'not_started',
-            categoryPreferences: body.categoryPreferences,
             metadata: {
                 createdBy: body.adminId,
                 createdAt: new Date(),

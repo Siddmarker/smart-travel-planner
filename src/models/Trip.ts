@@ -22,7 +22,7 @@ export interface ITrip extends Document {
         flexible: boolean;
     };
     participants: {
-        userId: mongoose.Types.ObjectId;
+        userId: string; // Changed from mongoose.Types.ObjectId
         name?: string;
         email?: string;
         role: 'admin' | 'co-admin' | 'member';
@@ -78,7 +78,7 @@ export interface ITrip extends Document {
         shareableLink: string;
     };
     metadata: {
-        createdBy: mongoose.Types.ObjectId;
+        createdBy: string; // Changed from mongoose.Types.ObjectId
         createdAt: Date;
         updatedAt: Date;
         [key: string]: any;
@@ -122,7 +122,7 @@ const TripSchema = new Schema<ITrip>({
         flexible: { type: Boolean, default: false }
     },
     participants: [{
-        userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        userId: { type: String, required: true },
         name: String,
         email: String,
         role: { type: String, enum: ['admin', 'co-admin', 'member'], default: 'member' },
@@ -186,7 +186,7 @@ const TripSchema = new Schema<ITrip>({
         chatLink: String
     },
     metadata: {
-        createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        createdBy: { type: String, required: true },
         createdAt: { type: Date, default: Date.now },
         updatedAt: { type: Date, default: Date.now },
         version: { type: Number, default: 1 },

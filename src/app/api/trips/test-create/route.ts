@@ -18,22 +18,33 @@ export async function POST(request: Request) {
         const testTrip = new Trip({
             name: body.name || 'Test Trip',
             description: 'Test from debug endpoint',
-            startDate: new Date(),
-            endDate: new Date(Date.now() + 86400000), // Tomorrow
-            totalDays: 2,
-            location: 'Test Location',
-            coordinates: { lat: 0, lng: 0 },
-            adminId: body.adminId || 'test-admin-id',
+            destination: {
+                mainLocation: {
+                    address: 'Test Location',
+                    coordinates: { lat: 0, lng: 0 }
+                }
+            },
+            dates: {
+                start: new Date(),
+                end: new Date(Date.now() + 86400000), // Tomorrow
+                totalDays: 2
+            },
             participants: [{
                 userId: body.adminId || 'test-admin-id',
                 name: body.adminName || 'Test Admin',
                 role: 'admin',
                 joinedAt: new Date()
             }],
-            days: [],
-            planningMode: 'manual',
-            votingStatus: 'not_started',
-            preferences: {}
+            itinerary: {
+                source: 'manual',
+                days: []
+            },
+            preferences: {
+                groupType: 'friends'
+            },
+            metadata: {
+                createdBy: body.adminId || 'test-admin-id'
+            }
         });
 
         await testTrip.save();
