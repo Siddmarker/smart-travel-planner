@@ -143,7 +143,8 @@ const TripSchema = new Schema<ITrip>({
             currency: { type: String, default: 'INR' },
             perPerson: { type: Boolean, default: false }
         },
-        groupType: { type: String, enum: ['family', 'friends', 'solo', 'couple', 'business'], required: true },
+        groupType: { type: String, enum: ['family', 'friends', 'solo', 'couple', 'business', 'corporate'], required: true },
+        travelers: { type: Number, default: 1 },
         categories: [String],
         ageGroup: { type: String, enum: ['kids', 'teen', 'young', 'adults', 'senior', 'mixed'] },
         advanced: Schema.Types.Mixed

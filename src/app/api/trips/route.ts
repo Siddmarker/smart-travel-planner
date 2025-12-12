@@ -13,6 +13,7 @@ export async function POST(request: Request) {
     try {
         await dbConnect();
         const body = await request.json();
+        console.log('API /api/trips: Received body:', JSON.stringify(body, null, 2));
 
         // Basic validation
         if (!body.name || !body.destination || !body.startDate || !body.endDate || !body.adminId) {

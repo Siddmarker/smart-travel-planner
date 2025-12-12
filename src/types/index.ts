@@ -288,6 +288,8 @@ export interface Trip {
     foodVariety?: 'high' | 'medium' | 'low';
     dietary?: string[];
     cuisines?: string[];
+    groupType?: 'family' | 'friends' | 'solo' | 'couple' | 'business' | 'corporate';
+    travelers?: number;
   };
   categoryPreferences?: CategoryPreferences;
   review?: {

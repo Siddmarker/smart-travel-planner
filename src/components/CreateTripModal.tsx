@@ -10,7 +10,7 @@ import { useStore } from '@/store/useStore';
 import { Place, TripCategory, Trip } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import { useRouter } from 'next/navigation';
-import { Calendar, MapPin, DollarSign, Type, Tag, Sparkles } from 'lucide-react';
+import { Calendar, MapPin, DollarSign, Type, Tag, Sparkles, Users, Briefcase } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
 import { autocompletePlace, getPlaceDetails, reverseGeocode } from '@/lib/googleMapsService';
@@ -30,6 +30,8 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [budget, setBudget] = useState('');
+    const [travelers, setTravelers] = useState<string>('1');
+    const [groupType, setGroupType] = useState<string>('friends');
     const [selectedCategories, setSelectedCategories] = useState<TripCategory[]>([]);
     const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
     const [showPredictions, setShowPredictions] = useState(false);
@@ -175,7 +177,9 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                     endTime: '20:00',
                     foodVariety: 'medium',
                     dietary: ['Non-Vegetarian'], // Default
-                    cuisines: []
+                    cuisines: [],
+                    groupType: groupType,
+                    travelers: parseInt(travelers) || 1
                 },
                 categoryPreferences: selectedCategories.length > 0 ? {
                     categories: selectedCategories,
@@ -350,6 +354,39 @@ export function CreateTripModal({ children }: CreateTripModalProps) {
                                 required
                                 className="h-10"
                             />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="travelers" className="flex items-center gap-2 text-base">
+                                <Users className="h-4 w-4 text-muted-foreground" />
+                                No. of People
+                            </Label>
+                            <Input
+                                id="travelers"
+                                type="number"
+                                min="1"
+                                value={travelers}
+                                onChange={(e) => setTravelers(e.target.value)}
+                                required
+                                className="h-10"
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="groupType" className="flex items-center gap-2 text-base">
+                                <Briefcase className="h-4 w-4 text-muted-foreground" />
+                                Trip with?
+                            </Label>
+                            <SelectUI value={groupType} onValueChange={setGroupType}>
+                                <SelectTrigger id="groupType" className="h-10">
+                                    <SelectValue placeholder="Select group type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="friends">Friends</SelectItem>
+                                    <SelectItem value="family">Family</SelectItem>
+                                    <SelectItem value="corporate">Corporate</SelectItem>
+                                </SelectContent>
+                            </SelectUI>
                         </div>
                     </div>
                     <div className="grid gap-2">

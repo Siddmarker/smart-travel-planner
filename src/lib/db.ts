@@ -29,7 +29,22 @@ async function dbConnect() {
             bufferCommands: true, // Enable buffering for serverless stability
         };
 
-        cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
+        // Sanitize URI: Remove appName if empty or if it contains placeholders causing issues
+        let validUri = MONGODB_URI!;
+        try {
+            const uri = new URL(MONGODB_URI!);
+            const appName = uri.searchParams.get('appName');
+            if (appName === '' || appName === null || appName === undefined) {
+                console.log('Sanitizing MONGODB_URI: Removing empty appName');
+                uri.searchParams.delete('appName');
+                validUri = uri.toString();
+            }
+        } catch (error) {
+            console.error('Error validating MONGODB_URI format:', error);
+            // Fallback to original if parsing fails
+        }
+
+        cached.promise = mongoose.connect(validUri, opts).then((mongoose) => {
             return mongoose;
         });
     }

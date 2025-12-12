@@ -53,7 +53,11 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
             });
             const responseData = await res.json();
 
-            if (!res.ok) throw new Error(responseData.error || 'Failed to create trip');
+            if (!res.ok) {
+                const errorMessage = responseData.error || 'Failed to create trip';
+                const errorDetails = responseData.details ? ` (${Array.isArray(responseData.details) ? responseData.details.join(', ') : responseData.details})` : '';
+                throw new Error(errorMessage + errorDetails);
+            }
 
             const newTrip = responseData.trip;
             setCurrentTrip(newTrip);
