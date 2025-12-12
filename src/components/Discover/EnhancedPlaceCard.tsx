@@ -7,13 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Star, MapPin, Plus, Heart, Share2, TrendingUp, Clock, Phone, Utensils } from 'lucide-react';
 import { BookingPriceDisplay } from '../Booking/BookingPriceDisplay';
 
-interface EnhancedPlaceCardProps {
+export interface EnhancedPlaceCardProps {
     place: Place;
-    onAddToTrip?: (place: Place) => void;
     onSavePlace?: (place: Place) => void;
 }
 
-export function EnhancedPlaceCard({ place, onAddToTrip, onSavePlace }: EnhancedPlaceCardProps) {
+export function EnhancedPlaceCard({ place, onSavePlace }: EnhancedPlaceCardProps) {
     const getPriceLevelSymbol = (level: number) => '$'.repeat(level);
 
     const handleGetDirections = () => {
@@ -134,13 +133,7 @@ export function EnhancedPlaceCard({ place, onAddToTrip, onSavePlace }: EnhancedP
 
                     {/* Actions */}
                     <div className="flex gap-2 mt-auto pt-2 border-t border-slate-100 dark:border-slate-800">
-                        <Button
-                            className="flex-1 bg-slate-900 hover:bg-slate-800 text-white h-9 text-sm"
-                            onClick={() => onAddToTrip?.(place)}
-                        >
-                            <Plus className="h-3 w-3 mr-1.5" />
-                            Add to Plan
-                        </Button>
+
                         <Button
                             variant="outline"
                             className="flex-1 h-9 text-sm border-slate-200 hover:bg-slate-50"

@@ -26,17 +26,16 @@ export function FinalCTASection({ user }: FinalCTASectionProps) {
                     </p>
 
                     <div className="cta-features flex flex-wrap gap-3 mb-10">
-                        <div className="feature-pill bg-white px-6 py-3 rounded-full font-medium shadow-sm border border-gray-200 text-gray-700">🤖 AI-Powered Planning</div>
+                        <div className="feature-pill bg-white px-6 py-3 rounded-full font-medium shadow-sm border border-gray-200 text-gray-700">🔍 Smart Discovery</div>
                         <div className="feature-pill bg-white px-6 py-3 rounded-full font-medium shadow-sm border border-gray-200 text-gray-700">🌍 Global Coverage</div>
-                        <div className="feature-pill bg-white px-6 py-3 rounded-full font-medium shadow-sm border border-gray-200 text-gray-700">💰 Smart Budgeting</div>
-                        <div className="feature-pill bg-white px-6 py-3 rounded-full font-medium shadow-sm border border-gray-200 text-gray-700">👥 Collaboration</div>
+                        <div className="feature-pill bg-white px-6 py-3 rounded-full font-medium shadow-sm border border-gray-200 text-gray-700">⭐ Authentic Reviews</div>
                     </div>
 
                     <div className="cta-actions flex gap-4 mb-10">
                         {user ? (
-                            <Link href="/trips/new">
+                            <Link href="/discover">
                                 <button className="cta-btn-primary bg-gradient-to-r from-blue-600 to-purple-600 text-white px-10 py-4 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all">
-                                    🗺️ Plan New Trip
+                                    🌍 Start Discovering
                                 </button>
                             </Link>
                         ) : (

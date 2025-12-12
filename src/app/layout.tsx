@@ -4,7 +4,6 @@ import "./globals.css";
 import { LayoutContent } from "@/components/LayoutContent";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
-import { TripProvider } from "@/contexts/TripContext";
 import { Toaster } from "@/components/ui/toaster";
 
 const geistSans = Geist({
@@ -35,10 +34,8 @@ export default function RootLayout({
       >
         <AuthProvider>
           <CurrencyProvider>
-            <TripProvider>
-              <LayoutContent>{children}</LayoutContent>
-              <Toaster />
-            </TripProvider>
+            <LayoutContent>{children}</LayoutContent>
+            <Toaster />
           </CurrencyProvider>
         </AuthProvider>
       </body>

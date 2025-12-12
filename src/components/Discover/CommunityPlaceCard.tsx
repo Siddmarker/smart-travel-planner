@@ -5,12 +5,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Star, MapPin, ThumbsUp, User } from 'lucide-react';
 
-interface CommunityPlaceCardProps {
+export interface CommunityPlaceCardProps {
     place: CommunityPlace;
-    onAddToTrip?: (place: CommunityPlace) => void;
 }
 
-export function CommunityPlaceCard({ place, onAddToTrip }: CommunityPlaceCardProps) {
+export function CommunityPlaceCard({ place }: CommunityPlaceCardProps) {
     return (
         <Card className="overflow-hidden hover:shadow-md transition-shadow border-l-4 border-l-blue-500">
             <div className="flex flex-col sm:flex-row">
@@ -71,9 +70,6 @@ export function CommunityPlaceCard({ place, onAddToTrip }: CommunityPlaceCardPro
                         <div className="flex gap-2">
                             <Button variant="ghost" size="sm" className="h-8 px-2 text-xs">
                                 <ThumbsUp className="h-3 w-3 mr-1" /> {place.upvotes}
-                            </Button>
-                            <Button size="sm" className="h-8 text-xs" onClick={() => onAddToTrip?.(place)}>
-                                Add to Trip
                             </Button>
                         </div>
                     </div>

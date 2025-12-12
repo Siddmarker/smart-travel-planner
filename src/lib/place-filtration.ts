@@ -1,5 +1,5 @@
-import { Place, UserPreferences, FiltrationMetadata, FilteredEntity, CredibilityScore } from '@/types';
-import { calculateDistance } from './route-optimizer/distance-matrix';
+import { Place, FiltrationMetadata, FilteredEntity, CredibilityScore } from '@/types';
+
 
 // ==========================================
 // ADVANCED FAKE ENTITY FILTRATION PIPELINE
@@ -380,77 +380,6 @@ function isDestinationRelevant(place: Place, destination: string): boolean {
     // But we filter if it explicitly mentions a DIFFERENT city
 
     return true;
-}
-
-// ==========================================
-// ENHANCED FOOD PLACE VALIDATION
-// ==========================================
-
-export function applyEnhancedFoodFiltration(
-    foodPlaces: Place[],
-    userPreferences: UserPreferences
-): { filteredPlaces: Place[], metadata: FiltrationMetadata } {
-
-    const originalCount = foodPlaces.length;
-    const fakeEntities: FilteredEntity[] = [];
-
-    const filteredPlaces = foodPlaces.filter(place => {
-        // LAYER 1: BASIC FOOD PLACE VALIDATION
-        if (!isAuthenticRestaurant(place)) {
-            fakeEntities.push({
-                name: place.name,
-                filterReason: 'Not an authentic restaurant (home kitchen/tiffin)',
-                filterLayer: 'Food Authenticity'
-            });
-            return false;
-        }
-
-        // LAYER 2: QUALITY THRESHOLDS
-        if (!passesFoodQualityThresholds(place)) {
-            fakeEntities.push({
-                name: place.name,
-                filterReason: 'Low food quality metrics',
-                filterLayer: 'Food Quality'
-            });
-            return false;
-        }
-
-        // LAYER 3: FAKE RESTAURANT DETECTION
-        if (isPotentialFakeRestaurant(place)) {
-            fakeEntities.push({
-                name: place.name,
-                filterReason: 'Potential fake restaurant indicators',
-                filterLayer: 'Fake Restaurant Detection'
-            });
-            return false;
-        }
-
-        // LAYER 4: DIETARY VARIETY (for multi-day trips)
-        if (userPreferences.trip_duration > 1 && !hasDietaryVariety(place)) {
-            // We are less strict here, maybe just de-prioritize instead of filter
-            // But for "Enhanced" filtration, we can filter
-            // return false; 
-        }
-
-        return true;
-    });
-
-    return {
-        filteredPlaces,
-        metadata: {
-            originalCount,
-            filteredCount: filteredPlaces.length,
-            fakeEntities,
-            filtrationRate: originalCount > 0 ? ((originalCount - filteredPlaces.length) / originalCount) * 100 : 0,
-            layerResults: {
-                basicValidation: 0,
-                fakeEntityDetection: 0,
-                credibilityScoring: 0,
-                categoryValidation: 0,
-                destinationRelevance: 0
-            }
-        }
-    };
 }
 
 function isAuthenticRestaurant(place: Place): boolean {

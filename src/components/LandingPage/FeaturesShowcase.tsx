@@ -6,13 +6,6 @@ export function FeaturesShowcase() {
 
     const features = [
         {
-            icon: '🤖',
-            title: 'AI Trip Planning',
-            description: 'Get personalized itineraries crafted by our advanced AI based on your preferences, budget, and travel style.',
-            benefits: ['Smart daily schedules', 'Budget optimization', 'Personalized recommendations'],
-            color: '#3B82F6'
-        },
-        {
             icon: '🗺️',
             title: 'Smart Discovery',
             description: 'Find hidden gems and local favorites with our advanced filtering and community-driven insights.',
@@ -20,18 +13,11 @@ export function FeaturesShowcase() {
             color: '#10B981'
         },
         {
-            icon: '💰',
-            title: 'Budget Management',
-            description: 'Track expenses in any currency and get real-time budget updates with smart spending alerts.',
-            benefits: ['Multi-currency support', 'Expense tracking', 'Smart alerts'],
-            color: '#F59E0B'
-        },
-        {
-            icon: '👥',
-            title: 'Collaborative Planning',
-            description: 'Plan trips with friends and family in real-time with our collaborative itinerary builder.',
-            benefits: ['Real-time collaboration', 'Group voting', 'Shared expenses'],
-            color: '#8B5CF6'
+            icon: '🎯',
+            title: 'Personalized Recommendations',
+            description: 'Get tailored suggestions for places to visit based on your interests and style.',
+            benefits: ['Curated lists', 'Interest matching', 'Context aware'],
+            color: '#3B82F6'
         }
     ];
 
@@ -76,8 +62,8 @@ export function FeaturesShowcase() {
                             <div
                                 key={index}
                                 className={`p-6 rounded-xl cursor-pointer transition-all duration-300 flex items-start gap-4 ${index === currentFeature
-                                        ? 'bg-white shadow-lg scale-105'
-                                        : 'hover:bg-white hover:shadow-md'
+                                    ? 'bg-white shadow-lg scale-105'
+                                    : 'hover:bg-white hover:shadow-md'
                                     }`}
                                 onClick={() => setCurrentFeature(index)}
                                 style={{

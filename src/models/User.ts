@@ -19,11 +19,6 @@ export interface IUser extends Document {
             sms: boolean;
         };
     };
-    trips: {
-        tripId: mongoose.Types.ObjectId;
-        role: 'admin' | 'co-admin' | 'member';
-        joinedAt: Date;
-    }[];
     isActive: boolean;
     lastActive: Date;
     createdAt: Date;
@@ -88,21 +83,7 @@ const UserSchema = new Schema<IUser>({
             sms: { type: Boolean, default: false }
         }
     },
-    trips: [{
-        tripId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Trip'
-        },
-        role: {
-            type: String,
-            enum: ['admin', 'co-admin', 'member'],
-            default: 'member'
-        },
-        joinedAt: {
-            type: Date,
-            default: Date.now
-        }
-    }],
+
     isActive: {
         type: Boolean,
         default: true

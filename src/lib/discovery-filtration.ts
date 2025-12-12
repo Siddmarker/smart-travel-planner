@@ -1,4 +1,4 @@
-import { Place, DiscoveryFiltrationMetadata, FilteredEntity, UserPreferences } from '@/types';
+import { Place, DiscoveryFiltrationMetadata, FilteredEntity } from '@/types';
 import { calculateRealDistances } from './googleMapsService';
 
 // ==========================================

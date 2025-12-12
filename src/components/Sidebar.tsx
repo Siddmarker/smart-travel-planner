@@ -8,11 +8,9 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { CreateTripModal } from './CreateTripModal';
 
 const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'My Trips', href: '/trips', icon: Briefcase },
     { name: 'Discover', href: '/discover', icon: Compass },
     { name: 'Settings', href: '/settings', icon: Settings },
 ];
@@ -42,39 +40,24 @@ export function Sidebar() {
                     </div>
                 </Link>
             </div>
-
             <div className="px-4 mb-6">
-                <CreateTripModal>
-                    <Button className="w-full justify-start gap-2 bg-gradient-to-r from-[#FF5C69] to-[#FFD166] hover:from-[#ff4b59] hover:to-[#ffc84d] text-white shadow-md hover:shadow-lg transition-all duration-300" size="lg">
-                        <Plus className="h-5 w-5" />
-                        <span className="font-semibold">New Trip</span>
-                    </Button>
-                </CreateTripModal>
+                {/* Plan a Trip button removed */}
             </div>
 
-            <nav className="flex-1 space-y-2 px-3">
+            <nav className="flex-1 px-4 space-y-2">
                 {navigation.map((item) => {
-                    const Icon = item.icon;
                     const isActive = pathname === item.href;
-
                     return (
-                        <Link
-                            key={item.name}
-                            href={item.href}
-                            className={cn(
-                                'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 group relative overflow-hidden',
-                                isActive
-                                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 shadow-sm'
-                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-100'
-                            )}
-                        >
-                            {isActive && (
-                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600 rounded-r-full" />
-                            )}
-                            <Icon className={cn("h-5 w-5 transition-transform group-hover:scale-110", isActive ? "text-blue-600 dark:text-blue-400" : "text-slate-400 group-hover:text-slate-600")} />
-                            {item.name}
+                        <Link key={item.name} href={item.href}>
+                            <Button
+                                variant={isActive ? 'secondary' : 'ghost'}
+                                className={`w-full justify-start ${isActive ? 'bg-secondary text-secondary-foreground' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+                            >
+                                <item.icon className="mr-2 h-4 w-4" />
+                                {item.name}
+                            </Button>
                         </Link>
-                    );
+                    )
                 })}
             </nav>
 
@@ -100,6 +83,6 @@ export function Sidebar() {
                     Logout
                 </Button>
             </div>
-        </div>
+        </div >
     );
 }

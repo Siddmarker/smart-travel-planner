@@ -7,15 +7,14 @@ import { Star, MapPin, Plus, Heart, Share2 } from 'lucide-react';
 import { Place } from '@/types';
 import { EnhancedPlaceCard } from './EnhancedPlaceCard';
 
-interface PlaceListProps {
+export interface PlaceListProps {
     places: Place[];
-    onAddToTrip?: (place: Place) => void;
     onSavePlace?: (place: Place) => void;
     viewMode?: 'grid' | 'list';
     useEnhancedCard?: boolean;
 }
 
-export function PlaceList({ places, onAddToTrip, onSavePlace, viewMode = 'grid', useEnhancedCard = false }: PlaceListProps) {
+export function PlaceList({ places, onSavePlace, viewMode = 'grid', useEnhancedCard = false }: PlaceListProps) {
     const getPriceLevelSymbol = (level: number) => {
         return '$'.repeat(level);
     };
@@ -63,7 +62,7 @@ export function PlaceList({ places, onAddToTrip, onSavePlace, viewMode = 'grid',
                     <EnhancedPlaceCard
                         key={place.id}
                         place={place}
-                        onAddToTrip={onAddToTrip}
+
                         onSavePlace={onSavePlace}
                     />
                 ))}
@@ -137,14 +136,7 @@ export function PlaceList({ places, onAddToTrip, onSavePlace, viewMode = 'grid',
 
                         {/* Actions */}
                         <div className="flex gap-2">
-                            <Button
-                                className="flex-1"
-                                onClick={() => onAddToTrip?.(place)}
-                            >
-                                <Plus className="h-4 w-4 mr-2" />
-                                <span className="hidden sm:inline">Add to Trip</span>
-                                <span className="sm:hidden">Add</span>
-                            </Button>
+
                             <Button
                                 variant="outline"
                                 className="flex-1"

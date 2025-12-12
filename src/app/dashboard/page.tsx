@@ -5,15 +5,14 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useStore } from '@/store/useStore';
-import { Plus, Plane, MapPin, DollarSign, Calendar } from 'lucide-react';
-import { TripCard } from '@/components/TripCard';
+import { Compass, MapPin } from 'lucide-react';
 import { DestinationDisplay } from '@/components/Dashboard/DestinationDisplay';
 import Link from 'next/link';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { CurrencySettings } from '@/components/CurrencySettings';
 
 function DashboardContent() {
-    const { trips, currentUser } = useStore();
+    const { savedPlaces, currentUser } = useStore();
     const { user } = useAuth(); // Use auth context user as fallback or primary
     const { formatAmount } = useCurrency();
 
@@ -21,16 +20,12 @@ function DashboardContent() {
     const displayUser = currentUser || (user ? { name: user.name, email: user.email } : null);
 
     // Calculate stats
-    const totalTrips = trips.length;
-    const upcomingTrips = trips.filter(t => new Date(t.startDate) > new Date()).length;
-    const uniqueDestinations = new Set(trips.map(t => t.destination.name)).size;
-    const totalSpent = trips.reduce((sum, trip) => sum + trip.budget.spent, 0);
+    const totalSaved = savedPlaces.length;
+    const uniqueCategories = new Set(savedPlaces.map(p => p.category)).size;
 
     const stats = [
-        { label: 'Total Trips', value: totalTrips, icon: Plane, color: 'text-blue-600' },
-        { label: 'Upcoming', value: upcomingTrips, icon: Calendar, color: 'text-green-600' },
-        { label: 'Destinations', value: uniqueDestinations, icon: MapPin, color: 'text-purple-600' },
-        { label: 'Total Spent', value: formatAmount(totalSpent), icon: DollarSign, color: 'text-orange-600' },
+        { label: 'Saved Places', value: totalSaved, icon: MapPin, color: 'text-purple-600' },
+        { label: 'Categories', value: uniqueCategories, icon: Compass, color: 'text-blue-600' },
     ];
 
     return (
@@ -39,20 +34,20 @@ function DashboardContent() {
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Welcome back, {displayUser?.name || 'Traveler'}!</h1>
-                    <p className="text-muted-foreground mt-1">Plan your next adventure or discover new places</p>
+                    <p className="text-muted-foreground mt-1">Discover new places for your next adventure</p>
                 </div>
                 <div className="flex gap-2">
-                    <Link href="/trips/new">
+                    <Link href="/discover">
                         <Button size="lg">
-                            <Plus className="mr-2 h-5 w-5" />
-                            Plan New Trip
+                            <Compass className="mr-2 h-5 w-5" />
+                            Start Discovering
                         </Button>
                     </Link>
                 </div>
             </div>
 
             {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                 {stats.map((stat) => {
                     const Icon = stat.icon;
                     return (
@@ -72,23 +67,22 @@ function DashboardContent() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Trips Section */}
+                {/* Main Content Section */}
                 <div className="lg:col-span-2 space-y-6">
                     <div>
-                        <h2 className="text-2xl font-semibold mb-4">Your Trips</h2>
-                        {trips.length === 0 ? (
+                        <h2 className="text-2xl font-semibold mb-4">Saved Places</h2>
+                        {savedPlaces.length === 0 ? (
                             <div className="text-center py-12 border-2 border-dashed rounded-lg">
-                                <h3 className="text-lg font-semibold mb-2">No trips planned yet</h3>
-                                <p className="text-muted-foreground mb-4">Start planning your next adventure today!</p>
-                                <Link href="/trips/new">
-                                    <Button variant="outline">Create First Trip</Button>
+                                <h3 className="text-lg font-semibold mb-2">No places saved yet</h3>
+                                <p className="text-muted-foreground mb-4">Explore the world and save your favorite spots!</p>
+                                <Link href="/discover">
+                                    <Button variant="outline">Go to Discover</Button>
                                 </Link>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {trips.map((trip) => (
-                                    <TripCard key={trip.id} trip={trip} />
-                                ))}
+                                {/* Placeholder for Saved Places list - implementation can be added later if needed or reused PlaceCard */}
+                                <p className="text-muted-foreground">You have {savedPlaces.length} saved places.</p>
                             </div>
                         )}
                     </div>

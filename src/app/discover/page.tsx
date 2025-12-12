@@ -423,11 +423,7 @@ export default function DiscoverPage() {
         }
     };
 
-    const handleAddToTrip = (place: Place) => {
-        // TODO: Implement add to trip functionality
-        console.log('Add to trip:', place.name);
-        alert(`Added "${place.name}" to your trip!`);
-    };
+
 
     const handleSavePlace = (place: Place) => {
         // TODO: Implement save place functionality
@@ -547,7 +543,7 @@ export default function DiscoverPage() {
                                             <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Community Picks</h3>
                                             <div className="grid gap-4">
                                                 {communityPlaces.map(place => (
-                                                    <CommunityPlaceCard key={place.id} place={place} onAddToTrip={handleAddToTrip as any} />
+                                                    <CommunityPlaceCard key={place.id} place={place} />
                                                 ))}
                                             </div>
                                         </div>
@@ -555,7 +551,7 @@ export default function DiscoverPage() {
 
                                     <PlaceList
                                         places={selectedCategory ? filteredPlaces.slice(0, visibleCount) : trendingPlacesList}
-                                        onAddToTrip={handleAddToTrip}
+
                                         onSavePlace={handleSavePlace}
                                         useEnhancedCard={selectedCategory === 'food' || selectedCategory === 'restaurants'}
                                     />
@@ -591,7 +587,7 @@ export default function DiscoverPage() {
                             ) : (
                                 <PlaceList
                                     places={nearbyPlacesList}
-                                    onAddToTrip={handleAddToTrip}
+
                                     onSavePlace={handleSavePlace}
                                 />
                             )}
@@ -612,7 +608,7 @@ export default function DiscoverPage() {
                             ) : (
                                 <PlaceList
                                     places={hiddenGemsList}
-                                    onAddToTrip={handleAddToTrip}
+
                                     onSavePlace={handleSavePlace}
                                 />
                             )}

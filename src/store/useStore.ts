@@ -1,25 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Trip, User, UserProfile, Place } from '@/types';
+import { User, UserProfile, Place } from '@/types';
 import { validateCredentials, createUser, setAuthToken, clearAuthToken, getUserFromToken, mockGoogleLogin, findUserByEmail } from '@/lib/auth';
 
 interface AppState {
     currentUser: UserProfile | User | null;
-    currentTrip: Trip | null;
-    trips: Trip[];
     places: Place[];
     savedPlaces: Place[];
     isAuthenticated: boolean;
     setCurrentUser: (user: UserProfile | User) => void;
     updateCurrentUser: (updates: Partial<UserProfile>) => void;
-    setCurrentTrip: (trip: Trip) => void;
-    addTrip: (trip: Trip) => void;
-    updateTrip: (tripId: string, updates: Partial<Trip>) => void;
-    deleteTrip: (tripId: string) => void;
     addPlace: (place: Place) => void;
     savePlace: (place: Place) => void;
     removeSavedPlace: (placeId: string) => void;
-    addPlaceToTrip: (tripId: string, place: Place, dayIndex: number) => void;
     login: (email: string, password: string) => Promise<void>;
     signup: (name: string, email: string, password: string) => Promise<void>;
     loginWithGoogle: () => Promise<void>;
@@ -30,66 +23,7 @@ interface AppState {
 export const useStore = create<AppState>()(persist((set) => ({
     currentUser: null,
     isAuthenticated: false,
-    currentTrip: null,
     savedPlaces: [],
-    trips: [
-        {
-            id: 'trip-1',
-            name: 'Summer in Paris',
-            startDate: '2024-07-15',
-            endDate: '2024-07-22',
-            destination: {
-                name: 'Paris, France',
-                lat: 48.8566,
-                lng: 2.3522,
-            },
-            adminId: 'user-1',
-            joinCode: 'PARIS24',
-            planningMode: 'manual',
-            votingStatus: 'not_started',
-            includeDining: false,
-            participants: [
-                { userId: 'user-2', name: 'Sarah Smith', role: 'member', joinedAt: new Date().toISOString() }
-            ],
-            itinerary: {
-                source: 'manual',
-                days: []
-            },
-            totalDays: 7,
-            budget: {
-                currency: 'EUR',
-                total: 2000,
-                spent: 450
-            }
-        },
-        {
-            id: 'trip-2',
-            name: 'Tokyo Adventure',
-            startDate: '2024-10-01',
-            endDate: '2024-10-10',
-            destination: {
-                name: 'Tokyo, Japan',
-                lat: 35.6762,
-                lng: 139.6503,
-            },
-            adminId: 'user-1',
-            joinCode: 'TOKYO24',
-            planningMode: 'manual',
-            votingStatus: 'not_started',
-            includeDining: false,
-            participants: [],
-            itinerary: {
-                source: 'manual',
-                days: []
-            },
-            totalDays: 10,
-            budget: {
-                currency: 'JPY',
-                total: 300000,
-                spent: 0
-            }
-        }
-    ],
     places: [
         {
             id: 'place-1',
@@ -159,21 +93,6 @@ export const useStore = create<AppState>()(persist((set) => ({
     updateCurrentUser: (updates) => set((state) => ({
         currentUser: state.currentUser ? { ...state.currentUser, ...updates } as UserProfile : null
     })),
-    setCurrentTrip: (trip) => set({ currentTrip: trip }),
-    addTrip: (trip) => set((state) => ({ trips: [...state.trips, trip] })),
-    updateTrip: (tripId, updates) =>
-        set((state) => ({
-            trips: state.trips.map((t) => (t.id === tripId ? { ...t, ...updates } : t)),
-            currentTrip:
-                state.currentTrip?.id === tripId
-                    ? { ...state.currentTrip, ...updates }
-                    : state.currentTrip,
-        })),
-    deleteTrip: (tripId: string) =>
-        set((state) => ({
-            trips: state.trips.filter((t) => t.id !== tripId),
-            currentTrip: state.currentTrip?.id === tripId ? null : state.currentTrip,
-        })),
     addPlace: (place) => set((state) => ({
         places: [...state.places, place]
     })),
@@ -182,40 +101,6 @@ export const useStore = create<AppState>()(persist((set) => ({
     })),
     removeSavedPlace: (placeId) => set((state) => ({
         savedPlaces: state.savedPlaces.filter(p => p.id !== placeId)
-    })),
-    addPlaceToTrip: (tripId, place, dayIndex) => set((state) => ({
-        trips: state.trips.map(trip => {
-            if (trip.id === tripId) {
-                const updatedItinerary = trip.itinerary ? { ...trip.itinerary } : { source: 'manual' as const, days: [] };
-                const updatedDays = updatedItinerary.days ? [...updatedItinerary.days] : [];
-
-                // Ensure day exists
-                if (!updatedDays[dayIndex]) {
-                    updatedDays[dayIndex] = {
-                        id: crypto.randomUUID(),
-                        dayNumber: dayIndex + 1,
-                        date: new Date().toISOString(),
-                        planningMode: 'manual',
-                        status: 'partial',
-                        morning: [],
-                        afternoon: [],
-                        evening: [],
-                        items: []
-                    };
-                }
-
-                updatedDays[dayIndex].morning.push({
-                    ...place,
-                    timeSlot: 'morning',
-                    dayNumber: dayIndex + 1,
-                    addedAt: new Date()
-                });
-
-                updatedItinerary.days = updatedDays;
-                return { ...trip, itinerary: updatedItinerary };
-            }
-            return trip;
-        })
     })),
 
     // Authentication actions
@@ -301,11 +186,9 @@ export const useStore = create<AppState>()(persist((set) => ({
 }), {
     name: '2wards-storage',
     partialize: (state) => ({
-        trips: state.trips,
         places: state.places,
         savedPlaces: state.savedPlaces,
         currentUser: state.currentUser,
-        isAuthenticated: state.isAuthenticated,
-        currentTrip: state.currentTrip
+        isAuthenticated: state.isAuthenticated
     })
 }));
