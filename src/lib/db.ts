@@ -21,6 +21,7 @@ if (!cached) {
 
 async function dbConnect() {
     if (cached.conn) {
+        console.log('dbConnect: Using cached connection');
         return cached.conn;
     }
 
@@ -37,8 +38,19 @@ async function dbConnect() {
             if (appName === '' || appName === null || appName === undefined) {
                 console.log('Sanitizing MONGODB_URI: Removing empty appName');
                 uri.searchParams.delete('appName');
-                validUri = uri.toString();
             }
+
+            // Ensure database name is set
+            if (uri.pathname === '/' || uri.pathname === '') {
+                console.log('Sanitizing MONGODB_URI: Setting default database to "smart-travel"');
+                uri.pathname = '/smart-travel';
+            }
+
+            validUri = uri.toString();
+
+            // Log masked URI for debugging
+            const maskedUri = validUri.replace(/:([^:@]+)@/, ':****@');
+            console.log('dbConnect: Creating new connection with URI:', maskedUri);
 
         } catch (error) {
             console.error('Error validating MONGODB_URI format:', error);
@@ -46,6 +58,7 @@ async function dbConnect() {
         }
 
         cached.promise = mongoose.connect(validUri, opts).then((mongoose) => {
+            console.log('dbConnect: Connection established successfully');
             return mongoose;
         });
     }
@@ -54,6 +67,7 @@ async function dbConnect() {
         cached.conn = await cached.promise;
     } catch (e) {
         cached.promise = null;
+        console.error('dbConnect: Connection promise failed:', e);
         throw e;
     }
 
