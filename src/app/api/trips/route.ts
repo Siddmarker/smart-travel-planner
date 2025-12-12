@@ -53,7 +53,7 @@ export async function POST(request: Request) {
             },
             preferences: body.preferences || {},
             includeDining: body.includeDining || false,
-            adminId: body.adminId,
+            // adminId: body.adminId, // Removed: Not in schema
             participants: [{
                 userId: body.adminId,
                 name: body.adminName || 'Admin', // Should be fetched from user profile ideally
@@ -68,6 +68,11 @@ export async function POST(request: Request) {
             planningMode: body.planningMode || 'manual',
             votingStatus: 'not_started',
             categoryPreferences: body.categoryPreferences,
+            metadata: {
+                createdBy: body.adminId,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            }
         });
 
         // If AI mode, generate itinerary
