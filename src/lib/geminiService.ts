@@ -105,5 +105,36 @@ export const generateMultiDayItinerary = async (
   } catch (error) {
     console.error("Error generating itinerary:", error);
     return null;
+    return null;
   }
 };
+
+export async function getPlaceVibeCheck(
+  placeName: string,
+  locationContext?: string
+): Promise<{ summary: string; tags: string[]; isTouristTrap: boolean } | null> {
+  if (!API_KEY) return null;
+
+  const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+
+  const prompt = `
+    Analyze the vibe of "${placeName}" ${locationContext ? `in ${locationContext}` : ''}.
+    Return a STRICT JSON object with these keys:
+    - summary: Max 15 words "Real Talk" description (e.g., "Chaotic but authentic.").
+    - tags: Array of strings (e.g., ["#HiddenGem", "#TouristTrap"]).
+    - isTouristTrap: Boolean (true if it's a known tourist trap).
+    
+    Do not use markdown formatting. Just raw JSON.
+  `;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    const jsonStr = text.replace(/```json\n?|\n?```/g, "").trim();
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.error(`Error generating vibe check for ${placeName}:`, error);
+    return null;
+  }
+}

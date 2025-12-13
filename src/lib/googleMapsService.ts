@@ -157,6 +157,39 @@ export async function searchNearbyPlaces(
     type?: string
 ): Promise<Place[]> {
     try {
+        // Server-Side Implementation
+        if (typeof window === 'undefined') {
+            console.log('[GoogleMaps] Server-side nearby search');
+            if (!API_KEY) return [];
+
+            const typeStr = type ? `&type=${type}` : '';
+            const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location.lat},${location.lng}&radius=${radius}${typeStr}&key=${API_KEY}`;
+
+            const res = await fetch(url);
+            const data = await res.json();
+
+            if (data.status === 'OK' && data.results) {
+                return data.results.slice(0, 20).map((p: any) => ({
+                    id: p.place_id,
+                    name: p.name,
+                    category: 'attraction', // basic fallback
+                    lat: p.geometry.location.lat,
+                    lng: p.geometry.location.lng,
+                    rating: p.rating || 0,
+                    reviews: p.user_ratings_total || 0,
+                    priceLevel: p.price_level,
+                    image: p.photos?.[0]?.photo_reference
+                        ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${p.photos[0].photo_reference}&key=${API_KEY}`
+                        : undefined,
+                    description: p.vicinity,
+                    rawTypes: p.types
+                }));
+            }
+            console.warn('[GoogleMaps] Server nearby search failed:', data.status);
+            return [];
+        }
+
+        // Client-Side Implementation
         await initGoogleMaps();
 
         if (typeof window === 'undefined' || !window.google?.maps) {
@@ -520,4 +553,18 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
         console.error('Reverse geocoding failed:', error);
         return null;
     }
+}
+
+export function calculateCentroid(places: { lat: number; lng: number }[]): { lat: number; lng: number } {
+    if (places.length === 0) return { lat: 0, lng: 0 };
+
+    const total = places.reduce((acc, curr) => ({
+        lat: acc.lat + curr.lat,
+        lng: acc.lng + curr.lng
+    }), { lat: 0, lng: 0 });
+
+    return {
+        lat: total.lat / places.length,
+        lng: total.lng / places.length
+    };
 }

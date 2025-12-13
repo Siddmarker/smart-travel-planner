@@ -227,3 +227,104 @@ export interface CommunityPlace extends Place {
   verified: boolean;
   tags: string[];
 }
+
+// --- AI-Powered Planner Interfaces ---
+
+export type TripState = 'DRAFT' | 'ACTIVE' | 'COMPLETED';
+export type DayState = 'PENDING' | 'VOTING' | 'LOCKED' | 'LIVE';
+
+export interface ISettings {
+  returnToStart: boolean;
+  budget?: 'budget' | 'moderate' | 'luxury';
+  pace?: 'relaxed' | 'moderate' | 'fast';
+}
+
+export interface PlaceCandidate {
+  id: string; // Internal DB ID (or Google Place ID if used as primary)
+  googlePlaceId: string;
+  name: string;
+  location: { lat: number; lng: number };
+  photos: string[];
+  rating: number;
+
+  // The "Route-Aware" Intelligence
+  clusterSlot: 'morning' | 'afternoon' | 'evening';
+  parentClusterId: string | null;
+
+  // The "Gemini" Intelligence
+  aiVibeCheck: {
+    summary: string;
+    tags: string[];
+    isTouristTrap: boolean;
+  };
+
+  // Voting State
+  votes: { userId: string; vote: 'up' | 'down' }[];
+
+  // Keeping compatible fields from legacy Place if needed, or mapping them
+  category?: string;
+  priceLevel?: number;
+  image?: string; // mapped from photos[0]
+}
+
+export interface DayItinerary {
+  id: string;
+  tripId: string;
+  date: string; // ISO Date
+  dayIndex: number; // Keeping for logic
+  status: 'PENDING' | 'VOTING' | 'LOCKED' | 'LIVE';
+
+  // Step 1: Voting Phase
+  votingPool: {
+    morning: PlaceCandidate[];
+    afternoon: PlaceCandidate[];
+    evening: PlaceCandidate[];
+  };
+
+  // Step 2: Finalized Route
+  finalRoute?: {
+    stops: PlaceCandidate[];
+    transport: {
+      mode: 'driving' | 'transit';
+      duration: string;
+      polyline: string;
+    }[];
+    returnTrip?: {
+      feasible: boolean;
+      duration: string;
+      warning?: string;
+    };
+  };
+}
+
+// Alias for compatibility with rest of app (Trip model uses IDay)
+export type IDay = DayItinerary;
+
+export interface ITripMember {
+  userId: string;
+  role: 'admin' | 'member';
+  joinedAt: Date;
+}
+
+export interface ITrip {
+  id: string;
+  adminId: string;
+  name: string;
+  destination: {
+    name: string;
+    location: { lat: number; lng: number };
+    placeId?: string;
+  };
+  dates: {
+    start: string;
+    end: string;
+  };
+  pax: number;
+  tripType: 'friends' | 'family' | 'couple' | 'solo' | 'business';
+  categories: string[];
+  members: ITripMember[];
+  tripState: TripState;
+  settings: ISettings;
+  days: IDay[] | string[]; // Populated or IDs
+  inviteCode?: string;
+}
