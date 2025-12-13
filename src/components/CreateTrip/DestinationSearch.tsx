@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { MapPin, Loader2, Locate } from 'lucide-react';
-import { useDebounce } from '@/hooks/use-debounce';
-import { reverseGeocode } from '@/lib/googleMapsService';
+import { searchPlaces, reverseGeocode } from '@/lib/googleMapsService'; // Import searchPlaces
 import { Button } from '@/components/ui/button';
 
 interface PlaceResult {
@@ -32,21 +31,18 @@ export function DestinationSearch({ onSelect, defaultValue = '' }: DestinationSe
             if (query.length > 2 && isOpen) {
                 setLoading(true);
                 try {
-                    const res = await fetch(`/api/maps/search?query=${encodeURIComponent(query)}`);
-                    if (res.ok) {
-                        const data = await res.json();
-                        console.log('Search API response:', data); // Debug log
-                        // Map API response (Place[]) to local PlaceResult interface
-                        const mappedResults = (data.results || []).map((p: any) => ({
-                            placeId: p.id,
-                            name: p.name,
-                            location: { lat: p.lat, lng: p.lng },
-                            formatted_address: p.description || p.vicinity
-                        }));
-                        setResults(mappedResults);
-                    } else {
-                        console.error('Search API failed:', await res.text());
-                    }
+                    // Use client-side search directly to utilize browser Referer headers
+                    const places = await searchPlaces(query);
+                    console.log('Client-side Search Results:', places);
+
+                    const mappedResults = places.map((p) => ({
+                        placeId: p.id,
+                        name: p.name,
+                        location: { lat: p.lat, lng: p.lng },
+                        formatted_address: p.description
+                    }));
+                    setResults(mappedResults);
+
                 } catch (error) {
                     console.error('Search failed', error);
                 } finally {
