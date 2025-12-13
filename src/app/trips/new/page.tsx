@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { DestinationSearch } from '@/components/CreateTrip/DestinationSearch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -77,10 +78,11 @@ export default function NewTripPage() {
 
                         <div className="space-y-2">
                             <Label htmlFor="destination">Destination</Label>
-                            <Input
-                                id="destination" name="destination"
-                                placeholder="Where to?"
-                                value={formData.destination} onChange={handleChange} required
+                            <DestinationSearch
+                                onSelect={(place) => {
+                                    setFormData(prev => ({ ...prev, destination: place.name }));
+                                    // You might want to store the full place object in state too
+                                }}
                             />
                         </div>
 

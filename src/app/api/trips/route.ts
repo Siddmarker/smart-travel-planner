@@ -8,7 +8,10 @@ import Trip from "@/models/Trip";
 export async function POST(req: Request) {
     try {
         const session = await getServerSession(authOptions);
+        console.log("Debug Trip Create Session:", JSON.stringify(session, null, 2));
+
         if (!session || !session.user || !session.user.id) {
+            console.log("Debug Trip Create Unauthorized: Missing session or user ID");
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
