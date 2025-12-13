@@ -50,7 +50,7 @@ export interface Currency {
 export interface Place {
   id: string;
   name: string;
-  category: 'food' | 'attraction' | 'hotel' | 'stay' | 'activity' | 'nature' | 'hiking' | 'shopping' | 'nightlife' | 'culture';
+  category: 'food' | 'attraction' | 'hotel' | 'stay' | 'activity' | 'nature' | 'hiking' | 'shopping' | 'nightlife' | 'culture' | 'Off-Roading';
   lat: number;
   lng: number;
   rating: number;
@@ -88,6 +88,12 @@ export interface Place {
     platform?: 'Instagram' | 'TikTok' | 'YouTube';
   };
   tags?: string[]; // e.g., 'Rooftop', 'Live Music', 'Pet-Friendly'
+
+  // Off-Roading Specific Fields
+  difficultyLevel?: 'Easy' | 'Intermediate' | 'Hard' | 'Expert';
+  bikeSuitability?: string[]; // e.g. 'Adventure', 'Enduro', 'Scrambler'
+  terrainDescription?: string;
+  hazards?: string[];
 
 }
 

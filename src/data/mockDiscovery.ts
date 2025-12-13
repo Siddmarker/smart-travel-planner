@@ -16,6 +16,7 @@ export const discoveryCategories: DiscoveryCategory[] = [
     { id: 'shopping', name: 'Shopping', icon: '🛍️' },
     { id: 'nightlife', name: 'Nightlife', icon: '🌃' },
     { id: 'culture', name: 'Culture', icon: '🎭' },
+    { id: 'off-roading', name: 'Off-Roading', icon: '🏍️' },
 ];
 
 export const trendingPlaces: Place[] = [

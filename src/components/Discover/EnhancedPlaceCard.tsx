@@ -4,7 +4,7 @@ import { Place } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Star, MapPin, Plus, Heart, Share2, TrendingUp, Clock, Phone, Utensils } from 'lucide-react';
+import { Star, MapPin, Plus, Heart, Share2, TrendingUp, Clock, Phone, Utensils, Mountain, AlertTriangle } from 'lucide-react';
 import { BookingPriceDisplay } from '../Booking/BookingPriceDisplay';
 
 export interface EnhancedPlaceCardProps {
@@ -110,6 +110,55 @@ export function EnhancedPlaceCard({ place, onSavePlace }: EnhancedPlaceCardProps
                                     <span>{place.popularDish.name}</span>
                                     <span className="opacity-70">(₹{place.popularDish.price})</span>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Off-Roading Specific UI */}
+                        {place.category === 'Off-Roading' && (
+                            <div className="mb-3 space-y-2">
+                                {/* Difficulty Badge */}
+                                <div className="flex items-center justify-between">
+                                    <Badge className={`
+                                        ${place.difficultyLevel === 'Easy' ? 'bg-green-100 text-green-800' : ''}
+                                        ${place.difficultyLevel === 'Intermediate' ? 'bg-yellow-100 text-yellow-800' : ''}
+                                        ${place.difficultyLevel === 'Hard' ? 'bg-orange-100 text-orange-800' : ''}
+                                        ${place.difficultyLevel === 'Expert' ? 'bg-red-100 text-red-800' : ''}
+                                        border-none text-xs font-bold px-2 py-0.5
+                                    `}>
+                                        <Mountain className="h-3 w-3 mr-1" />
+                                        {place.difficultyLevel || 'Unknown Difficulty'}
+                                    </Badge>
+                                </div>
+
+                                {/* Terrain Description */}
+                                {place.terrainDescription && (
+                                    <p className="text-xs text-slate-600 dark:text-slate-300 italic">
+                                        "{place.terrainDescription}"
+                                    </p>
+                                )}
+
+                                {/* Bike Suitability */}
+                                {place.bikeSuitability && place.bikeSuitability.length > 0 && (
+                                    <div className="flex flex-wrap gap-1">
+                                        {place.bikeSuitability.map(bike => (
+                                            <span key={bike} className="text-[10px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-slate-600 border border-slate-200">
+                                                🏍️ {bike}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Hazards */}
+                                {place.hazards && place.hazards.length > 0 && (
+                                    <div className="flex gap-1 overflow-x-auto pb-1">
+                                        {place.hazards.map(hazard => (
+                                            <Badge key={hazard} variant="outline" className="text-[10px] text-red-600 border-red-200 bg-red-50 whitespace-nowrap">
+                                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                                {hazard}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
 

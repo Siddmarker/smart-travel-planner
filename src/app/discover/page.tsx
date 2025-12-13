@@ -12,10 +12,11 @@ import { PlaceSubmissionModal } from '@/components/Submission/PlaceSubmissionMod
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Place, DiscoveryFiltrationMetadata, CommunityPlace } from '@/types';
 import { TrendingUp, MapPin, Sparkles, PlusCircle } from 'lucide-react';
-import { searchPlaces, searchNearbyPlaces, mapCategoryToGoogleType, searchHiddenGems, searchHikingPlaces, enhancePlacesWithPhotosAndDistance } from '@/lib/googleMapsService';
 import { applyDiscoveryFiltrationPipeline, enhanceDiscoveryPlaces } from '@/lib/discovery-filtration';
 import { smartCategoryFilter } from '@/lib/categoryUtils';
 import { SubmissionService } from '@/lib/submission-service';
+import { analyzeOffRoadTerrain } from '@/services/offRoadAI';
+import { searchPlaces, searchNearbyPlaces, mapCategoryToGoogleType, searchHiddenGems, searchHikingPlaces, searchOffRoadPlaces, enhancePlacesWithPhotosAndDistance } from '@/lib/googleMapsService';
 import { Button } from '@/components/ui/button';
 import { SocialTrends } from '@/components/Discover/SocialTrends';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -190,6 +191,27 @@ export default function DiscoverPage() {
             if (categoryId === 'hiking') {
                 // Use strict hiking search
                 results = await searchHikingPlaces(currentLocationName, locationCoords || undefined, currentRadius);
+            } else if (categoryId === 'off-roading') {
+                // Specialized Off-Roading Logic
+                console.log('Fetching Off-Roading places...');
+                results = await searchOffRoadPlaces(currentLocationName, locationCoords || undefined, currentRadius);
+
+                // Enhance top 10 results with AI Analysis
+                const placesToAnalyze = results.slice(0, 10);
+                const analyzedPlaces = await Promise.all(placesToAnalyze.map(async (place) => {
+                    const analysis = await analyzeOffRoadTerrain(place.name, place.description, []);
+                    return {
+                        ...place,
+                        difficultyLevel: analysis?.difficultyLevel || 'Intermediate',
+                        bikeSuitability: analysis?.bikeSuitability || [],
+                        terrainDescription: analysis?.terrainDescription,
+                        hazards: analysis?.hazards || []
+                    };
+                }));
+
+                // Merge analyzed places back into results
+                results = [...analyzedPlaces, ...results.slice(10)];
+
             } else {
                 // Standard search for other categories
                 if (locationCoords) {

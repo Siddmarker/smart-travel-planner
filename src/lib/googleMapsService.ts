@@ -530,6 +530,49 @@ export async function searchHikingPlaces(
     }
 }
 
+export async function searchOffRoadPlaces(
+    locationName: string,
+    coords?: { lat: number; lng: number },
+    radius: number = 20000 // Larger radius for off-roading
+): Promise<Place[]> {
+    try {
+        const queries = [
+            `off-road trails near ${locationName}`,
+            `dirt bike tracks near ${locationName}`,
+            `motocross track near ${locationName}`,
+            `forest service roads near ${locationName}`,
+            `4x4 trails near ${locationName}`,
+            `Enduro trails near ${locationName}`
+        ];
+
+        // Search for natural features, parks, or points of interest
+        const promises = queries.map(query =>
+            searchPlaces(query, coords, radius)
+        );
+
+        const results = await Promise.all(promises);
+
+        let allPlaces: Place[] = [];
+        results.forEach(places => {
+            allPlaces = [...allPlaces, ...places];
+        });
+
+        // Deduplicate by name + lat (approx)
+        const uniquePlaces = Array.from(new Map(allPlaces.map(item => [item.name + item.lat.toFixed(4), item])).values());
+
+        // Basic client-side filtering to remove obvious non-offroad places if needed
+        // For now, return all unique results
+        return uniquePlaces.map(p => ({
+            ...p,
+            category: 'Off-Roading' // Explicitly set category
+        }));
+
+    } catch (error) {
+        console.error('Error searching off-road places:', error);
+        return [];
+    }
+}
+
 function calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
