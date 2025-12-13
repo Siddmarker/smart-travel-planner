@@ -9,7 +9,7 @@ import mongoose from "mongoose";
 
 export async function POST(
     req: Request,
-    { params }: { params: { id: string } } // Day ID
+    { params }: { params: Promise<{ id: string }> } // Day ID
 ) {
     try {
         const session = await getServerSession(authOptions);

@@ -4,8 +4,9 @@ import { TripLogicService } from '../lib/trip-logic'; // Adjust path
 import Trip from '../models/Trip';
 import Day from '../models/Day';
 import User from '../models/User';
-import dotenv from 'dotenv';
-import path from 'path';
+const dotenv = require('dotenv');
+// import path from 'path'; // path is likely used, keep if needed or use require
+const path = require('path');
 
 // Load env
 dotenv.config({ path: path.resolve(__dirname, '../../.env.local') });

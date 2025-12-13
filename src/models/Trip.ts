@@ -1,13 +1,19 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import { ITrip, TripState } from '@/types';
 
-export interface ITripDocument extends Document, Omit<ITrip, 'id' | 'days'> {
+export interface ITripDocument extends Document, Omit<ITrip, 'id' | 'days' | 'adminId' | 'members'> {
+    adminId: mongoose.Types.ObjectId;
     days: mongoose.Types.ObjectId[];
+    members: {
+        userId: mongoose.Types.ObjectId;
+        role: 'admin' | 'member';
+        joinedAt: Date;
+    }[];
 }
 
 const TripSchema = new Schema<ITripDocument>({
     adminId: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: Schema.Types.ObjectId as any,
         ref: 'User',
         required: true
     },
@@ -70,6 +76,6 @@ const TripSchema = new Schema<ITripDocument>({
     toObject: { virtuals: true }
 });
 
-const Trip: Model<ITripDocument> = mongoose.models.Trip || mongoose.model<ITripDocument>('Trip', TripSchema);
+const Trip: Model<ITripDocument> = mongoose.models.Trip || mongoose.model<ITripDocument>('Trip', TripSchema as any);
 
 export default Trip;

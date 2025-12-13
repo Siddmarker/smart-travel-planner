@@ -48,7 +48,7 @@ const TransportSchema = new Schema({
 
 const DaySchema = new Schema<IDay & Document>({
     tripId: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: Schema.Types.ObjectId as any,
         ref: 'Trip',
         required: true
     },
@@ -90,6 +90,21 @@ const DaySchema = new Schema<IDay & Document>({
 // Compound index for unique day per trip
 DaySchema.index({ tripId: 1, dayIndex: 1 }, { unique: true });
 
-const Day: Model<IDay & Document> = mongoose.models.Day || mongoose.model<IDay & Document>('Day', DaySchema);
+export interface IDayDocument extends Document, Omit<IDay, 'id' | 'tripId'> {
+    tripId: mongoose.Types.ObjectId;
+    status: 'PENDING' | 'VOTING' | 'LOCKED' | 'LIVE';
+    votingPool: {
+        morning: PlaceCandidate[];
+        afternoon: PlaceCandidate[];
+        evening: PlaceCandidate[];
+    };
+    finalRoute?: {
+        stops: PlaceCandidate[];
+        transport: any[];
+    };
+    markModified(path: string): void;
+}
+
+const Day: Model<IDayDocument> = mongoose.models.Day || mongoose.model<IDayDocument>('Day', DaySchema as any);
 
 export default Day;
