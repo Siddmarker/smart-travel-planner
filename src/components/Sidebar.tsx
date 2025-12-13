@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'My Trips', href: '/trips', icon: Briefcase },
     { name: 'Discover', href: '/discover', icon: Compass },
     { name: 'Settings', href: '/settings', icon: Settings },
 ];
@@ -41,7 +42,12 @@ export function Sidebar() {
                 </Link>
             </div>
             <div className="px-4 mb-6">
-                {/* Plan a Trip button removed */}
+                <Link href="/trips">
+                    <Button className="w-full justify-start gap-2 shadow-sm font-semibold text-white bg-gradient-to-r from-primary to-blue-600 hover:from-blue-700 hover:to-blue-800 transition-all border-0">
+                        <Plus className="h-4 w-4" />
+                        Plan a Trip
+                    </Button>
+                </Link>
             </div>
 
             <nav className="flex-1 px-4 space-y-2">
