@@ -35,6 +35,7 @@ export function DestinationSearch({ onSelect, defaultValue = '' }: DestinationSe
                     const res = await fetch(`/api/maps/search?query=${encodeURIComponent(query)}`);
                     if (res.ok) {
                         const data = await res.json();
+                        console.log('Search API response:', data); // Debug log
                         // Map API response (Place[]) to local PlaceResult interface
                         const mappedResults = (data.results || []).map((p: any) => ({
                             placeId: p.id,
@@ -43,6 +44,8 @@ export function DestinationSearch({ onSelect, defaultValue = '' }: DestinationSe
                             formatted_address: p.description || p.vicinity
                         }));
                         setResults(mappedResults);
+                    } else {
+                        console.error('Search API failed:', await res.text());
                     }
                 } catch (error) {
                     console.error('Search failed', error);
@@ -99,6 +102,7 @@ export function DestinationSearch({ onSelect, defaultValue = '' }: DestinationSe
                     location: { lat: latitude, lng: longitude },
                     placeId: "current-location"
                 });
+                setIsOpen(false); // Close dropdown if open
             } catch (error) {
                 console.error('Error getting location name:', error);
                 // Fallback
@@ -147,25 +151,31 @@ export function DestinationSearch({ onSelect, defaultValue = '' }: DestinationSe
                 </Button>
             </div>
 
-            {isOpen && results.length > 0 && (
-                <ul className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto dark:bg-slate-950 dark:border-slate-800">
-                    {results.map((place) => (
-                        <li
-                            key={place.placeId}
-                            className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center gap-3 dark:hover:bg-slate-800"
-                            onClick={() => handleSelect(place)}
-                        >
-                            <div className="bg-blue-100 p-2 rounded-full dark:bg-blue-900/30">
-                                <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div>
-                                <p className="font-medium text-sm">{place.name}</p>
-                                <p className="text-xs text-gray-500 truncate dark:text-gray-400">
-                                    {place.formatted_address || "Destination"}
-                                </p>
-                            </div>
+            {isOpen && query.length > 2 && (
+                <ul className="absolute z-[100] w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto dark:bg-slate-950 dark:border-slate-800">
+                    {results.length > 0 ? (
+                        results.map((place) => (
+                            <li
+                                key={place.placeId}
+                                className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center gap-3 dark:hover:bg-slate-800"
+                                onClick={() => handleSelect(place)}
+                            >
+                                <div className="bg-blue-100 p-2 rounded-full dark:bg-blue-900/30">
+                                    <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                </div>
+                                <div>
+                                    <p className="font-medium text-sm">{place.name}</p>
+                                    <p className="text-xs text-gray-500 truncate dark:text-gray-400">
+                                        {place.formatted_address || "Destination"}
+                                    </p>
+                                </div>
+                            </li>
+                        ))
+                    ) : (
+                        <li className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+                            {loading ? "Searching..." : "No results found"}
                         </li>
-                    ))}
+                    )}
                 </ul>
             )}
         </div>
