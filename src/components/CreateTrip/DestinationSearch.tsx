@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
-import { MapPin, Loader2 } from 'lucide-react';
-import { useDebounce } from '@/hooks/use-debounce'; // Assuming this exists or I'll implement a simple one
+import { MapPin, Loader2, Locate } from 'lucide-react';
+import { useDebounce } from '@/hooks/use-debounce';
+import { reverseGeocode } from '@/lib/googleMapsService';
+import { Button } from '@/components/ui/button';
 
 interface PlaceResult {
     placeId: string;
@@ -33,7 +35,14 @@ export function DestinationSearch({ onSelect, defaultValue = '' }: DestinationSe
                     const res = await fetch(`/api/maps/search?query=${encodeURIComponent(query)}`);
                     if (res.ok) {
                         const data = await res.json();
-                        setResults(data.places || []);
+                        // Map API response (Place[]) to local PlaceResult interface
+                        const mappedResults = (data.results || []).map((p: any) => ({
+                            placeId: p.id,
+                            name: p.name,
+                            location: { lat: p.lat, lng: p.lng },
+                            formatted_address: p.description || p.vicinity
+                        }));
+                        setResults(mappedResults);
                     }
                 } catch (error) {
                     console.error('Search failed', error);
@@ -69,22 +78,73 @@ export function DestinationSearch({ onSelect, defaultValue = '' }: DestinationSe
         });
     };
 
+    const handleCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            alert('Geolocation is not supported by your browser');
+            return;
+        }
+
+        setLoading(true);
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const { latitude, longitude } = position.coords;
+
+            try {
+                // Try to get a nice address name
+                const address = await reverseGeocode(latitude, longitude);
+                const name = address || "Current Location";
+
+                setQuery(name);
+                onSelect({
+                    name: name,
+                    location: { lat: latitude, lng: longitude },
+                    placeId: "current-location"
+                });
+            } catch (error) {
+                console.error('Error getting location name:', error);
+                // Fallback
+                setQuery("Current Location");
+                onSelect({
+                    name: "Current Location",
+                    location: { lat: latitude, lng: longitude },
+                    placeId: "current-location"
+                });
+            } finally {
+                setLoading(false);
+            }
+        }, (error) => {
+            console.error('Error getting location:', error);
+            setLoading(false);
+            alert('Unable to retrieve your location. Please check your permissions.');
+        });
+    };
+
     return (
         <div className="relative" ref={containerRef}>
-            <div className="relative">
-                <Input
-                    value={query}
-                    onChange={(e) => {
-                        setQuery(e.target.value);
-                        setIsOpen(true);
-                    }}
-                    placeholder="Search destination (e.g. Paris, Tokyo)"
-                    className="pl-10"
-                />
-                <MapPin className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                {loading && (
-                    <Loader2 className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 animate-spin" />
-                )}
+            <div className="relative flex gap-2">
+                <div className="relative flex-1">
+                    <Input
+                        value={query}
+                        onChange={(e) => {
+                            setQuery(e.target.value);
+                            setIsOpen(true);
+                        }}
+                        placeholder="Search destination (e.g. Paris, Tokyo)"
+                        className="pl-10"
+                    />
+                    <MapPin className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                    {loading && (
+                        <Loader2 className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 animate-spin" />
+                    )}
+                </div>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={handleCurrentLocation}
+                    title="Use my current location"
+                >
+                    <Locate className="h-4 w-4" />
+                </Button>
             </div>
 
             {isOpen && results.length > 0 && (
