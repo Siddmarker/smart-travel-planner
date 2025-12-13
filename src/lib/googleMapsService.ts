@@ -106,9 +106,46 @@ export async function searchPlaces(
     type?: string
 ): Promise<Place[]> {
     try {
+        // Server-Side Implementation
+        if (typeof window === 'undefined') {
+            const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || ''; // Ensure we get the key
+            if (!API_KEY) {
+                console.error('[GoogleMaps] API key not found for server-side search');
+                return [];
+            }
+
+            const locationStr = location ? `&location=${location.lat},${location.lng}&radius=${radius}` : '';
+            const typeStr = type ? `&type=${type}` : '';
+            const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}${locationStr}${typeStr}&key=${API_KEY}`;
+
+            const res = await fetch(url);
+            const data = await res.json();
+
+            if (data.status === 'OK' && data.results) {
+                return data.results.slice(0, 20).map((p: any) => ({
+                    id: p.place_id,
+                    name: p.name,
+                    category: 'attraction',
+                    lat: p.geometry.location.lat,
+                    lng: p.geometry.location.lng,
+                    rating: p.rating || 0,
+                    reviews: p.user_ratings_total || 0,
+                    priceLevel: p.price_level,
+                    image: p.photos?.[0]?.photo_reference
+                        ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${p.photos[0].photo_reference}&key=${API_KEY}`
+                        : undefined,
+                    description: p.formatted_address,
+                    rawTypes: p.types
+                }));
+            }
+            console.warn('[GoogleMaps] Server text search failed:', data.status);
+            return [];
+        }
+
+        // Client-Side Implementation
         await initGoogleMaps();
 
-        if (typeof window === 'undefined' || !window.google?.maps) {
+        if (!window.google?.maps) {
             console.error('[GoogleMaps] API not available for searchPlaces');
             return [];
         }
@@ -123,10 +160,10 @@ export async function searchPlaces(
                 type: type as any,
             };
 
-            console.log(`[GoogleMaps] Executing Text Search: "${query}"`, request);
+            // console.log(`[GoogleMaps] Executing Text Search: "${query}"`, request);
 
             service.textSearch(request, (results, status) => {
-                console.log(`[GoogleMaps] Search query: "${query}", Status: ${status}, Results: ${results?.length}`);
+                // console.log(`[GoogleMaps] Search query: "${query}", Status: ${status}, Results: ${results?.length}`);
                 if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
                     const places = results.slice(0, 20).map(convertGooglePlaceToPlace);
                     resolve(places);

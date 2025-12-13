@@ -8,14 +8,14 @@ export async function GET(request: Request) {
     const lng = searchParams.get('lng');
     const type = searchParams.get('type') || 'tourist_attraction';
 
-    if (!query || !lat || !lng) {
-        return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+    if (!query) {
+        return NextResponse.json({ error: 'Missing query parameter' }, { status: 400 });
     }
 
     try {
         const results = await searchPlaces(
             query,
-            { lat: parseFloat(lat), lng: parseFloat(lng) },
+            (lat && lng) ? { lat: parseFloat(lat as string), lng: parseFloat(lng as string) } : undefined,
             5000,
             type
         );
