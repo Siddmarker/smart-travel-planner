@@ -16,7 +16,7 @@ export default function NewTripPage() {
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
-        destination: '',
+        destination: null as any, // Holds full place object
         startDate: '',
         endDate: '',
         budget: 1000
@@ -31,16 +31,32 @@ export default function NewTripPage() {
         e.preventDefault();
         setLoading(true);
 
+        // Validation
+        if (!formData.destination || !formData.destination.location) {
+            toast({ title: "Validation Error", description: "Please select a valid destination from the list.", variant: "destructive" });
+            setLoading(false);
+            return;
+        }
+
         try {
+            const payload = {
+                name: formData.name,
+                destination: {
+                    name: formData.destination.name,
+                    location: formData.destination.location,
+                    placeId: formData.destination.placeId
+                },
+                dates: { start: formData.startDate, end: formData.endDate },
+                settings: { budget: Number(formData.budget) },
+                // Defaults required by schema
+                pax: 1,
+                tripType: 'friends'
+            };
+
             const res = await fetch('/api/trips', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: formData.name,
-                    destination: { name: formData.destination }, // Simple object for now
-                    dates: { start: formData.startDate, end: formData.endDate },
-                    settings: { budget: Number(formData.budget) }
-                })
+                body: JSON.stringify(payload)
             });
 
             if (res.ok) {
@@ -49,7 +65,8 @@ export default function NewTripPage() {
                 router.push(`/trips/${data.trip._id}`);
             } else {
                 const error = await res.json();
-                toast({ title: "Failed to create trip", description: error.error, variant: "destructive" });
+                console.error("Create Trip Error:", error);
+                toast({ title: "Failed to create trip", description: error.details || error.error || "Unknown error", variant: "destructive" });
             }
         } catch (error) {
             console.error(error);
@@ -80,8 +97,7 @@ export default function NewTripPage() {
                             <Label htmlFor="destination">Destination</Label>
                             <DestinationSearch
                                 onSelect={(place) => {
-                                    setFormData(prev => ({ ...prev, destination: place.name }));
-                                    // You might want to store the full place object in state too
+                                    setFormData(prev => ({ ...prev, destination: place }));
                                 }}
                             />
                         </div>

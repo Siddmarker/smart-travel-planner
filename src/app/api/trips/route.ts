@@ -15,7 +15,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { name, destination, dates, settings } = await req.json();
+        const { name, destination, dates, settings, pax, tripType } = await req.json();
 
         if (!name || !destination || !dates) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -24,20 +24,27 @@ export async function POST(req: Request) {
         await dbConnect();
 
         const trip = await Trip.create({
-            adminId: session.user.id, // Auth User ID
+            adminId: session.user.id,
             name,
             destination,
             dates,
             settings: settings || {},
-            status: 'DRAFT', // Default state
-            members: [{ userId: session.user.id, role: 'admin' }]
+            tripState: 'DRAFT', // Correct field name per schema
+            members: [{ userId: session.user.id, role: 'admin' }],
+            pax: pax || 1,
+            tripType: tripType || 'friends'
         });
 
         return NextResponse.json({ success: true, trip }, { status: 201 });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error creating trip:", error);
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+        // Return more detailed validation errors if available
+        const errorMessage = error.name === 'ValidationError'
+            ? Object.values(error.errors).map((e: any) => e.message).join(', ')
+            : "Internal Server Error";
+
+        return NextResponse.json({ error: "Failed to create trip", details: errorMessage }, { status: 500 });
     }
 }
 
