@@ -635,6 +635,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
     }
 }
 
+
 export function calculateCentroid(places: { lat: number; lng: number }[]): { lat: number; lng: number } {
     if (places.length === 0) return { lat: 0, lng: 0 };
 
@@ -647,4 +648,47 @@ export function calculateCentroid(places: { lat: number; lng: number }[]): { lat
         lat: total.lat / places.length,
         lng: total.lng / places.length
     };
+}
+
+export async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+    try {
+        // Server-Side Implementation
+        if (typeof window === 'undefined') {
+            const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || '';
+            if (!API_KEY) {
+                console.error('[GoogleMaps] API key not found for server-side geocoding');
+                return null;
+            }
+
+            const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${API_KEY}`;
+            const res = await fetch(url);
+            const data = await res.json();
+
+            if (data.status === 'OK' && data.results && data.results[0]) {
+                const location = data.results[0].geometry.location;
+                return { lat: location.lat, lng: location.lng };
+            }
+            console.warn('[GoogleMaps] Server geocoding failed:', data.status);
+            return null;
+        }
+
+        // Client-Side Implementation
+        await initGoogleMaps();
+        if (!window.google?.maps) return null;
+
+        const geocoder = new window.google.maps.Geocoder();
+        const response = await geocoder.geocode({ address });
+
+        if (response.results && response.results[0]) {
+            const location = response.results[0].geometry.location;
+            return {
+                lat: location.lat(),
+                lng: location.lng()
+            };
+        }
+        return null;
+    } catch (error) {
+        console.error('Geocoding failed:', error);
+        return null;
+    }
 }

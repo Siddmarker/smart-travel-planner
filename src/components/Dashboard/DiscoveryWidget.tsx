@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Compass, MapPin, Star, TrendingUp, Sparkles } from 'lucide-react';
 import { Place } from '@/types';
-import { searchNearbyPlaces, reverseGeocode } from '@/lib/googleMapsService';
+import { searchNearbyPlaces, reverseGeocode, geocodeAddress } from '@/lib/googleMapsService';
 import { getDestinationSuggestions } from '@/lib/geminiService';
 import { useStore } from '@/store/useStore';
 import Link from 'next/link';
@@ -83,6 +83,27 @@ export function DiscoveryWidget() {
         });
     };
 
+    const handleSearch = async () => {
+        if (!location.trim()) return;
+        setLoading(true);
+        try {
+            // 1. Geocode the input location
+            const coords = await geocodeAddress(location);
+
+            if (coords) {
+                // 2. Search nearby the new coords
+                const places = await searchNearbyPlaces(coords, radius * 1000);
+                setTrendingPlaces(places.slice(0, 3));
+            } else {
+                console.warn('Location not found');
+            }
+        } catch (error) {
+            console.error('Error searching:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const calculateDistance = (lat: number, lng: number) => {
         // Mock distance calculation
         return (Math.random() * 5 + 0.5).toFixed(1);
@@ -130,8 +151,13 @@ export function DiscoveryWidget() {
                             />
                             <span className="text-sm text-slate-500">km</span>
                         </div>
-                        <Button size="lg" className="h-auto py-3 px-8 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-lg shadow-blue-900/20 transition-all hover:scale-105">
-                            Search
+                        <Button
+                            size="lg"
+                            className="h-auto py-3 px-8 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-lg shadow-blue-900/20 transition-all hover:scale-105"
+                            onClick={handleSearch}
+                            disabled={loading}
+                        >
+                            {loading ? '...' : 'Search'}
                         </Button>
                     </div>
                 </div>
