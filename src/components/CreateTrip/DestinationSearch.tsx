@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { MapPin, Loader2, Locate } from 'lucide-react';
-import { searchPlaces, reverseGeocode } from '@/lib/googleMapsService'; // Import searchPlaces
+import { autocompletePlace, getPlaceDetails, reverseGeocode } from '@/lib/googleMapsService';
 import { Button } from '@/components/ui/button';
 
 interface PlaceResult {
@@ -31,14 +31,14 @@ export function DestinationSearch({ onSelect, defaultValue = '' }: DestinationSe
             if (query.length > 2 && isOpen) {
                 setLoading(true);
                 try {
-                    // Use client-side search directly to utilize browser Referer headers
-                    const places = await searchPlaces(query);
-                    console.log('Client-side Search Results:', places);
+                    // Use autocomplete for better destination suggestions
+                    const predictions = await autocompletePlace(query);
+                    console.log('Autocomplete Results:', predictions);
 
-                    const mappedResults = places.map((p) => ({
-                        placeId: p.id,
-                        name: p.name,
-                        location: { lat: p.lat, lng: p.lng },
+                    const mappedResults = predictions.map((p) => ({
+                        placeId: p.place_id,
+                        name: p.structured_formatting?.main_text || p.description,
+                        location: { lat: 0, lng: 0 }, // Fetched on select
                         formatted_address: p.description
                     }));
                     setResults(mappedResults);
@@ -67,14 +67,23 @@ export function DestinationSearch({ onSelect, defaultValue = '' }: DestinationSe
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const handleSelect = (place: PlaceResult) => {
+    const handleSelect = async (place: PlaceResult) => {
         setQuery(place.name);
         setIsOpen(false);
-        onSelect({
-            name: place.name,
-            location: place.location,
-            placeId: place.placeId
-        });
+
+        // Fetch details to get lat/lng
+        try {
+            const details = await getPlaceDetails(place.placeId);
+            if (details) {
+                onSelect({
+                    name: place.name,
+                    location: { lat: details.lat, lng: details.lng },
+                    placeId: place.placeId
+                });
+            }
+        } catch (error) {
+            console.error("Failed to get place details", error);
+        }
     };
 
     const handleCurrentLocation = () => {

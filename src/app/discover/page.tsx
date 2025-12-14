@@ -279,6 +279,18 @@ export default function DiscoverPage() {
             return filterValues.every(val => placeOptions.includes(val));
         }
 
+        // 3. Cuisine (OR logic - User likely wants "Italian OR Chinese")
+        if (filterKey === 'cuisine') {
+            const placeTags = place.tags || []; // Tags often hold cuisine info like 'South Indian', 'Chinese'
+            return filterValues.some(val => placeTags.includes(val));
+        }
+
+        // 4. Features (OR logic - "Rooftop OR Live Music" to see broad options)
+        if (filterKey === 'features') {
+            const placeTags = place.tags || [];
+            return filterValues.some(val => placeTags.includes(val));
+        }
+
         // 2. Establishment Type
         if (filterKey === 'establishmentType') {
             const placeTypes = [...(place.rawTypes || []), ...(place.tags || [])].map(t => t.toLowerCase());
