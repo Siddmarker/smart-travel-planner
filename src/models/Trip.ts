@@ -2,10 +2,10 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 import { ITrip, TripState } from '@/types';
 
 export interface ITripDocument extends Document, Omit<ITrip, 'id' | 'days' | 'adminId' | 'members'> {
-    adminId: mongoose.Types.ObjectId;
+    adminId: string;
     days: mongoose.Types.ObjectId[];
     members: {
-        userId: mongoose.Types.ObjectId;
+        userId: string;
         role: 'admin' | 'member';
         joinedAt: Date;
     }[];
