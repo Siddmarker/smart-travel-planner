@@ -13,8 +13,7 @@ export interface ITripDocument extends Document, Omit<ITrip, 'id' | 'days' | 'ad
 
 const TripSchema = new Schema<ITripDocument>({
     adminId: {
-        type: Schema.Types.ObjectId as any,
-        ref: 'User',
+        type: String, // Changed to String to support local auth IDs
         required: true
     },
     name: {
@@ -47,7 +46,7 @@ const TripSchema = new Schema<ITripDocument>({
     },
     categories: [{ type: String }],
     members: [{
-        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        userId: { type: String }, // Changed to String
         role: { type: String, enum: ['admin', 'member'], default: 'member' },
         joinedAt: { type: Date, default: Date.now }
     }],
