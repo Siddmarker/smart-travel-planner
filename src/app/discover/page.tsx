@@ -227,14 +227,19 @@ export default function DiscoverPage() {
                 }
             }
 
-            setCategoryResults(results); // Store base results for re-filtering
-            setFilteredPlaces(results); // Update Trending tab
+            // Apply enhancements (Credibility, Dietary Options, etc.)
+            // Metadata: We could also apply the full pipeline here if we wanted fake detection etc.
+            // For now, ensuring dietary options are present is key.
+            const enhancedResults = await enhanceDiscoveryPlaces(results, locationCoords);
+
+            setCategoryResults(enhancedResults); // Store base results for re-filtering
+            setFilteredPlaces(enhancedResults); // Update Trending tab
 
             // Update Nearby tab (sort by distance if possible, or just use results)
-            setNearbyPlacesList([...results]);
+            setNearbyPlacesList([...enhancedResults]);
 
             // Update Hidden Gems tab (filter by rating/reviews)
-            const hidden = results.filter(p => (p.rating || 0) >= 4.0 && (p.reviews || 0) < 100);
+            const hidden = enhancedResults.filter(p => (p.rating || 0) >= 4.0 && (p.reviews || 0) < 100);
             setHiddenGemsList(hidden);
 
         } catch (error) {

@@ -387,11 +387,14 @@ function isDiscoveryDestinationRelevant(place: Place, destination: string): bool
 
 export async function enhanceDiscoveryPlaces(
     places: Place[],
-    userLocation: { lat: number; lng: number }
+    userLocation: { lat: number; lng: number } | null | undefined
 ): Promise<Place[]> {
 
     // Add distances
-    const placesWithDistance = await calculateRealDistances(userLocation, places);
+    let placesWithDistance = places;
+    if (userLocation) {
+        placesWithDistance = await calculateRealDistances(userLocation, places);
+    }
 
     return placesWithDistance.map(place => {
         // Add credibility score
