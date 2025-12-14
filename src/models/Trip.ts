@@ -75,6 +75,11 @@ const TripSchema = new Schema<ITripDocument>({
     toObject: { virtuals: true }
 });
 
-const Trip: Model<ITripDocument> = mongoose.models.Trip || mongoose.model<ITripDocument>('Trip', TripSchema as any);
+// Force recompilation of model if it already exists to ensure schema updates are applied
+if (mongoose.models.Trip) {
+    delete mongoose.models.Trip;
+}
+
+const Trip: Model<ITripDocument> = mongoose.model<ITripDocument>('Trip', TripSchema as any);
 
 export default Trip;

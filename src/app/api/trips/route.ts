@@ -47,12 +47,16 @@ export async function POST(req: Request) {
 
     } catch (error: any) {
         console.error("Error creating trip:", error);
-        // Return more detailed validation errors if available
-        const errorMessage = error.name === 'ValidationError'
-            ? Object.values(error.errors).map((e: any) => e.message).join(', ')
-            : "Internal Server Error";
 
-        return NextResponse.json({ error: "Failed to create trip", details: errorMessage }, { status: 500 });
+        // Return clear validation message but hide system details
+        const errorMessage = error.name === 'ValidationError' && error.errors
+            ? Object.values(error.errors).map((e: any) => e.message).join(', ')
+            : error.message || "Failed to create trip";
+
+        return NextResponse.json({
+            error: "Failed to create trip",
+            details: errorMessage
+        }, { status: 500 });
     }
 }
 
