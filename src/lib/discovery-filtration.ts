@@ -446,16 +446,44 @@ function enhanceFoodPlace(place: Place) {
 
     // 2. Infer Tags (Features & Cuisine)
     place.tags = [];
-    // Cuisine
-    if (combinedText.includes('north indian') || combinedText.includes('punjabi') || combinedText.includes('tandoor')) place.tags.push('North Indian');
-    if (combinedText.includes('south indian') || combinedText.includes('dosa') || combinedText.includes('idli')) place.tags.push('South Indian');
-    if (combinedText.includes('chinese') || combinedText.includes('asian') || combinedText.includes('noodle')) place.tags.push('Chinese');
-    if (combinedText.includes('italian') || combinedText.includes('pizza') || combinedText.includes('pasta')) place.tags.push('Italian');
+
+    // Cuisine Inference
+    // South Indian
+    if (
+        combinedText.includes('south indian') || combinedText.includes('dosa') || combinedText.includes('idli') ||
+        combinedText.includes('sagar') || combinedText.includes('bhavan') || combinedText.includes('udupi') ||
+        combinedText.includes('darshini') || combinedText.includes('tiffins') || combinedText.includes('tiffanys') ||
+        combinedText.includes('sambhar') || combinedText.includes('vada')
+    ) place.tags.push('South Indian');
+
+    // North Indian
+    if (
+        combinedText.includes('north indian') || combinedText.includes('punjabi') || combinedText.includes('tandoor') ||
+        combinedText.includes('curry') || combinedText.includes('roti') || combinedText.includes('naan') ||
+        combinedText.includes('dhaba') || combinedText.includes('biryani') || combinedText.includes('kebab') ||
+        combinedText.includes('tikka') || combinedText.includes('butter chicken') || combinedText.includes('paratha') ||
+        combinedText.includes('mughlai') || combinedText.includes('grill')
+    ) place.tags.push('North Indian');
+
+    // Chinese / Asian
+    if (
+        combinedText.includes('chinese') || combinedText.includes('asian') || combinedText.includes('noodle') ||
+        combinedText.includes('dim sum') || combinedText.includes('momos') || combinedText.includes('wok') ||
+        combinedText.includes('dragon') || combinedText.includes('cantonese') || combinedText.includes('szechuan')
+    ) place.tags.push('Chinese');
+
+    // Italian / Pizza
+    if (
+        combinedText.includes('italian') || combinedText.includes('pizza') || combinedText.includes('pasta') ||
+        combinedText.includes('lasagna') || combinedText.includes('risotto') || combinedText.includes('tuscana') ||
+        combinedText.includes('olive')
+    ) place.tags.push('Italian');
+
     // Features
-    if (combinedText.includes('rooftop') || combinedText.includes('view') || combinedText.includes('terrace')) place.tags.push('Rooftop');
-    if (combinedText.includes('live') || combinedText.includes('music')) place.tags.push('Live Music');
-    if (combinedText.includes('pet') || combinedText.includes('dog')) place.tags.push('Pet-Friendly');
-    if (combinedText.includes('delivery')) place.tags.push('Home Delivery');
+    if (combinedText.includes('rooftop') || combinedText.includes('view') || combinedText.includes('terrace') || combinedText.includes('sky')) place.tags.push('Rooftop');
+    if (combinedText.includes('live') || combinedText.includes('music') || combinedText.includes('dj') || combinedText.includes('jazz')) place.tags.push('Live Music');
+    if (combinedText.includes('pet') || combinedText.includes('dog') || combinedText.includes('cat') || combinedText.includes('paw')) place.tags.push('Pet-Friendly');
+    if (combinedText.includes('delivery') || combinedText.includes('takeaway') || combinedText.includes('swiggy') || combinedText.includes('zomato')) place.tags.push('Home Delivery');
 
     // 3. Simulate Social Stats (Mock Data for Demo)
     // We use the place ID to generate consistent "random" numbers
