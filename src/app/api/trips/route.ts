@@ -7,6 +7,7 @@ import Trip from "@/models/Trip";
 
 export async function POST(req: Request) {
     try {
+        console.log("Trip Creation API called");
         const session = await getServerSession(authOptions);
 
         const body = await req.json();
@@ -21,15 +22,31 @@ export async function POST(req: Request) {
         }
 
         if (!userId) {
-            console.log("Debug Trip Create Unauthorized: Missing session or body userId");
+            console.error("Trip Create Unauthorized: Missing session or body userId");
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        if (!process.env.MONGODB_URI) {
+            console.error("Critical: MONGODB_URI is not defined");
+            return NextResponse.json({ error: "Server Configuration Error" }, { status: 500 });
+        }
+
         if (!name || !destination || !dates) {
+            console.error("Validation Error: Missing required fields", { name, destination, dates });
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
-        await dbConnect();
+        try {
+            await dbConnect();
+        } catch (dbError: any) {
+            console.error("Failed to connect to Database during Trip Creation:", dbError);
+            return NextResponse.json({
+                error: "Database Connection Failed",
+                details: dbError.message
+            }, { status: 500 });
+        }
+
+        console.log("Creating trip for user:", userId);
 
         const trip = await Trip.create({
             adminId: userId,
@@ -37,16 +54,17 @@ export async function POST(req: Request) {
             destination,
             dates,
             settings: settings || {},
-            tripState: 'DRAFT', // Correct field name per schema
+            tripState: 'DRAFT',
             members: [{ userId: userId, role: 'admin' }],
             pax: pax || 1,
             tripType: tripType || 'friends'
         });
 
+        console.log("Trip created successfully:", trip._id);
         return NextResponse.json({ success: true, trip }, { status: 201 });
 
     } catch (error: any) {
-        console.error("Error creating trip:", error);
+        console.error("Fatal Error creating trip:", error);
 
         // Return clear validation message but hide system details
         const errorMessage = error.name === 'ValidationError' && error.errors

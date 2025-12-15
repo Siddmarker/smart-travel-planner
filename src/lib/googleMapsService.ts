@@ -60,7 +60,7 @@ export async function initGoogleMaps(): Promise<void> {
 
         console.log('[GoogleMaps] Loading new script...');
         const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places,geometry&loading=async`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places,geometry&v=weekly&loading=async`;
         script.async = true;
         script.defer = true;
         script.id = 'google-maps-script';
@@ -438,8 +438,14 @@ export async function autocompletePlace(input: string, types?: string[]): Promis
         const autocompletePromise = new Promise<google.maps.places.AutocompletePrediction[]>((resolve) => {
             const service = new window.google.maps.places.AutocompleteService();
 
+            // Create a new session token for this prediction request
+            // In a real optimized app, this token should be created once per "session" (e.g. per component mount or per search interaction start)
+            // But doing it here ensures we are at least using the API correctly as per new requirements.
+            const sessionToken = new window.google.maps.places.AutocompleteSessionToken();
+
             const request: google.maps.places.AutocompletionRequest = {
                 input,
+                sessionToken: sessionToken
             };
 
             // Default to (cities) only if types is explicitly undefined (not passed)
