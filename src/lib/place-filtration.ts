@@ -159,6 +159,11 @@ function isPotentialFakeEntity(place: Place, destination: string): string | null
             'headquarters', 'secretariat', 'embassy', 'consulate'
         ],
 
+        industrial: [
+            'plant', 'service center', 'repair', 'industrial', 'factory',
+            'manufacturing', 'supplier', 'agency', 'works', 'mill'
+        ],
+
         educational: [
             'school', 'college', 'university', 'institute', 'academy',
             'coaching center', 'tuition', 'kindergarten', 'play school',

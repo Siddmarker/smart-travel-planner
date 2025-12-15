@@ -692,3 +692,154 @@ export async function geocodeAddress(address: string): Promise<{ lat: number; ln
         return null;
     }
 }
+
+export async function searchActivityPlaces(
+    locationName: string,
+    coords?: { lat: number; lng: number },
+    radius: number = 5000
+): Promise<Place[]> {
+    try {
+        const queries = [
+            `Go karting near ${locationName}`,
+            `Bowling alleys near ${locationName}`,
+            `Paintball and laser tag near ${locationName}`,
+            `Amusement parks near ${locationName}`,
+            `Workshops and classes near ${locationName}`
+        ];
+
+        const promises = queries.map(query =>
+            searchPlaces(query, coords, radius, 'point_of_interest')
+        );
+
+        const results = await Promise.all(promises);
+
+        let allPlaces: Place[] = [];
+        results.forEach(places => {
+            allPlaces = [...allPlaces, ...places];
+        });
+
+        // Deduplicate
+        const uniquePlaces = Array.from(new Map(allPlaces.map(item => [item.id, item])).values());
+
+        // Use smart category filter but manually force 'activity' category on results
+        return uniquePlaces.map(p => ({
+            ...p,
+            category: 'activity'
+        }));
+
+    } catch (error) {
+        console.error('Error searching activity places:', error);
+        return [];
+    }
+}
+
+export async function searchShoppingPlaces(
+    locationName: string,
+    subtype: 'malls' | 'markets' | 'all' = 'all',
+    coords?: { lat: number; lng: number },
+    radius: number = 5000
+): Promise<Place[]> {
+    try {
+        let queries: string[] = [];
+
+        if (subtype === 'malls' || subtype === 'all') {
+            queries.push(`Shopping malls in ${locationName}`);
+            queries.push(`Department stores in ${locationName}`);
+        }
+
+        if (subtype === 'markets' || subtype === 'all') {
+            queries.push(`Street market in ${locationName}`);
+            queries.push(`Flea market in ${locationName}`);
+            queries.push(`Bazaar in ${locationName}`);
+            queries.push(`Haat in ${locationName}`); // Local term
+            queries.push(`Farmers market in ${locationName}`);
+        }
+
+        const promises = queries.map(query =>
+            searchPlaces(query, coords, radius, 'shopping_mall') // Base type hint
+        );
+
+        const results = await Promise.all(promises);
+
+        let allPlaces: Place[] = [];
+        results.forEach(places => {
+            allPlaces = [...allPlaces, ...places];
+        });
+
+        // Strict Post-Filtering based on subtype
+        const uniquePlaces = Array.from(new Map(allPlaces.map(item => [item.id, item])).values());
+
+        return uniquePlaces.filter(place => {
+            const name = place.name.toLowerCase();
+            const types = (place.rawTypes || []).map(t => t.toLowerCase());
+
+            if (subtype === 'markets') {
+                // EXCLUDE Malls
+                if (types.includes('shopping_mall') || types.includes('outlet_mall')) return false;
+                if (name.includes('mall') || name.includes('plaza') || name.includes('center')) return false;
+                return true;
+            }
+
+            if (subtype === 'malls') {
+                // Must be a mall
+                return types.includes('shopping_mall') || types.includes('department_store') || name.includes('mall');
+            }
+
+            return true;
+        }).map(p => ({ ...p, category: 'shopping' }));
+
+    } catch (error) {
+        console.error('Error searching shopping places:', error);
+        return [];
+    }
+}
+
+export async function searchCulturePlaces(
+    locationName: string,
+    coords?: { lat: number; lng: number },
+    radius: number = 5000
+): Promise<Place[]> {
+    try {
+        // Stream A: Heritage
+        const heritageQueries = [
+            `Monuments near ${locationName}`,
+            `Temples near ${locationName}`,
+            `Statues near ${locationName}`,
+            `Forts near ${locationName}`,
+            `Historical places near ${locationName}`
+        ];
+
+        // Stream B: Living Arts
+        const artsQueries = [
+            `Performing arts theaters near ${locationName}`,
+            `Auditoriums near ${locationName}`,
+            `Cultural centers near ${locationName}`,
+            `Art galleries near ${locationName}`
+        ];
+
+        const allQueries = [...heritageQueries, ...artsQueries];
+
+        const promises = allQueries.map(query =>
+            searchPlaces(query, coords, radius, 'tourist_attraction')
+        );
+
+        const results = await Promise.all(promises);
+
+        let allPlaces: Place[] = [];
+        results.forEach(places => {
+            allPlaces = [...allPlaces, ...places];
+        });
+
+        const uniquePlaces = Array.from(new Map(allPlaces.map(item => [item.id, item])).values());
+
+        return uniquePlaces.map(p => ({
+            ...p,
+            category: 'culture'
+        }));
+
+    } catch (error) {
+        console.error('Error searching culture places:', error);
+        return [];
+    }
+}
+
