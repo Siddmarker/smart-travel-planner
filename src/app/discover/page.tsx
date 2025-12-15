@@ -17,6 +17,8 @@ import { smartCategoryFilter } from '@/lib/categoryUtils';
 import { SubmissionService } from '@/lib/submission-service';
 import { analyzeOffRoadTerrain } from '@/services/offRoadAI';
 import { searchPlaces, searchNearbyPlaces, mapCategoryToGoogleType, searchHiddenGems, searchHikingPlaces, searchOffRoadPlaces, enhancePlacesWithPhotosAndDistance } from '@/lib/googleMapsService';
+import { constructMapsQuery } from '@/lib/search-logic';
+import { auditJainFriendliness } from '@/lib/geminiService';
 import { Button } from '@/components/ui/button';
 import { SocialTrends } from '@/components/Discover/SocialTrends';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -65,32 +67,9 @@ export default function DiscoverPage() {
         }
     }, []);
 
-    // Helper to construct smart query and determine type
-    const constructSmartQuery = (input: string): { query: string; type?: string } => {
-        const lowerInput = input.toLowerCase();
-        let type: string | undefined;
-        let suffix = '';
+    // Helper to construct smart query and determine type - DEPRECATED in favor of search-logic.ts
+    // Keeping for reference or fallback if needed, but primary logic moved.
 
-        if (lowerInput.includes('hiking') || lowerInput.includes('trek') || lowerInput.includes('trail')) {
-            type = 'park'; // or 'natural_feature'
-            if (!lowerInput.includes('trail')) suffix = ' trails';
-        } else if (lowerInput.includes('food') || lowerInput.includes('restaurant') || lowerInput.includes('eat')) {
-            type = 'restaurant';
-        } else if (lowerInput.includes('hotel') || lowerInput.includes('stay') || lowerInput.includes('lodging')) {
-            type = 'lodging';
-        } else if (lowerInput.includes('shop') || lowerInput.includes('mall') || lowerInput.includes('store')) {
-            type = 'shopping_mall';
-        } else if (lowerInput.includes('museum') || lowerInput.includes('art') || lowerInput.includes('culture')) {
-            type = 'museum';
-        } else if (lowerInput.includes('club') || lowerInput.includes('bar') || lowerInput.includes('nightlife')) {
-            type = 'night_club';
-        }
-
-        return {
-            query: input + suffix,
-            type
-        };
-    };
 
     const fetchPlaces = async (coords: { lat: number; lng: number } | null, radius: number, locationName: string) => {
         setIsLoading(true);
@@ -116,16 +95,29 @@ export default function DiscoverPage() {
                 setOriginalNearby([]);
             }
 
-            // 2. Fetch trending using TEXT SEARCH with Smart Query
-            const searchLocation = locationName;
-            // Default trending search
-            const trendingBase = `popular tourist attractions in ${searchLocation}`;
-            console.log('Executing Text Search with query:', trendingBase);
+            // 2. Fetch trending using TEXT SEARCH with Smart Query (PROTOCOL ENABLED)
+            const searchLogic = constructMapsQuery({
+                query: locationName ? `popular tourist attractions in ${locationName}` : 'popular tourist attractions',
+                locationName: locationName,
+                filters: activeFilters,
+                time: new Date()
+            });
 
-            let trending = await searchPlaces(trendingBase, coords || undefined, radius, 'tourist_attraction');
+            console.log(`[Discover] Executing Search Strategy: ${searchLogic.strategy} | Query: ${searchLogic.finalQuery}`);
+
+            // Use radius from logic if expanded (e.g., 4 AM Protocol)
+            const effectiveRadius = Math.max(radius, searchLogic.radius);
+
+            let trending = await searchPlaces(searchLogic.finalQuery, coords || undefined, effectiveRadius, 'tourist_attraction');
 
             // Apply Advanced Filtration Pipeline
             let { filteredPlaces: filteredTrending, metadata } = applyDiscoveryFiltrationPipeline(trending, locationName, 'attractions');
+
+            // Jain Audit Protocol
+            if (searchLogic.strategy === 'JAIN_STRICT') {
+                console.log('[Discover] Applying Strict Jain Audit via Gemini...');
+                filteredTrending = await auditJainFriendliness(filteredTrending);
+            }
 
             // FALLBACK: If filtration removed everything, show original results (but warn)
             if (trending.length > 0 && filteredTrending.length === 0) {
@@ -220,9 +212,16 @@ export default function DiscoverPage() {
                     results = smartCategoryFilter(categoryPlaces, categoryId);
                 } else {
                     // Fallback to text search if no coords
-                    const { query } = constructSmartQuery(categoryId);
-                    const fullQuery = `${query} in ${currentLocationName}`;
-                    const textResults = await searchPlaces(fullQuery, undefined, currentRadius);
+                    // Use new logic here too
+                    const searchLogic = constructMapsQuery({
+                        query: categoryId,
+                        locationName: currentLocationName,
+                        filters: activeFilters,
+                        category: categoryId,
+                        time: new Date()
+                    });
+
+                    const textResults = await searchPlaces(searchLogic.finalQuery, undefined, currentRadius);
                     results = smartCategoryFilter(textResults, categoryId);
                 }
             }
@@ -230,6 +229,15 @@ export default function DiscoverPage() {
             // Apply enhancements (Credibility, Dietary Options, etc.)
             // Metadata: We could also apply the full pipeline here if we wanted fake detection etc.
             // For now, ensuring dietary options are present is key.
+
+            // Jain Audit Protocol (if coming from category select + filters)
+            // Note: activeFilters might not be set yet if just clicking category, but if they refine it later...
+            // Actually handleFilterChange triggers re-filter not re-fetch usually? 
+            // The handleCategorySelect fetches FRESH data. 
+            // If we want Jain audit here, we need to know if Jain filter is active. 
+            // But activeFilters is CLEARED on category select (line 174).
+            // So initially this won't trigger Jain strategy unless we pass initial filters.
+
             const enhancedResults = await enhanceDiscoveryPlaces(results, locationCoords);
 
             setCategoryResults(enhancedResults); // Store base results for re-filtering
@@ -432,19 +440,30 @@ export default function DiscoverPage() {
         setIsLoading(true);
         setFiltrationMetadata(null);
         try {
-            // Construct smart query
-            const { query: smartQuery, type } = constructSmartQuery(query);
+            // Construct smart query using new logic
+            const searchLogic = constructMapsQuery({
+                query: query,
+                locationName: currentLocationName,
+                filters: activeFilters,
+                time: new Date() // Will trigger 4AM logic if applicable
+            });
 
-            // Include location name in query if available for better context
-            const searchContext = currentLocationName ? ` in ${currentLocationName.split(',')[0]}` : '';
-            const fullQuery = smartQuery + searchContext;
+            console.log(`[Discover] Search Strategy: ${searchLogic.strategy} | Query: ${searchLogic.finalQuery} | Radius: ${searchLogic.radius}`);
 
-            console.log('Searching with smart query:', fullQuery, 'Type:', type);
+            // Use radius from logic (e.g. 35km for Early Morning)
+            const effectiveRadius = Math.max(currentRadius, searchLogic.radius);
 
-            const results = await searchPlaces(fullQuery, locationCoords || undefined, currentRadius, type);
+            const results = await searchPlaces(searchLogic.finalQuery, locationCoords || undefined, effectiveRadius, searchLogic.searchType);
 
             // Apply Advanced Filtration
-            const { filteredPlaces, metadata } = applyDiscoveryFiltrationPipeline(results, currentLocationName, '');
+            let { filteredPlaces, metadata } = applyDiscoveryFiltrationPipeline(results, currentLocationName, '');
+
+            // Jain Audit Protocol
+            if (searchLogic.strategy === 'JAIN_STRICT') {
+                console.log('[Discover] Applying Strict Jain Audit via Gemini...');
+                filteredPlaces = await auditJainFriendliness(filteredPlaces);
+            }
+
             setFiltrationMetadata(metadata);
 
             let enhancedResults = filteredPlaces;

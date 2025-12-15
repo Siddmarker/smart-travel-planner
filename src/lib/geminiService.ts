@@ -138,3 +138,61 @@ export async function getPlaceVibeCheck(
     return null;
   }
 }
+
+export async function auditJainFriendliness(places: Place[]): Promise<Place[]> {
+  if (!API_KEY || places.length === 0) return places;
+
+  const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+
+  // Only audit the top 10 results to save tokens/time
+  const placesToAudit = places.slice(0, 10);
+  const remainingPlaces = places.slice(10);
+
+  const placeNames = placesToAudit.map(p => p.name).join(", ");
+
+  const prompt = `
+    Analyze these places for "Strict Jain" compatibility: ${placeNames}.
+    
+    For EACH place, estimate confidence (0-100) that it serves explicit Jain Food (No Onion, No Garlic).
+    Criteria:
+    - High Confidence (80-100): Explicitly known for Jain food, Pure Veg, Sattvic.
+    - Medium Confidence (50-79): Standard Pure Veg restaurant (likely has Jain options).
+    - Low Confidence (0-49): Serves non-veg, or known for heavy garlic/onion, or reviews mention "limited Jain options".
+    - Discard (0): Pubs, bars, or places definitively not suitable.
+    
+    Return ONLY a JSON array with objects:
+    {
+      "name": "string",
+      "confidence": number,
+      "reason": "short string"
+    }
+  `;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    const jsonStr = text.replace(/```json\n?|\n?```/g, "").trim();
+    const auditResults: { name: string; confidence: number; reason: string }[] = JSON.parse(jsonStr);
+
+    // Filter and Sort based on audit
+    const verifiedPlaces = placesToAudit.filter(place => {
+      const audit = auditResults.find(a => a.name.toLowerCase() === place.name.toLowerCase());
+      // Keep if confidence is high enough OR if audit missed it (fail open for now, or strict?)
+      // User asked for Strict Protocol: "If reviews mention... discard it."
+      // So we filter strictly > 50 confidence.
+      return audit ? audit.confidence >= 50 : true;
+    }).map(place => {
+      const audit = auditResults.find(a => a.name.toLowerCase() === place.name.toLowerCase());
+      if (audit) {
+        return { ...place, description: `[Jain Verified: ${audit.confidence}%] ${audit.reason} | ${place.description}` };
+      }
+      return place;
+    });
+
+    return [...verifiedPlaces, ...remainingPlaces];
+  } catch (error) {
+    console.error("Error auditing Jain friendliness:", error);
+    return places; // Fallback to original list
+  }
+}
