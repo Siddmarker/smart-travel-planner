@@ -110,8 +110,14 @@ export default function DiscoverPage() {
 
             let trending = await searchPlaces(searchLogic.finalQuery, coords || undefined, effectiveRadius, 'tourist_attraction');
 
+            // Determine correct category for filtration based on strategy
+            let filtrationCategory = 'attractions'; // default for trending
+            if (searchLogic.strategy === 'JAIN_STRICT' || searchLogic.strategy === 'LOCAL_NON_VEG' || searchLogic.strategy === 'EARLY_MORNING') {
+                filtrationCategory = 'restaurants';
+            }
+
             // Apply Advanced Filtration Pipeline
-            let { filteredPlaces: filteredTrending, metadata } = applyDiscoveryFiltrationPipeline(trending, locationName, 'attractions');
+            let { filteredPlaces: filteredTrending, metadata } = applyDiscoveryFiltrationPipeline(trending, locationName, filtrationCategory);
 
             // Jain Audit Protocol
             if (searchLogic.strategy === 'JAIN_STRICT') {
@@ -455,8 +461,14 @@ export default function DiscoverPage() {
 
             const results = await searchPlaces(searchLogic.finalQuery, locationCoords || undefined, effectiveRadius, searchLogic.searchType);
 
+            // Determine correct category for filtration
+            let filtrationCategory = '';
+            if (searchLogic.strategy === 'JAIN_STRICT' || searchLogic.strategy === 'LOCAL_NON_VEG' || searchLogic.strategy === 'EARLY_MORNING') {
+                filtrationCategory = 'restaurants';
+            }
+
             // Apply Advanced Filtration
-            let { filteredPlaces, metadata } = applyDiscoveryFiltrationPipeline(results, currentLocationName, '');
+            let { filteredPlaces, metadata } = applyDiscoveryFiltrationPipeline(results, currentLocationName, filtrationCategory);
 
             // Jain Audit Protocol
             if (searchLogic.strategy === 'JAIN_STRICT') {

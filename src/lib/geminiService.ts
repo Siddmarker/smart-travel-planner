@@ -178,10 +178,9 @@ export async function auditJainFriendliness(places: Place[]): Promise<Place[]> {
     // Filter and Sort based on audit
     const verifiedPlaces = placesToAudit.filter(place => {
       const audit = auditResults.find(a => a.name.toLowerCase() === place.name.toLowerCase());
-      // Keep if confidence is high enough OR if audit missed it (fail open for now, or strict?)
-      // User asked for Strict Protocol: "If reviews mention... discard it."
-      // So we filter strictly > 50 confidence.
-      return audit ? audit.confidence >= 50 : true;
+      // Relaxed Threshold to 30% - better to include possible places than exclude good ones
+      // Also fail open if audit has no data for the place
+      return audit ? audit.confidence >= 30 : true;
     }).map(place => {
       const audit = auditResults.find(a => a.name.toLowerCase() === place.name.toLowerCase());
       if (audit) {
