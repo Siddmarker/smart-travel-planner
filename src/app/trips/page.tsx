@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { useStore } from '@/store/useStore';
 import Link from 'next/link';
 
 interface TripSummary {
@@ -18,14 +19,23 @@ export default function TripsPage() {
     const [trips, setTrips] = useState<TripSummary[]>([]);
     const [loading, setLoading] = useState(true);
     const router = useRouter();
+    const { currentUser } = useStore();
 
     useEffect(() => {
         const fetchTrips = async () => {
+            if (!currentUser) return; // Wait for user
+
             try {
-                const res = await fetch('/api/trips');
+                const res = await fetch('/api/trips', {
+                    headers: {
+                        'x-user-id': currentUser.id
+                    }
+                });
                 if (res.ok) {
                     const data = await res.json();
                     setTrips(data.trips);
+                } else if (res.status === 401) {
+                    console.error('Unauthorized fetch');
                 }
             } catch (error) {
                 console.error('Failed to fetch trips:', error);
@@ -34,8 +44,14 @@ export default function TripsPage() {
             }
         };
 
-        fetchTrips();
-    }, []);
+        if (currentUser) {
+            fetchTrips();
+        } else {
+            // If no user immediately, wait or stop loading if we know they aren't logged in?
+            // Actually if trips page is protected, we expect user.
+            // If persist hasn't loaded yet...
+        }
+    }, [currentUser]);
 
     if (loading) return <div className="p-8 text-center">Loading trips...</div>;
 
@@ -67,8 +83,8 @@ export default function TripsPage() {
                             <div className="flex justify-between items-start mb-2">
                                 <h3 className="font-semibold text-lg truncate pr-2">{trip.name}</h3>
                                 <span className={`text-xs px-2 py-1 rounded-full ${trip.tripState === 'ACTIVE' ? 'bg-green-100 text-green-800' :
-                                        trip.tripState === 'COMPLETED' ? 'bg-gray-100 text-gray-800' :
-                                            'bg-yellow-100 text-yellow-800'
+                                    trip.tripState === 'COMPLETED' ? 'bg-gray-100 text-gray-800' :
+                                        'bg-yellow-100 text-yellow-800'
                                     }`}>
                                     {trip.tripState}
                                 </span>

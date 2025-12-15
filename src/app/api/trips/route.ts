@@ -81,7 +81,18 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
     try {
         const session = await getServerSession(authOptions);
-        if (!session || !session.user || !session.user.id) {
+        let userId = session?.user?.id;
+
+        // Fallback for custom/mock auth via header
+        if (!userId) {
+            const userIdHeader = req.headers.get('x-user-id');
+            if (userIdHeader) {
+                console.log("Debug Trips GET: Using header userId (Mock Auth):", userIdHeader);
+                userId = userIdHeader;
+            }
+        }
+
+        if (!userId) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -90,8 +101,8 @@ export async function GET(req: Request) {
         // Find trips where user is admin or member
         const trips = await Trip.find({
             $or: [
-                { adminId: session.user.id },
-                { 'members.userId': session.user.id }
+                { adminId: userId },
+                { 'members.userId': userId }
             ]
         }).sort({ updatedAt: -1 });
 
