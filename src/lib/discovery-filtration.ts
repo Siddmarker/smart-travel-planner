@@ -485,6 +485,16 @@ function enhanceFoodPlace(place: Place) {
     if (combinedText.includes('pet') || combinedText.includes('dog') || combinedText.includes('cat') || combinedText.includes('paw')) place.tags.push('Pet-Friendly');
     if (combinedText.includes('delivery') || combinedText.includes('takeaway') || combinedText.includes('swiggy') || combinedText.includes('zomato')) place.tags.push('Home Delivery');
 
+    // Famous / Local
+    // Tag as 'Famous local' if it has high reviews, specific local keywords, or high rating
+    const isLocalCuisine = place.tags.includes('South Indian') || combinedText.includes('military') || combinedText.includes('donne') || combinedText.includes('nati');
+    const isFamous = (place.reviews || 0) > 500 || (place.rating || 0) >= 4.3 || combinedText.includes('famous') || combinedText.includes('legendary');
+
+    if (isLocalCuisine && isFamous) place.tags.push('Famous local');
+    // Also add just 'Famous' if usage differs, but screenshot says "Famous local"
+    if (combinedText.includes('authentic') || combinedText.includes('traditional')) place.tags.push('Authentic');
+
+
     // 3. Simulate Social Stats (Mock Data for Demo)
     // We use the place ID to generate consistent "random" numbers
     const idNum = place.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
