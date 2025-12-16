@@ -6,31 +6,51 @@ import { authOptions } from '@/lib/authOptions';
 
 export async function POST(req: Request) {
     try {
+        // 1. Get Session
         const session = await getServerSession(authOptions);
-        const userId = session?.user?.email || 'anonymous'; // Fallback / Hack for mismatching IDs if needed
-        // Ideally: session.user.id if available and matches DB.
-        // For now, let's try to get a real ID or just pass what we have.
+        const email = session?.user?.email;
+        const name = session?.user?.name || 'Traveler'; // Fallback name
 
-        // Note: If 'profiles' table enforces FK to auth.users, and we are using NextAuth...
-        // we might fail unless we insert into 'profiles' first or have matching IDs.
-        // Given the constraints, I will proceed with a best-effort insertion.
-
-        const body = await req.json();
-        const {
-            destination,
-            startDate,
-            endDate,
-            budget,
-            categories,
-            name
-        } = body;
-
-        // Validate
-        if (!destination || !startDate || !endDate) {
-            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        if (!email) {
+            // Allow anonymous trips? For now, enforcing at least an Email or "anonymous" placeholder if strictly needed
+            // But typical flow requires login.
+            console.warn("No session email found. Falling back to anonymous user logic.");
         }
 
-        // Insert Trip Shell
+        const userEmail = email || `anon_${Date.now()}@example.com`;
+
+        // 2. Ensure Profile Exists (The "Auto-Heal" Logic)
+        // Check if user exists
+        let { data: profile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', userEmail)
+            .single();
+
+        let userId = profile?.id;
+
+        // If no profile, CREATE one
+        if (!userId) {
+            console.log(`Profile missing for ${userEmail}. Creating new profile...`);
+            userId = crypto.randomUUID(); // Generate ID
+
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .insert({
+                    id: userId,
+                    email: userEmail,
+                    full_name: name,
+                    avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+                });
+
+            if (profileError) {
+                console.error("Failed to auto-create profile:", profileError);
+                return NextResponse.json({ error: "Failed to create user profile" }, { status: 500 });
+            }
+        }
+
+        // 3. Insert Trip
+        // Now we definitely have a valid userId (profile.id)
         const { data: trip, error } = await supabase
             .from('trips')
             .insert({
@@ -41,9 +61,7 @@ export async function POST(req: Request) {
                 categories: categories || [],
                 name: name || `${destination} Trip`,
                 status: 'DRAFT',
-                // user_id: userId // If we can't guarantee FK, maybe omit or handle profile creation?
-                // The SQL has 'created_by UUID REFERENCES profiles(id)'. 
-                // We technically need a profile.
+                created_by: userId // CORRECT FK LINK
             })
             .select()
             .single();

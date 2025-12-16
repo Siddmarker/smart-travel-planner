@@ -1,12 +1,19 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 if (!supabaseUrl || !supabaseKey) {
-    // Warn only, so build doesn't fail if envs are missing
-    console.warn('Supabase URL or Key is missing. Trip features may not work.');
+    console.error('CRITICAL: Supabase URL or Key is missing. Database connection will fail.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Ensure URL is valid before creating client to prevent crashes
+const isValidUrl = (url: string) => {
+    try { return Boolean(new URL(url)); } catch (e) { return false; }
+};
+
+export const supabase = createClient(
+    isValidUrl(supabaseUrl) ? supabaseUrl : 'https://placeholder.supabase.co',
+    supabaseKey
+);

@@ -26,7 +26,7 @@ export default function GoogleMapLoader({ onLoad, onError }: GoogleMapLoaderProp
 
         // Load Google Maps script
         const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&loading=async`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&loading=async&v=weekly`;
         script.async = true;
         script.defer = true;
 
