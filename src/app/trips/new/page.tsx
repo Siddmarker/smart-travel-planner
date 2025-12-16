@@ -55,19 +55,20 @@ export default function NewTripPage() {
         }
 
         try {
+            // Simple budget mapping
+            const budgetNum = Number(formData.budget);
+            let budgetTier = 'Medium';
+            if (budgetNum < 1000) budgetTier = 'Low';
+            if (budgetNum > 3000) budgetTier = 'High';
+
             const payload = {
-                userId: currentUser.id, // Explicitly send user ID for non-session auth
+                // userId: currentUser.id, // Not used by backend currently (uses session or ignores)
                 name: formData.name,
-                destination: {
-                    name: formData.destination.name,
-                    location: formData.destination.location,
-                    placeId: formData.destination.placeId
-                },
-                dates: { start: formData.startDate, end: formData.endDate },
-                settings: { budget: Number(formData.budget) },
-                // Defaults required by schema
-                pax: 1,
-                tripType: 'friends'
+                destination: formData.destination.name, // Send string name only
+                startDate: formData.startDate,          // Send top-level
+                endDate: formData.endDate,              // Send top-level
+                budget: budgetTier,                     // Send Text Tier
+                categories: []                          // Send empty array or add UI later
             };
 
             const res = await fetch('/api/trips', {
