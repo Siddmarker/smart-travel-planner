@@ -4,7 +4,7 @@
 // CONFIGURATION & DICTIONARIES
 // ==========================================
 
-const KEYWORD_DICTIONARY: Record<string, string[]> = {
+export const KEYWORD_DICTIONARY: Record<string, string[]> = {
     // 3. Local Non-Veg Unlock
     'bangalore_non_veg': [
         'Military Hotel',
@@ -53,12 +53,16 @@ export interface SearchResultMetadata {
     radius: number; // In meters
     searchType?: string; // e.g., 'restaurant', 'cafe', etc.
     strategy: 'STANDARD' | 'JAIN_STRICT' | 'EARLY_MORNING' | 'LOCAL_NON_VEG' | 'LOCAL_GEM';
+    fallbackQuery?: string;
 }
 
 // ==========================================
 // LOGIC IMPLEMENTATION
 // ==========================================
 
+/**
+ * Constructs the specialized Google Maps query based on User Protocols.
+ */
 /**
  * Constructs the specialized Google Maps query based on User Protocols.
  */
@@ -70,13 +74,13 @@ export function constructMapsQuery(options: SearchQueryOptions): SearchResultMet
     let radius = 5000; // Default 5km
     let searchType: string | undefined = undefined;
     let strategy: SearchResultMetadata['strategy'] = 'STANDARD';
+    let fallbackQuery: string | undefined = undefined;
 
     const cleanLocation = locationName.split(',')[0].trim();
     const currentHour = time.getHours();
 
     // ---------------------------------------------------------
     // PROTOCOL 2: "4 AM Biryani" (Time-Aware Search)
-    // Trigger: 3 AM - 7 AM OR Query explicit mention
     // ---------------------------------------------------------
     const isEarlyMorning = (currentHour >= 3 && currentHour < 7);
     const isExplicitEarlyQuery = query.toLowerCase().includes('early morning') || query.toLowerCase().includes('4am');
@@ -86,98 +90,114 @@ export function constructMapsQuery(options: SearchQueryOptions): SearchResultMet
         radius = 35000; // Action A: Radius Expansion to 35km (Hoskote check)
 
         // Action B: Keyword Override
-        // If query is generic like "food" or empty, force specific terms
         if (!query || query.toLowerCase().includes('food') || query.toLowerCase().includes('restaurant')) {
-            // Randomly pick one or use a combined approach? For Maps Text Search, specificity is key.
-            // We'll construct a "OR" style query naturally by asking for "Early morning biryani or breakfast"
             finalQuery = `Early morning biryani or Thatte Idli spots near ${cleanLocation}`;
         } else {
-            // Append time context to existing query
             finalQuery = `${query} open now near ${cleanLocation}`;
         }
-
-        // Return early to prioritize this specific use case? 
-        // No, Jain logic might still apply (e.g. Jain at 4 AM), but "Military Hotel" clashes with Jain.
     }
-
     // ---------------------------------------------------------
-    // PROTOCOL 1: "Strict Jain" Protocol
-    // Trigger: Diet includes 'Jain'
+    // SMART QUERY INJECTION (Filter-Driven)
     // ---------------------------------------------------------
-    const dietFilters = filters.dietary || [];
-    const isJain = dietFilters.includes('Jain');
+    else {
+        // Construct base specific query modifiers from filters
+        const descriptors: string[] = [];
 
-    if (isJain) {
-        strategy = 'JAIN_STRICT';
-        // Layer 1 (Search Query): DO NOT search generic "Restaurants"
-
-        // Force specific phrasing
-        const jainKeywords = ['Pure Jain', 'Sattvic food', 'No onion no garlic'];
-
-        // If the user typed "Italian", we make it "Pure Jain Italian..."
-        if (query) {
-            finalQuery = `Pure Jain ${query} near ${cleanLocation}`;
-        } else {
-            finalQuery = `Pure Jain restaurants near ${cleanLocation}`;
+        // 1. Establishment Type (e.g. "Rooftop", "Fine Dining")
+        if (filters.establishmentType && filters.establishmentType.length > 0) {
+            descriptors.push(...filters.establishmentType);
         }
 
-        // Note: Negative filtering for 'pub' etc happens in post-processing or via Gemini
-        // We can't strictly send "NOT pub" to Maps Text Search effectively in one go
-    }
+        // 2. Features (e.g. "Live Music", "Pet Friendly")
+        if (filters.features && filters.features.length > 0) {
+            descriptors.push(...filters.features);
+        }
 
-    // ---------------------------------------------------------
-    // PROTOCOL 3: "Local Non-Veg" & "Local Gem" Unlock
-    // Trigger: Category='Local' OR Query='Local'
-    // ---------------------------------------------------------
-    const isLocalCategory = category.toLowerCase() === 'local' || query.toLowerCase().includes('local');
-    const isNonVeg = dietFilters.includes('Non-Vegetarian') || dietFilters.includes('Non-Veg');
+        // 3. Cuisine
+        if (filters.cuisine && filters.cuisine.length > 0) {
+            descriptors.push(...filters.cuisine);
+        }
 
-    if (isLocalCategory) {
-        if (!isJain && isNonVeg) {
-            strategy = 'LOCAL_NON_VEG';
-            // Action: Stop searching "Non-veg restaurant", Start searching "Military Hotel"
-            const localTerms = KEYWORD_DICTIONARY['bangalore_non_veg'].join(' OR ');
-            finalQuery = `${localTerms} near ${cleanLocation}`;
-        } else if (isJain) {
-            // Local + Jain = Bhojanalaya
-            strategy = 'JAIN_STRICT'; // Keep strict jain strategy but enhance query
-            const jainTerms = KEYWORD_DICTIONARY['jain_strict'].join(' OR ');
-            finalQuery = `${jainTerms} near ${cleanLocation}`;
-        } else {
-            // General Local (could be veg or non-veg, but 'Local' usually implies these native spots)
+        // 4. Category (if generic like 'food', 'restaurants' -> 'restaurant')
+        let baseTerm = 'places';
+        if (category === 'food' || category === 'restaurants') baseTerm = 'restaurant';
+        else if (category === 'cafes') baseTerm = 'cafe';
+        else if (category === 'nightlife') baseTerm = 'night club';
+        else if (category) baseTerm = category;
+
+        // ---------------------------------------------------------
+        // PROTOCOL 3: Specific Local Mappings (Bangalore Context)
+        // ---------------------------------------------------------
+        const dietFilters = filters.dietary || [];
+        const isNonVeg = dietFilters.includes('Non-Vegetarian') || dietFilters.includes('Non-Veg');
+        const isVeg = dietFilters.includes('Vegetarian');
+        const isFamousLocal = filters.establishmentType?.includes('Famous Local');
+
+        if (isFamousLocal) {
             strategy = 'LOCAL_GEM';
-            // Search for both Military Hotels AND Bhojanalayas/Khanavalis to get a mix?
-            // Or just generic "Native Oota" terms?
-            // Let's mix standard native terms if no diet specified
-            const mixedTerms = [
-                ...KEYWORD_DICTIONARY['bangalore_non_veg'],
-                'Bhojanalaya',
-                'Tiffin Room'
-            ].join(' OR ');
-
-            // If query has specifics, append them; otherwise use mixed terms
-            if (query && !query.toLowerCase().includes('local')) {
-                finalQuery = `${query} (Local famous) near ${cleanLocation}`;
-            } else {
-                finalQuery = `${mixedTerms} near ${cleanLocation}`;
+            if (isNonVeg) {
+                // "Famous Local" + "Non-Veg" -> Military Hotel
+                baseTerm = KEYWORD_DICTIONARY['bangalore_non_veg'].join(' OR ');
+                // Remove 'Famous Local' from descriptors to avoid redundancy in query string if we inject specific terms
+                const idx = descriptors.indexOf('Famous Local');
+                if (idx > -1) descriptors.splice(idx, 1);
+            } else if (isVeg) {
+                // "Famous Local" + "Veg" -> Tiffin Room
+                baseTerm = 'Tiffin Room OR Darshini OR Bhavan';
+                const idx = descriptors.indexOf('Famous Local');
+                if (idx > -1) descriptors.splice(idx, 1);
             }
         }
-    }
 
-    // ---------------------------------------------------------
-    // FINAL FALLBACK & FORMATTING
-    // ---------------------------------------------------------
+        // ---------------------------------------------------------
+        // PROTOCOL 1: Strict Jain
+        // ---------------------------------------------------------
+        const isJain = dietFilters.includes('Jain');
+        if (isJain) {
+            strategy = 'JAIN_STRICT';
+            descriptors.push('Pure Jain');
+            descriptors.push('No Onion No Garlic');
+            // We append these to ensure Google Text Search prioritizes them
+        }
 
-    // If we haven't completely overridden the query yet, ensure location is present
-    if (strategy === 'STANDARD' && !finalQuery.toLowerCase().includes(cleanLocation.toLowerCase())) {
-        finalQuery = `${finalQuery} near ${cleanLocation}`;
+
+        // Construct Final Query
+        // Combine descriptors + baseTerm
+        // e.g. "Rooftop Live Music Italian restaurant"
+        const descriptorString = descriptors.join(' ');
+
+        // If user typed a query, we combine or prefer it?
+        // User query is highest intent.
+        if (query) {
+            finalQuery = `${descriptorString} ${query} near ${cleanLocation}`;
+        } else {
+            finalQuery = `${descriptorString} ${baseTerm} near ${cleanLocation}`;
+        }
+
+        // Clean up double spaces
+        finalQuery = finalQuery.replace(/\s+/g, ' ').trim();
+
+        // ---------------------------------------------------------
+        // FALLBACK MECHANISM (Relaxed Query)
+        // ---------------------------------------------------------
+        // If the query is very complex (has descriptors), create a fallback
+        if (descriptors.length > 0) {
+            // Fallback: Just the category/base term and maybe main cuisine
+            let fallbackDescriptors = [];
+            if (filters.cuisine && filters.cuisine.length > 0) fallbackDescriptors.push(filters.cuisine[0]);
+            // Maybe keep establishment type if it's broad like "Cafe"
+
+            const fallbackBase = query || baseTerm; // Keep user query if exists
+            fallbackQuery = `Top rated ${fallbackDescriptors.join(' ')} ${fallbackBase} near ${cleanLocation}`.replace(/\s+/g, ' ').trim();
+        }
     }
 
     return {
         finalQuery,
         radius,
         searchType,
-        strategy
+        strategy,
+        fallbackQuery
     };
 }
 

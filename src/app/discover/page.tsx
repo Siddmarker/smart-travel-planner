@@ -12,7 +12,7 @@ import { PlaceSubmissionModal } from '@/components/Submission/PlaceSubmissionMod
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Place, DiscoveryFiltrationMetadata, CommunityPlace } from '@/types';
 import { TrendingUp, MapPin, Sparkles, PlusCircle } from 'lucide-react';
-import { applyDiscoveryFiltrationPipeline, enhanceDiscoveryPlaces } from '@/lib/discovery-filtration';
+import { applyDiscoveryFiltrationPipeline, enhanceDiscoveryPlaces, scoreAndSortPlaces } from '@/lib/discovery-filtration';
 import { smartCategoryFilter } from '@/lib/categoryUtils';
 import { SubmissionService } from '@/lib/submission-service';
 import { analyzeOffRoadTerrain } from '@/services/offRoadAI';
@@ -71,17 +71,18 @@ export default function DiscoverPage() {
     // Keeping for reference or fallback if needed, but primary logic moved.
 
 
-    const fetchPlaces = async (coords: { lat: number; lng: number } | null, radius: number, locationName: string) => {
+    const fetchPlaces = async (coords: { lat: number; lng: number } | null, radius: number, locationName: string, filters: Record<string, any> = {}) => {
         setIsLoading(true);
         setFiltrationMetadata(null); // Reset metadata
         try {
-            console.log(`Fetching places for ${locationName}`);
+            console.log(`Fetching places for ${locationName} with Smart Query...`);
 
             // Fetch Community Places
             const community = SubmissionService.getCommunityPlaces();
             setCommunityPlaces(community);
 
-            // 1. Fetch nearby places ONLY if we have coords
+            // 1. Fetch nearby places ONLY if we have coords (and no strict filters that require text search)
+            // If filters dictate specific query (e.g. "Famous Local"), we might rely less on generic 'nearby'
             if (coords) {
                 let nearby = await searchNearbyPlaces(coords, radius);
                 // Apply filtration to nearby places too
@@ -99,7 +100,7 @@ export default function DiscoverPage() {
             const searchLogic = constructMapsQuery({
                 query: locationName ? `popular tourist attractions in ${locationName}` : 'popular tourist attractions',
                 locationName: locationName,
-                filters: activeFilters,
+                filters: filters, // Pass dynamic filters
                 time: new Date()
             });
 
@@ -108,7 +109,15 @@ export default function DiscoverPage() {
             // Use radius from logic if expanded (e.g., 4 AM Protocol)
             const effectiveRadius = Math.max(radius, searchLogic.radius);
 
-            let trending = await searchPlaces(searchLogic.finalQuery, coords || undefined, effectiveRadius, 'tourist_attraction');
+            let trending = await searchPlaces(searchLogic.finalQuery, coords || undefined, effectiveRadius, undefined); // Remove strict 'tourist_attraction' type to allow broader results
+
+            // FALLBACK MECHANISM
+            if (trending.length === 0 && searchLogic.fallbackQuery) {
+                console.warn(`[Discover] No results for "${searchLogic.finalQuery}". Retrying with fallback: "${searchLogic.fallbackQuery}"`);
+                // UI Feedback (Toast placeholder)
+                // toast.info("Specific match not found. Showing similar top-rated spots.");
+                trending = await searchPlaces(searchLogic.fallbackQuery, coords || undefined, effectiveRadius);
+            }
 
             // Determine correct category for filtration based on strategy
             let filtrationCategory = 'attractions'; // default for trending
@@ -125,13 +134,9 @@ export default function DiscoverPage() {
                 filteredTrending = await auditJainFriendliness(filteredTrending);
             }
 
-            // FALLBACK: If filtration removed everything, show original results (but warn)
-            if (trending.length > 0 && filteredTrending.length === 0) {
-                console.warn('[Discovery] Filtration removed all results. Showing raw results as fallback.');
-                filteredTrending = trending;
-                metadata.filteredCount = trending.length;
-                metadata.filtrationRate = 0;
-            }
+            // SCORE & SORT (instead of strict filtering)
+            // Even if basic filtration passes, we rank them
+            filteredTrending = scoreAndSortPlaces(filteredTrending, filters);
 
             setFiltrationMetadata(metadata);
 
@@ -157,31 +162,17 @@ export default function DiscoverPage() {
                 setOriginalHidden([]);
             }
 
-            // Initialize filtered places with trending
-            setFilteredPlaces(enhancedTrending);
+            // Initialize filtered places with trending (Top 20 scored)
+            setFilteredPlaces(enhancedTrending.slice(0, 20));
+
         } catch (error) {
             console.error('Error fetching places:', error);
-            // TODO: Show error toast or UI state
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleCategorySelect = async (categoryId: string) => {
-        setSelectedCategory(categoryId);
-        setActiveFilters({}); // Reset filters on category change
-        setVisibleCount(12); // Reset pagination
-        setFiltrationMetadata(null);
-
-        if (!categoryId) {
-            // No category selected, show all original trending
-            setFilteredPlaces(trendingPlacesList);
-            setNearbyPlacesList(originalNearby);
-            setHiddenGemsList(originalHidden);
-            setCategoryResults([]);
-            return;
-        }
-
+    const executeCategorySearch = async (categoryId: string, filters: Record<string, any> = {}) => {
         setIsLoading(true);
         try {
             let results: Place[] = [];
@@ -211,50 +202,65 @@ export default function DiscoverPage() {
                 results = [...analyzedPlaces, ...results.slice(10)];
 
             } else {
-                // Standard search for other categories
-                if (locationCoords) {
-                    const googleType = mapCategoryToGoogleType(categoryId);
-                    const categoryPlaces = await searchNearbyPlaces(locationCoords, currentRadius, googleType);
-                    results = smartCategoryFilter(categoryPlaces, categoryId);
-                } else {
-                    // Fallback to text search if no coords
-                    // Use new logic here too
-                    const searchLogic = constructMapsQuery({
-                        query: categoryId,
-                        locationName: currentLocationName,
-                        filters: activeFilters,
-                        category: categoryId,
-                        time: new Date()
-                    });
+                // Standard search for other categories WITH SMART QUERY INJECTION
+                // 1. Construct Smart Query
+                const searchLogic = constructMapsQuery({
+                    query: categoryId, // Base category intent
+                    locationName: currentLocationName,
+                    filters: filters, // Inject filters
+                    category: categoryId,
+                    time: new Date()
+                });
 
-                    const textResults = await searchPlaces(searchLogic.finalQuery, undefined, currentRadius);
-                    results = smartCategoryFilter(textResults, categoryId);
+                console.log(`[Category Search] Strategy: ${searchLogic.strategy} | Query: ${searchLogic.finalQuery}`);
+
+                // 2. Execute Search (Text Search is better for "Famous Local" than Nearby Search)
+                // If we have filters, prefer Text Search. If vanilla category + coords, Nearby might be ok but Text Search is robust.
+                // We'll use Text Search primarily for consistency with Smart Query logic.
+                const effectiveRadius = Math.max(currentRadius, searchLogic.radius);
+
+                // Use searchPlaces (Text Search)
+                let textResults = await searchPlaces(searchLogic.finalQuery, locationCoords || undefined, effectiveRadius);
+
+                // 3. Fallback Mechanism
+                if (textResults.length === 0 && searchLogic.fallbackQuery) {
+                    console.warn(`[Category] No results for "${searchLogic.finalQuery}". Retrying fallback: "${searchLogic.fallbackQuery}"`);
+                    textResults = await searchPlaces(searchLogic.fallbackQuery, locationCoords || undefined, effectiveRadius);
                 }
+
+                results = textResults;
+
+                // Note: We used to call smartCategoryFilter(textResults, categoryId) here.
+                // But if we injected "Famous Local" into the query, strict category filtering might hide "Military Hotels" if their google type is 'restaurant' not 'local'?
+                // Actually 'smartCategoryFilter' checks types. Military Hotel IS a restaurant.
+                // But better to trust the Search Query results + Score Sorting.
             }
 
             // Apply enhancements (Credibility, Dietary Options, etc.)
-            // Metadata: We could also apply the full pipeline here if we wanted fake detection etc.
-            // For now, ensuring dietary options are present is key.
-
-            // Jain Audit Protocol (if coming from category select + filters)
-            // Note: activeFilters might not be set yet if just clicking category, but if they refine it later...
-            // Actually handleFilterChange triggers re-filter not re-fetch usually? 
-            // The handleCategorySelect fetches FRESH data. 
-            // If we want Jain audit here, we need to know if Jain filter is active. 
-            // But activeFilters is CLEARED on category select (line 174).
-            // So initially this won't trigger Jain strategy unless we pass initial filters.
-
             const enhancedResults = await enhanceDiscoveryPlaces(results, locationCoords);
 
-            setCategoryResults(enhancedResults); // Store base results for re-filtering
-            setFilteredPlaces(enhancedResults); // Update Trending tab
+            // SCORE & SORT (Soft Filtering)
+            // This replaces strict filtering
+            const scoredResults = scoreAndSortPlaces(enhancedResults, filters);
 
-            // Update Nearby tab (sort by distance if possible, or just use results)
-            setNearbyPlacesList([...enhancedResults]);
+            setCategoryResults(scoredResults); // Store base results
+            setFilteredPlaces(scoredResults.slice(0, 20)); // Update Trending tab with top 20
 
-            // Update Hidden Gems tab (filter by rating/reviews)
-            const hidden = enhancedResults.filter(p => (p.rating || 0) >= 4.0 && (p.reviews || 0) < 100);
+            // Update Nearby tab
+            setNearbyPlacesList([...scoredResults]);
+
+            // Update Hidden Gems tab
+            const hidden = scoredResults.filter(p => (p.rating || 0) >= 4.0 && (p.reviews || 0) < 100);
             setHiddenGemsList(hidden);
+
+            // Update Metadata for Analytics
+            setFiltrationMetadata({
+                originalCount: results.length,
+                filteredCount: scoredResults.length,
+                filtrationRate: 0, // We are sorting, not hiding, unless size differs?
+                fakeEntities: [],
+                layerResults: { basicValidation: 0, fakeEntityDetection: 0, credibilityScoring: 0, categoryValidation: 0, destinationRelevance: 0 }
+            });
 
         } catch (error) {
             console.error('Error searching category:', error);
@@ -267,128 +273,51 @@ export default function DiscoverPage() {
         }
     };
 
+    const handleCategorySelect = async (categoryId: string) => {
+        setSelectedCategory(categoryId);
+        setActiveFilters({}); // Reset filters on NEW category select
+        setVisibleCount(12);
+        setFiltrationMetadata(null);
+
+        if (!categoryId) {
+            // No category selected, show all original trending
+            setFilteredPlaces(trendingPlacesList);
+            setNearbyPlacesList(originalNearby);
+            setHiddenGemsList(originalHidden);
+            setCategoryResults([]);
+            return;
+        }
+
+        // Execute Search with empty filters initially
+        executeCategorySearch(categoryId, {});
+    };
+
+
     const handleFilterChange = (filters: Record<string, any>) => {
         setActiveFilters(filters);
-        setVisibleCount(12); // Reset pagination on filter change
+        setVisibleCount(12);
+
+        // TRIGGER SMART SEARCH ON FILTER CHANGE
+        // This is the key fix for "No Results" -> We need to re-fetch with new query
+        if (selectedCategory) {
+            executeCategorySearch(selectedCategory, filters);
+        } else {
+            // If in Discovery Mode (no category), re-fetch main places logic
+            // We need to pass filters to fetchPlaces
+            fetchPlaces(locationCoords, currentRadius, currentLocationName, filters);
+        }
     };
 
     const handleSortChange = (value: string) => {
         setSortOption(value);
     };
 
-    // Helper for strict filtering
-    const checkFilterMatch = (place: Place, filterKey: string, filterValues: any[]): boolean => {
-        if (!filterValues || filterValues.length === 0) return true;
-
-        // 1. Dietary Preferences (AND logic - place must have ALL selected options)
-        // Actually, usually for dietary "Vegetarian" means "Is Vegetarian Friendly".
-        // If I select "Vegetarian" and "Vegan", I want a place that is BOTH? Or EITHER?
-        // User request: "Multiple filters (Veg + Jain + Café) → show places matching ALL criteria"
-        // This implies AND across categories.
-        // Within Dietary: "Vegetarian" + "Jain". A place can be both.
-        // If I select "Vegetarian" and "Non-Vegetarian", I likely want a place that serves BOTH.
-        // So 'every' (AND) is safer for "Must support X and Y".
-        if (filterKey === 'dietary') {
-            const placeOptions = place.dietaryOptions || [];
-            return filterValues.every(val => placeOptions.includes(val));
-        }
-
-        // 3. Cuisine (OR logic - User likely wants "Italian OR Chinese")
-        if (filterKey === 'cuisine') {
-            const placeTags = place.tags || []; // Tags often hold cuisine info like 'South Indian', 'Chinese'
-            return filterValues.some(val => placeTags.includes(val));
-        }
-
-        // 4. Features (OR logic - "Rooftop OR Live Music" to see broad options)
-        if (filterKey === 'features') {
-            const placeTags = place.tags || [];
-            return filterValues.some(val => placeTags.includes(val));
-        }
-
-        // 2. Establishment Type
-        if (filterKey === 'establishmentType') {
-            const placeTypes = [...(place.rawTypes || []), ...(place.tags || [])].map(t => t.toLowerCase());
-            const placeName = place.name.toLowerCase();
-
-            // Map filter values to lowercase for comparison
-            return filterValues.some(val => {
-                const v = val.toLowerCase();
-                // Special handling for 'Cafe' vs 'Cafes'
-                if (v === 'cafe') return placeTypes.some(t => t.includes('cafe') || t.includes('coffee'));
-
-                // Enhanced matching for Stays
-                if (v === 'resort') return placeTypes.some(t => t.includes('resort')) || placeName.includes('resort');
-                if (v === 'homestay') return placeTypes.some(t => t.includes('homestay') || t.includes('guest house') || t.includes('bnb')) || placeName.includes('homestay') || placeName.includes('villa') || placeName.includes('cottage');
-                if (v === 'lodge') return placeTypes.some(t => t.includes('lodge') || t.includes('lodging')) || placeName.includes('lodge');
-                if (v === 'hotel') return placeTypes.some(t => t.includes('hotel')) || placeName.includes('hotel');
-                if (v === 'villa') return placeTypes.some(t => t.includes('villa')) || placeName.includes('villa');
-
-                return placeTypes.some(t => t.includes(v));
-            });
-        }
-
-        // 3. Cuisine (OR logic)
-        if (filterKey === 'cuisine') {
-            const placeTags = [...(place.tags || []), ...(place.rawTypes || [])].map(t => t.toLowerCase());
-            return filterValues.some(val => {
-                const v = val.toLowerCase();
-                return placeTags.some(t => t.includes(v));
-            });
-        }
-
-        // 4. Trending (OR logic)
-        if (filterKey === 'trending') {
-            // Check social stats or tags
-            if (filterValues.includes('Trending') && place.socialStats?.trending) return true;
-            // For others, check tags
-            return false;
-        }
-
-        // 5. Features (AND logic)
-        if (filterKey === 'features') {
-            const placeTags = [...(place.tags || []), ...(place.rawTypes || [])].map(t => t.toLowerCase());
-            return filterValues.every(val => {
-                const v = val.toLowerCase();
-                return placeTags.some(t => t.includes(v));
-            });
-        }
-
-        return true;
-    };
-
-    // Effect to apply dynamic filters when activeFilters changes
+    // Effect to handle CLIENT-SIDE Sorting only (when sortOption changes)
+    // We do NOT re-fetch here, just re-order current filteredPlaces
     useEffect(() => {
-        if (!selectedCategory || categoryResults.length === 0) return;
+        if (filteredPlaces.length === 0) return;
 
-        let results = [...categoryResults];
-
-        // Apply dynamic filters
-        if (activeFilters.price && activeFilters.price !== 'any') {
-            results = results.filter(p => p.priceLevel === Number(activeFilters.price));
-        }
-        if (activeFilters.rating && activeFilters.rating !== 'any') {
-            const minRating = Number(activeFilters.rating);
-            if (!isNaN(minRating)) {
-                results = results.filter(p => (p.rating || 0) >= minRating);
-            }
-        }
-
-        // Strict Field Filtering
-        if (activeFilters.dietary && activeFilters.dietary.length > 0) {
-            results = results.filter(p => checkFilterMatch(p, 'dietary', activeFilters.dietary));
-        }
-
-        if (activeFilters.establishmentType && activeFilters.establishmentType.length > 0) {
-            results = results.filter(p => checkFilterMatch(p, 'establishmentType', activeFilters.establishmentType));
-        }
-
-        if (activeFilters.cuisine && activeFilters.cuisine.length > 0) {
-            results = results.filter(p => checkFilterMatch(p, 'cuisine', activeFilters.cuisine));
-        }
-
-        if (activeFilters.features && activeFilters.features.length > 0) {
-            results = results.filter(p => checkFilterMatch(p, 'features', activeFilters.features));
-        }
+        let results = [...filteredPlaces];
 
         // Sorting
         if (sortOption === 'popularity') {
@@ -399,29 +328,14 @@ export default function DiscoverPage() {
             results.sort((a, b) => (a.priceLevel || 0) - (b.priceLevel || 0));
         } else if (sortOption === 'price_high') {
             results.sort((a, b) => (b.priceLevel || 0) - (a.priceLevel || 0));
+        } else if (sortOption === 'relevance') {
+            // Default scoring sort
+            results.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
         }
 
         setFilteredPlaces(results);
 
-        // Update analytics metadata to reflect visible results
-        if (filtrationMetadata) {
-            setFiltrationMetadata({
-                ...filtrationMetadata,
-                filteredCount: results.length,
-                filtrationRate: filtrationMetadata.originalCount > 0
-                    ? Math.round(((filtrationMetadata.originalCount - results.length) / filtrationMetadata.originalCount) * 100)
-                    : 0
-            });
-        }
-
-        // Also apply filters to Nearby and Hidden Gems tabs
-        setNearbyPlacesList(results);
-
-        // For Hidden Gems, maintain the rating/review criteria
-        const hidden = results.filter(p => (p.rating || 0) >= 4.0 && (p.reviews || 0) < 100);
-        setHiddenGemsList(hidden);
-
-    }, [activeFilters, categoryResults, selectedCategory, sortOption]);
+    }, [sortOption]); // removed activeFilters dependencies
 
     const handleLocationChange = (location: string, coords?: { lat: number; lng: number }) => {
         console.log('Location changed to:', location);
@@ -430,14 +344,24 @@ export default function DiscoverPage() {
             setLocationCoords(coords);
         }
         // Always fetch places, even if we don't have coords (we'll use text search)
-        fetchPlaces(coords || null, currentRadius, location);
+        // Pass current active filters if any?
+        // Usually location change might reset filters, but keeping them is fine.
+        if (selectedCategory) {
+            executeCategorySearch(selectedCategory, activeFilters);
+        } else {
+            fetchPlaces(coords || null, currentRadius, location, activeFilters);
+        }
     };
 
     const handleRadiusChange = (radius: number) => {
         const radiusInMeters = radius * 1000;
         setCurrentRadius(radiusInMeters);
         // Pass current location coords (or null) and name
-        fetchPlaces(locationCoords, radiusInMeters, currentLocationName);
+        if (selectedCategory) {
+            executeCategorySearch(selectedCategory, activeFilters);
+        } else {
+            fetchPlaces(locationCoords, radiusInMeters, currentLocationName, activeFilters);
+        }
     };
 
     const handleSearch = async (query: string) => {

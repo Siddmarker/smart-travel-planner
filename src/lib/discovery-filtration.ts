@@ -1,5 +1,6 @@
 import { Place, DiscoveryFiltrationMetadata, FilteredEntity } from '@/types';
 import { calculateRealDistances } from './googleMapsService';
+import { KEYWORD_DICTIONARY } from './search-logic'; // Import shared dictionary
 
 // ==========================================
 // DISCOVERY PAGE FILTRATION PIPELINE
@@ -562,4 +563,80 @@ function extractCategoryTags(types: string[]): string[] {
         .filter(t => interestingTypes.includes(t))
         .map(t => t.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()))
         .slice(0, 3);
+}
+
+// ==========================================
+// SCORING & SORTING (Soft Filtering)
+// ==========================================
+
+export function scoreAndSortPlaces(places: Place[], filters: Record<string, any>): Place[] {
+    const scoredPlaces = places.map(place => {
+        let score = 0;
+        const name = place.name.toLowerCase();
+        const tags = (place.tags || []).map(t => t.toLowerCase());
+        const types = (place.rawTypes || []).map(t => t.toLowerCase());
+        const combinedText = `${name} ${tags.join(' ')} ${types.join(' ')}`;
+
+        // 1. Keyword Matching (High Priority)
+        // Check for specific Bangalore terms if filtering for them
+        if (filters.establishmentType?.includes('Famous Local')) {
+            const localTerms = [
+                ...KEYWORD_DICTIONARY['bangalore_non_veg'],
+                'tiffin', 'darshini', 'bhavan', 'mess', 'native'
+            ].map(t => t.toLowerCase());
+
+            if (localTerms.some(term => combinedText.includes(term))) {
+                score += 20; // Massive boost for explicit local gems
+            }
+        }
+
+        // 2. Establishment Type Scoring
+        if (filters.establishmentType && filters.establishmentType.length > 0) {
+            filters.establishmentType.forEach((type: string) => {
+                const t = type.toLowerCase();
+                if (combinedText.includes(t)) score += 10;
+                // Partial matches
+                if (t === 'rooftop' && combinedText.includes('roof')) score += 5;
+                if (t === 'fine dining' && (combinedText.includes('luxury') || (place.priceLevel || 0) >= 3)) score += 5;
+            });
+        }
+
+        // 3. Features Scoring
+        if (filters.features && filters.features.length > 0) {
+            filters.features.forEach((feat: string) => {
+                const f = feat.toLowerCase();
+                if (combinedText.includes(f)) score += 10;
+            });
+        }
+
+        // 4. Cuisine Scoring
+        if (filters.cuisine && filters.cuisine.length > 0) {
+            filters.cuisine.forEach((cuisine: string) => {
+                const c = cuisine.toLowerCase();
+                if (combinedText.includes(c)) score += 10;
+            });
+        }
+
+        // 5. Dietary (Safety Check mostly, but boost if explicit)
+        if (filters.dietary && filters.dietary.length > 0) {
+            const placeDiet = place.dietaryOptions || [];
+            filters.dietary.forEach((diet: string) => {
+                if (placeDiet.includes(diet)) score += 5;
+                // Penalty? No, we filter out strict violations elsewhere if needed, 
+                // but for "No Results" fix we prefer sorting.
+                // However, showing a Steakhouse to a Vegetarian is bad.
+                // We'll rely on the existing 'enhanceFoodPlace' to tag options.
+                // If it's a "Military Hotel", it likely has "Non-Vegetarian".
+            });
+        }
+
+        return { ...place, relevanceScore: score };
+    });
+
+    // Sort by Score DESC, then Rating DESC
+    return scoredPlaces.sort((a, b) => {
+        const scoreDiff = (b.relevanceScore || 0) - (a.relevanceScore || 0);
+        if (scoreDiff !== 0) return scoreDiff;
+        return (b.rating || 0) - (a.rating || 0);
+    });
 }
