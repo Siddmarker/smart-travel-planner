@@ -6,21 +6,29 @@ import { authOptions } from '@/lib/authOptions';
 
 export async function POST(req: Request) {
     try {
+        // 0. Parse Body (FIXED: Added this back)
+        const body = await req.json();
+        const {
+            destination,
+            startDate,
+            endDate,
+            budget,
+            categories,
+            name: tripName
+        } = body;
+
         // 1. Get Session
         const session = await getServerSession(authOptions);
         const email = session?.user?.email;
-        const name = session?.user?.name || 'Traveler'; // Fallback name
+        const name = session?.user?.name || 'Traveler';
 
         if (!email) {
-            // Allow anonymous trips? For now, enforcing at least an Email or "anonymous" placeholder if strictly needed
-            // But typical flow requires login.
             console.warn("No session email found. Falling back to anonymous user logic.");
         }
 
         const userEmail = email || `anon_${Date.now()}@example.com`;
 
         // 2. Ensure Profile Exists (The "Auto-Heal" Logic)
-        // Check if user exists
         let { data: profile } = await supabase
             .from('profiles')
             .select('id')
@@ -29,10 +37,9 @@ export async function POST(req: Request) {
 
         let userId = profile?.id;
 
-        // If no profile, CREATE one
         if (!userId) {
             console.log(`Profile missing for ${userEmail}. Creating new profile...`);
-            userId = crypto.randomUUID(); // Generate ID
+            userId = crypto.randomUUID();
 
             const { error: profileError } = await supabase
                 .from('profiles')
@@ -50,20 +57,23 @@ export async function POST(req: Request) {
         }
 
         // 3. Insert Trip
-        // Now we definitely have a valid userId (profile.id)
+        if (!destination || !startDate || !endDate) {
+            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        }
+
         const { data: trip, error } = await supabase
             .from('trips')
             .insert({
                 destination,
                 start_date: startDate,
                 end_date: endDate,
-                budget_tier: budget, // Mapping 'budget' to 'budget_tier'
+                budget_tier: budget,
                 categories: categories || [],
-                name: name || `${destination} Trip`,
+                name: tripName || `${destination} Trip`,
                 status: 'DRAFT',
-                created_by: userId // CORRECT FK LINK
+                created_by: userId
             })
-            .select()
+            .select() // FIXED: Added .select() to return the object
             .single();
 
         if (error) {
