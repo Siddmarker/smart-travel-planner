@@ -463,8 +463,13 @@ export default function DiscoverPage() {
 
             // Determine correct category for filtration
             let filtrationCategory = '';
-            if (searchLogic.strategy === 'JAIN_STRICT' || searchLogic.strategy === 'LOCAL_NON_VEG' || searchLogic.strategy === 'EARLY_MORNING') {
-                filtrationCategory = 'restaurants';
+            if (searchLogic.strategy === 'JAIN_STRICT') {
+                filtrationCategory = 'restaurants'; // Keep strict validation but maybe not blocklist chains if they are pure veg?
+                // Actually chains like 'A2B' are pure veg and good for Jain. We shouldn't block them for Jain.
+            } else if (searchLogic.strategy === 'LOCAL_NON_VEG' || searchLogic.strategy === 'LOCAL_GEM') {
+                filtrationCategory = 'Local'; // Trigger Review Ceiling & Franchise Killer
+            } else if (searchLogic.strategy === 'EARLY_MORNING') {
+                filtrationCategory = 'Local'; // Early morning spots are usually local gems
             }
 
             // Apply Advanced Filtration

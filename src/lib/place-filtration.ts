@@ -2,6 +2,27 @@ import { Place, FiltrationMetadata, FilteredEntity, CredibilityScore } from '@/t
 
 
 // ==========================================
+// CONFIGURATION
+// ==========================================
+
+const BLOCKLIST_FRANCHISES = [
+    "Empire",
+    "Nandhini",
+    "Adyar Ananda Bhavan",
+    "A2B",
+    "Dominos",
+    "KFC",
+    "McDonalds",
+    "Pizza Hut",
+    "Mainland China",
+    "Burger King",
+    "Subway",
+    "Starbucks",
+    "Cafe Coffee Day",
+    "Taco Bell"
+];
+
+// ==========================================
 // ADVANCED FAKE ENTITY FILTRATION PIPELINE
 // ==========================================
 
@@ -80,6 +101,35 @@ export function applyAdvancedFakeEntityFiltration(
             });
             layerResults.destinationRelevance++;
             return false;
+        }
+
+        // LAYER 6: FRANCHISE KILLER (For 'Local' Category)
+        if (category === 'Local' || category === 'local') {
+            if (isFranchise(place)) {
+                fakeEntities.push({
+                    name: place.name,
+                    filterReason: 'Franchise/Chain blocked in Local Discovery',
+                    filterLayer: 'Franchise Killer'
+                });
+                return false; // Silently drop franchises from Local view
+            }
+
+            // LAYER 7: REVIEW CEILING (Hidden Gem Logic)
+            // Prefer < 800 reviews.
+            // If > 800 reviews, it MUST have > 4.5 rating to survive as a "Legendary Local". 
+            // The prompt says "A place with 15,000 reviews is a Tourist Trap." 
+            // Prompt: "Standard Logic: Sort by review_count -> DELETE THIS."
+            // Prompt: "Local Logic: Prefer rating > 4.2 AND reviews BETWEEN 50 and 800."
+
+            // We'll treat this as a Filter for now.
+            if (!passesLocalGemCriteria(place)) {
+                fakeEntities.push({
+                    name: place.name,
+                    filterReason: 'Failed Local Gem Review Ceiling (>800 reviews or <4.2 rating)',
+                    filterLayer: 'Review Ceiling'
+                });
+                return false;
+            }
         }
 
         return true;
@@ -473,4 +523,51 @@ function hasDietaryVariety(place: Place): boolean {
     }
 
     return dietaryOptions.nonVeg || dietaryOptions.egg || dietaryOptions.multiCuisine;
+}
+
+// ==========================================
+// LAYER 6 & 7: LOCAL DISCOVERY FILTERS
+// ==========================================
+
+function isFranchise(place: Place): boolean {
+    const name = place.name.toLowerCase();
+    return BLOCKLIST_FRANCHISES.some(franchise => name.includes(franchise.toLowerCase()));
+}
+
+function passesLocalGemCriteria(place: Place): boolean {
+    const rating = place.rating || 0;
+    const reviews = place.reviews || 0;
+
+    // 1. Rating Floor
+    if (rating <= 4.2) return false;
+
+    // 2. Review Ceiling & Floor
+    // "User wants the 50-year-old mess with 200 reviews"
+    // "Place with 15,000 reviews is a Tourist Trap"
+
+    if (reviews < 50) return false; // Too new/unknown? Or maybe hidden gem? Prompt says "BETWEEN 50 AND 800"
+    if (reviews > 800) {
+        // Exception for absolute legends? 
+        // "Empire" (10k reviews) is blocked.
+        // What about "Vidyarthi Bhavan"? (Likely 10k+). 
+        // The prompt says "If high reviews -> Tourist Trap". 
+        // Users asking for "Discovery" want "Local hidden spots".
+        // Strict adherence:
+        return false;
+    }
+
+    return true;
+}
+
+export function traceUnusualHours(place: Place): boolean {
+    // Check if place opens early (4 AM - 6 AM)
+    // This requires detailed opening_hours which we might not have on simple search results
+    // But if we do:
+    if (place.openingHours && Array.isArray(place.openingHours)) {
+        // Naive check for '04:00' or '4:00 AM' strings in opening text
+        const earlyMorningPatterns = [/4:00\s*AM/i, /5:00\s*AM/i, /6:00\s*AM/i, /04:00/i, /05:00/i, /06:00/i];
+        const allHours = place.openingHours.join(' ');
+        return earlyMorningPatterns.some(p => p.test(allHours));
+    }
+    return false; // Default to false if unknown
 }

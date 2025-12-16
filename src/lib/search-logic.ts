@@ -8,18 +8,25 @@ const KEYWORD_DICTIONARY: Record<string, string[]> = {
     // 3. Local Non-Veg Unlock
     'bangalore_non_veg': [
         'Military Hotel',
-        'Nati Style',
+        'Nati Style Hotel',
         'Donne Biryani',
-        'Mess',
-        'Gowda Style',
+        'Gowda Oota',
+        'Khanavali',
         'Andhra Mess'
     ],
     // 2. 4 AM Biryani Logic
     'early_morning': [
-        'Early morning biryani',
-        'Thatte Idli spots',
-        'Breakfast places open now',
-        'Midnight food'
+        'Pulav point',
+        'Thatte Idli',
+        'Dum Biryani',
+        'Early morning breakfast'
+    ],
+    // 4. Strict Jain
+    'jain_strict': [
+        'Pure Veg Jain Options',
+        'Bhojanalaya',
+        'Asafoetida free food',
+        'Sattvic food'
     ]
 };
 
@@ -45,7 +52,7 @@ export interface SearchResultMetadata {
     finalQuery: string;
     radius: number; // In meters
     searchType?: string; // e.g., 'restaurant', 'cafe', etc.
-    strategy: 'STANDARD' | 'JAIN_STRICT' | 'EARLY_MORNING' | 'LOCAL_NON_VEG';
+    strategy: 'STANDARD' | 'JAIN_STRICT' | 'EARLY_MORNING' | 'LOCAL_NON_VEG' | 'LOCAL_GEM';
 }
 
 // ==========================================
@@ -119,20 +126,42 @@ export function constructMapsQuery(options: SearchQueryOptions): SearchResultMet
     }
 
     // ---------------------------------------------------------
-    // PROTOCOL 3: "Local Non-Veg" & "Military Hotel" Unlock
-    // Trigger: Category='Local' (or generic food) AND Diet='Non-Veg'
+    // PROTOCOL 3: "Local Non-Veg" & "Local Gem" Unlock
+    // Trigger: Category='Local' OR Query='Local'
     // ---------------------------------------------------------
-    const isNonVeg = dietFilters.includes('Non-Vegetarian') || dietFilters.includes('Non-Veg');
     const isLocalCategory = category.toLowerCase() === 'local' || query.toLowerCase().includes('local');
+    const isNonVeg = dietFilters.includes('Non-Vegetarian') || dietFilters.includes('Non-Veg');
 
-    // ONLY apply if NOT Jain (Safety check)
-    if (!isJain && isNonVeg && isLocalCategory) {
-        strategy = 'LOCAL_NON_VEG';
+    if (isLocalCategory) {
+        if (!isJain && isNonVeg) {
+            strategy = 'LOCAL_NON_VEG';
+            // Action: Stop searching "Non-veg restaurant", Start searching "Military Hotel"
+            const localTerms = KEYWORD_DICTIONARY['bangalore_non_veg'].join(' OR ');
+            finalQuery = `${localTerms} near ${cleanLocation}`;
+        } else if (isJain) {
+            // Local + Jain = Bhojanalaya
+            strategy = 'JAIN_STRICT'; // Keep strict jain strategy but enhance query
+            const jainTerms = KEYWORD_DICTIONARY['jain_strict'].join(' OR ');
+            finalQuery = `${jainTerms} near ${cleanLocation}`;
+        } else {
+            // General Local (could be veg or non-veg, but 'Local' usually implies these native spots)
+            strategy = 'LOCAL_GEM';
+            // Search for both Military Hotels AND Bhojanalayas/Khanavalis to get a mix?
+            // Or just generic "Native Oota" terms?
+            // Let's mix standard native terms if no diet specified
+            const mixedTerms = [
+                ...KEYWORD_DICTIONARY['bangalore_non_veg'],
+                'Bhojanalaya',
+                'Tiffin Room'
+            ].join(' OR ');
 
-        // Action: Stop searching "Non-veg restaurant", Start searching "Military Hotel"
-        const localTerms = KEYWORD_DICTIONARY['bangalore_non_veg'].join(' OR ');
-
-        finalQuery = `${localTerms} near ${cleanLocation}`;
+            // If query has specifics, append them; otherwise use mixed terms
+            if (query && !query.toLowerCase().includes('local')) {
+                finalQuery = `${query} (Local famous) near ${cleanLocation}`;
+            } else {
+                finalQuery = `${mixedTerms} near ${cleanLocation}`;
+            }
+        }
     }
 
     // ---------------------------------------------------------
