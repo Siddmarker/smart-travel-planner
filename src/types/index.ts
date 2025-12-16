@@ -72,6 +72,7 @@ export interface Place {
   rawTypes?: string[]; // Raw Google Place types
   vicinity?: string; // Address/vicinity from Google
   credibilityScore?: CredibilityScore;
+  relevanceScore?: number; // Score for search relevance
   photos?: string[];
   categoryTags?: string[];
   // Enhanced Food & Dining Fields
