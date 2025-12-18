@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
+import { createBrowserClient } from '@supabase/ssr';
 import { DestinationSearch } from '@/components/CreateTrip/DestinationSearch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,13 +57,22 @@ export default function NewTripPage() {
             return;
         }
 
-        if (!currentUser) {
-            toast({ title: "Error", description: "User not identified", variant: "destructive" });
-            setLoading(false);
-            return;
-        }
-
         try {
+            // A. Get the fresh token manually
+            const supabase = createBrowserClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+            );
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session) {
+                toast({ title: "Authentication Required", description: "Please log in again.", variant: "destructive" });
+                router.push('/login');
+                return;
+            }
+
+            const token = session.access_token; // <--- The Key
+
             // Simple budget mapping
             const budgetNum = Number(formData.budget);
             let budgetTier = 'Medium';
@@ -76,21 +86,24 @@ export default function NewTripPage() {
                 startDate: formData.startDate,          // Send top-level
                 endDate: formData.endDate,              // Send top-level
                 budget: budgetTier,                     // Send Text Tier
-                tripType: formData.tripType,            // <--- ADD THIS
+                tripType: formData.tripType,
                 categories: []                          // Send empty array or add UI later
             };
 
+            // B. Send it in the Header
             const res = await fetch('/api/trips', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify(payload)
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` // <--- Manually attaching ID
+                },
+                body: JSON.stringify(payload) // Ensure 'payload' contains your form data
             });
 
             if (res.ok) {
                 const data = await res.json();
                 toast({ title: "Trip created!", description: "Redirecting to dashboard..." });
-                router.push(`/trips/${data.trip._id}`);
+                router.push(`/trips/${data.trip._id}`); // Note: Verify if _id or id is returned
             } else {
                 const error = await res.json();
                 console.error("Create Trip Error:", error);
