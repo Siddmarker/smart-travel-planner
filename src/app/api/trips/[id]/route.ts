@@ -8,27 +8,30 @@ export async function GET(
     try {
         const { id } = await params;
 
+        if (!id) {
+            return NextResponse.json({ error: 'Trip ID missing' }, { status: 400 });
+        }
+
         // 1. ADMIN CLIENT
         const supabaseAdmin = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_ROLE_KEY!
         );
 
-        // 2. FETCH ONLY THE TRIP (Removed 'trip_days' to isolate the issue)
+        // 2. FETCH TRIP + DAYS
+        // We add 'trip_days(*)' back so the UI can render the itinerary.
         const { data: trip, error } = await supabaseAdmin
             .from('trips')
-            .select('*') // <--- SIMPLEST POSSIBLE QUERY
+            .select('*, trip_days(*)')
             .eq('id', id)
             .single();
 
         if (error) {
             console.error("Fetch Error:", error);
-            // Log the specific error to the Vercel/Local console
-            return NextResponse.json({ error: error.message, details: error }, { status: 500 });
-        }
-
-        if (!trip) {
-            return NextResponse.json({ error: 'Trip found but is empty' }, { status: 404 });
+            if (error.code === 'PGRST116') {
+                return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+            }
+            throw error;
         }
 
         return NextResponse.json(trip);
