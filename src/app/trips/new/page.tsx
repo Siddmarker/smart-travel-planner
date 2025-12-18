@@ -9,6 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
 
 export default function NewTripPage() {
@@ -21,7 +28,8 @@ export default function NewTripPage() {
         destination: null as any, // Holds full place object
         startDate: '',
         endDate: '',
-        budget: 1000
+        budget: 1000,
+        tripType: 'Friends'
     });
 
     // Protect route
@@ -68,6 +76,7 @@ export default function NewTripPage() {
                 startDate: formData.startDate,          // Send top-level
                 endDate: formData.endDate,              // Send top-level
                 budget: budgetTier,                     // Send Text Tier
+                tripType: formData.tripType,            // <--- ADD THIS
                 categories: []                          // Send empty array or add UI later
             };
 
@@ -135,6 +144,25 @@ export default function NewTripPage() {
                                     value={formData.endDate} onChange={handleChange} required
                                 />
                             </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Who is traveling?</Label>
+                            <Select
+                                value={formData.tripType}
+                                onValueChange={(value) => setFormData(prev => ({ ...prev, tripType: value }))}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select Trip Type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Solo">Solo</SelectItem>
+                                    <SelectItem value="Couple">Couple</SelectItem>
+                                    <SelectItem value="Friends">Friends</SelectItem>
+                                    <SelectItem value="Family">Family</SelectItem>
+                                    <SelectItem value="Corporate">Corporate</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         <div className="space-y-2">

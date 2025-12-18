@@ -2,13 +2,13 @@
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { supabase } from '@/lib/supabase';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/authOptions';
 
 export async function POST(req: Request) {
     try {
-        // 0. Parse Body (FIXED: Added this back)
+        const cookieStore = cookies();
+        const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+
+        // 0. Parse Body
         const body = await req.json();
         const {
             destination,
@@ -16,32 +16,55 @@ export async function POST(req: Request) {
             endDate,
             budget,
             categories,
-            name: tripName
+            name: tripName,
+            tripType
         } = body;
 
-        // 1. Get Session
-        const session = await getServerSession(authOptions);
-        const email = session?.user?.email;
-        const name = session?.user?.name || 'Traveler';
-
-        if (!email) {
-            console.warn("No session email found. Falling back to anonymous user logic.");
-        }
-
-        const userEmail = email || `anon_${Date.now()}@example.com`;
-
-        // 2. Ensure Profile Exists (The "Auto-Heal" Logic)
-        let { data: profile } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('email', userEmail)
-            .single();
-
-        let userId = profile?.id;
+        // 1. Get Session from Supabase
+        const { data: { user } } = await supabase.auth.getUser();
+        let userId = user?.id;
+        let userEmail = user?.email;
+        let name = user?.user_metadata?.name || 'Traveler'; // fallback
 
         if (!userId) {
+            // If we want to allow anonymous trips, handle it here. 
+            // But usually for "My Trips", we want a user.
+            // If legacy "anon" logic is needed, we'd need to trust the client which is valid for demo but not prod.
+            // Given the instructions to remove NextAuth, we rely on Supabase Auth.
+            // If no user, maybe we return 401 or proceed as anonymous?
+            // Original logic had "anon_${Date.now()}" fallback.
+            console.warn("No Supabase user found. Using anonymous fallback.");
+            userEmail = `anon_${Date.now()}@example.com`;
+        }
+
+        // 2. Ensure Profile Exists
+        // Note: With Supabase Auth, profiles trigger should handle this, but if we need manual check:
+        // Or if we are using the "Missing Profile" logic from before.
+        // If we have a userId from Auth, usually profile exists.
+
+        let shouldCreateProfile = false;
+        if (userId) {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('id', userId)
+                .single();
+            if (!profile) shouldCreateProfile = true;
+        } else {
+            // For anonymous fallback, we don't have a real userId until we make one or find one by email?
+            // The old logic looked up by email.
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('email', userEmail)
+                .single();
+            userId = profile?.id;
+            if (!userId) shouldCreateProfile = true;
+        }
+
+        if (shouldCreateProfile) {
+            if (!userId) userId = crypto.randomUUID(); // Generate ID for anon
             console.log(`Profile missing for ${userEmail}. Creating new profile...`);
-            userId = crypto.randomUUID();
 
             const { error: profileError } = await supabase
                 .from('profiles')
@@ -54,6 +77,7 @@ export async function POST(req: Request) {
 
             if (profileError) {
                 console.error("Failed to auto-create profile:", profileError);
+                // Continue? Or fail? The old code returned 500.
                 return NextResponse.json({ error: "Failed to create user profile" }, { status: 500 });
             }
         }
@@ -72,10 +96,11 @@ export async function POST(req: Request) {
                 budget_tier: budget,
                 categories: categories || [],
                 name: tripName || `${destination} Trip`,
+                tripType: tripType?.toLowerCase() || 'friends', // Map to lowercase enum
                 status: 'DRAFT',
                 created_by: userId
             })
-            .select() // FIXED: Added .select() to return the object
+            .select()
             .single();
 
         if (error) {
@@ -105,7 +130,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // 2. Fetch Trips (RLS Policy will automatically filter for this user)
+    // 2. Fetch Trips
     const { data: trips, error } = await supabase
         .from('trips')
         .select('*')
