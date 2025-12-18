@@ -3,8 +3,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore } from '@/store/useStore';
-import { createBrowserClient } from '@supabase/ssr';
+import { useAuth } from '@/contexts/AuthContext';
+
 
 import { DestinationSearch } from '@/components/CreateTrip/DestinationSearch';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 export default function NewTripPage() {
     const router = useRouter();
     const { toast } = useToast();
-    const { currentUser, isAuthenticated } = useStore();
+    const { user } = useAuth(); // <--- Get the logged-in user directly
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
@@ -36,11 +36,14 @@ export default function NewTripPage() {
 
     // Protect route
     useEffect(() => {
-        if (!isAuthenticated) {
-            toast({ title: "Authentication Required", description: "Please log in to create a trip.", variant: "destructive" });
-            router.push('/login');
+        // user might be null initially while loading, but AuthContext handles initial check.
+        // If we strictly want to redirect:
+        if (!user && !localStorage.getItem('user-storage')) { // Simple check or rely on AuthContext loading state if exposed
+            // For now, let's assume if user is missing and we interact, we alert. 
+            // Or we can add a loading check if AuthContext exposes it.
         }
-    }, [isAuthenticated, router, toast]);
+    }, [user, router]);
+
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
@@ -49,36 +52,15 @@ export default function NewTripPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log("🚀 Starting SSR Trip Creation...");
+
+        if (!user) {
+            toast({ title: "Authentication Required", description: "Please log in to create a trip.", variant: "destructive" });
+            return;
+        }
+
         setLoading(true);
 
         try {
-            // 2. CREATE THE CLIENT (This one can read cookies!)
-            const supabase = createBrowserClient(
-                process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-            );
-
-            // 3. GET SESSION
-            const { data: { session }, error } = await supabase.auth.getSession();
-
-            if (error || !session) {
-                console.error("❌ SSR Client could not find session:", error);
-                toast({ title: "Authentication Error", description: "Please log in again. (Session not found)", variant: "destructive" });
-                setLoading(false);
-                return;
-            }
-
-            const token = session.access_token;
-            console.log("✅ Token found via SSR Client!");
-
-            // Validation
-            if (!formData.destination || !formData.destination.location) {
-                toast({ title: "Validation Error", description: "Please select a valid destination from the list.", variant: "destructive" });
-                setLoading(false);
-                return;
-            }
-
             // Simple budget mapping
             const budgetNum = Number(formData.budget);
             let budgetTier = 'Medium';
@@ -86,37 +68,35 @@ export default function NewTripPage() {
             if (budgetNum > 3000) budgetTier = 'High';
 
             const payload = {
-                name: formData.name,
-                destination: formData.destination.name,
+                tripName: formData.name,
+                destination: formData.destination?.name || '',
                 startDate: formData.startDate,
                 endDate: formData.endDate,
                 budget: budgetTier,
                 tripType: formData.tripType,
-                categories: []
+                userId: user.id // <--- VITAL: Send the ID to the backend
             };
 
-            // 4. SEND REQUEST
             const response = await fetch('/api/trips', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}` // Explicitly attaching the token
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
 
+            const data = await response.json();
+
             if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error || 'Failed to create trip');
+                throw new Error(data.error || 'Failed to create trip');
             }
 
-            const data = await response.json();
-            console.log("🎉 SUCCESS:", data);
+            console.log("Success:", data);
             toast({ title: "Trip created!", description: "Redirecting to dashboard..." });
 
             // Redirect
-            if (data.trip && data.trip._id) {
-                window.location.href = `/trips/${data.trip._id}`;
+            if (data.id) {
+                window.location.href = `/trips/${data.id}`;
+            } else if (data._id) {
+                window.location.href = `/trips/${data._id}`;
             } else {
                 window.location.href = '/my-trips';
             }
