@@ -42,54 +42,62 @@ const createUserClient = (token: string) => {
 };
 
 export async function POST(request: Request) {
-    // 1. Grab the Token from the Header
-    const authHeader = request.headers.get('Authorization');
-    let user = null;
+    try {
+        // 1. Look for the Header
+        const authHeader = request.headers.get('Authorization');
 
-    if (authHeader) {
-        // Method A: Verify the Token directly
+        if (!authHeader) {
+            console.error("Missing Authorization Header");
+            return NextResponse.json({ error: 'Missing Auth Header' }, { status: 401 });
+        }
+
+        // 2. Validate the Token
         const token = authHeader.replace('Bearer ', '');
         const supabase = createSupabaseClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
         );
-        const { data } = await supabase.auth.getUser(token);
-        user = data.user;
-    }
 
-    // 2. Fail if no user found
-    if (!user) {
-        return NextResponse.json({ error: 'Unauthorized: No valid token' }, { status: 401 });
-    }
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
-    // 3. Parse Data & Insert
-    const body = await request.json();
-    const { tripName, destination, startDate, endDate, budget, tripType } = body;
+        if (authError || !user) {
+            console.error("Auth Failed:", authError);
+            return NextResponse.json({ error: 'Invalid Token' }, { status: 401 });
+        }
 
-    // Create a client scoped to this user for the Insert (RLS)
-    // We can use the token from the header for the RLS client
-    const token = authHeader?.replace('Bearer ', '')!;
-    const supabase = createUserClient(token);
+        // 3. Insert Data
+        const body = await request.json();
+        const { tripName, destination, startDate, endDate, budget, tripType } = body;
 
-    const { data, error } = await supabase
-        .from('trips')
-        .insert({
-            name: tripName,
-            destination,
-            start_date: startDate,
-            end_date: endDate,
-            budget_tier: budget,
-            trip_type: tripType || 'Friends',
-            created_by: user.id
-        })
-        .select()
-        .single();
+        // Create client with user context for RLS
+        const supabaseUser = createSupabaseClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            { global: { headers: { Authorization: authHeader } } }
+        );
 
-    if (error) {
+        const { data, error } = await supabaseUser
+            .from('trips')
+            .insert({
+                name: tripName,
+                destination,
+                start_date: startDate,
+                end_date: endDate,
+                budget_tier: budget,
+                trip_type: tripType || 'Friends',
+                created_by: user.id
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        return NextResponse.json(data);
+
+    } catch (error: any) {
+        console.error("Server Error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-
-    return NextResponse.json(data);
 }
 
 export async function GET(request: Request) {

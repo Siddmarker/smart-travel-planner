@@ -48,6 +48,7 @@ export default function NewTripPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        console.log("Starting trip creation...");
         setLoading(true);
 
         // Validation
@@ -58,20 +59,22 @@ export default function NewTripPage() {
         }
 
         try {
-            // A. Get the fresh token manually
+            // 1. Get the Session Manually
             const supabase = createBrowserClient(
                 process.env.NEXT_PUBLIC_SUPABASE_URL!,
                 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
             );
             const { data: { session } } = await supabase.auth.getSession();
 
-            if (!session) {
-                toast({ title: "Authentication Required", description: "Please log in again.", variant: "destructive" });
+            // Debugging: Check if we actually have a token
+            if (!session || !session.access_token) {
+                console.error("NO SESSION FOUND. Aborting.");
+                toast({ title: "Authentication Error", description: "You appear to be logged out. Please refresh and log in.", variant: "destructive" });
                 router.push('/login');
                 return;
             }
 
-            const token = session.access_token; // <--- The Key
+            console.log("Session found. Token:", session.access_token.substring(0, 10) + "...");
 
             // Simple budget mapping
             const budgetNum = Number(formData.budget);
@@ -90,28 +93,30 @@ export default function NewTripPage() {
                 categories: []                          // Send empty array or add UI later
             };
 
-            // B. Send it in the Header
+            // 2. Send the Request with the Header
             const res = await fetch('/api/trips', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}` // <--- Manually attaching ID
+                    'Authorization': `Bearer ${session.access_token}` // <--- THE FIX
                 },
-                body: JSON.stringify(payload) // Ensure 'payload' contains your form data
+                body: JSON.stringify(payload)
             });
 
-            if (res.ok) {
-                const data = await res.json();
-                toast({ title: "Trip created!", description: "Redirecting to dashboard..." });
-                router.push(`/trips/${data.trip._id}`); // Note: Verify if _id or id is returned
-            } else {
-                const error = await res.json();
-                console.error("Create Trip Error:", error);
-                toast({ title: "Failed to create trip", description: error.details || error.error || "Unknown error", variant: "destructive" });
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("API Error:", err);
+                throw new Error(err.error || 'Failed to create trip');
             }
-        } catch (error) {
+
+            const data = await res.json();
+            console.log("Success:", data);
+            toast({ title: "Trip created!", description: "Redirecting to dashboard..." });
+            window.location.href = `/trips/${data.trip._id}`;
+
+        } catch (error: any) {
             console.error(error);
-            toast({ title: "Error", description: "Something went wrong", variant: "destructive" });
+            toast({ title: "Error", description: error.message || "Something went wrong", variant: "destructive" });
         } finally {
             setLoading(false);
         }
