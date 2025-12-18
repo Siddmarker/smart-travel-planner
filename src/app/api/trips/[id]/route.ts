@@ -4,10 +4,12 @@ import { NextResponse } from 'next/server';
 // Check the folder name (e.g. src/app/api/trips/[id] -> params.id)
 export async function GET(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const tripId = params.id;
+        // Next.js 15: params is a Promise, must be awaited
+        const { id } = await params;
+        const tripId = id;
 
         if (!tripId) {
             return NextResponse.json({ error: 'Trip ID missing' }, { status: 400 });
