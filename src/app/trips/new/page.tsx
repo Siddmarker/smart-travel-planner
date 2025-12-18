@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { createBrowserClient } from '@supabase/ssr';
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+
 import { DestinationSearch } from '@/components/CreateTrip/DestinationSearch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,62 +49,36 @@ export default function NewTripPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log("🚀 Starting Universal Trip Creation...");
+        console.log("🚀 Starting SSR Trip Creation...");
         setLoading(true);
 
-        let accessToken = null;
-        let userId = null;
-
-        // --- STRATEGY 1: Standard SDK Check ---
         try {
-            const supabase = createSupabaseClient(
+            // 2. CREATE THE CLIENT (This one can read cookies!)
+            const supabase = createBrowserClient(
                 process.env.NEXT_PUBLIC_SUPABASE_URL!,
                 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
             );
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                console.log("✅ Strategy 1 (SDK) Worked");
-                accessToken = session.access_token;
-                userId = session.user.id;
+
+            // 3. GET SESSION
+            const { data: { session }, error } = await supabase.auth.getSession();
+
+            if (error || !session) {
+                console.error("❌ SSR Client could not find session:", error);
+                toast({ title: "Authentication Error", description: "Please log in again. (Session not found)", variant: "destructive" });
+                setLoading(false);
+                return;
             }
-        } catch (err) { console.log("Strategy 1 failed"); }
 
-        // --- STRATEGY 2: LocalStorage Scavenger Hunt (The Backup) ---
-        if (!accessToken) {
-            console.log("⚠️ SDK failed. Hunting in LocalStorage...");
-            // Loop through all keys to find the Supabase token
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
-                    try {
-                        const item = JSON.parse(localStorage.getItem(key)!);
-                        if (item.access_token) {
-                            console.log("✅ Strategy 2 (LocalStorage) Found it!");
-                            accessToken = item.access_token;
-                            userId = item.user.id;
-                            break;
-                        }
-                    } catch (e) { /* Ignore parse errors */ }
-                }
+            const token = session.access_token;
+            console.log("✅ Token found via SSR Client!");
+
+            // Validation
+            if (!formData.destination || !formData.destination.location) {
+                toast({ title: "Validation Error", description: "Please select a valid destination from the list.", variant: "destructive" });
+                setLoading(false);
+                return;
             }
-        }
 
-        // --- FINAL CHECK ---
-        if (!accessToken) {
-            console.error("❌ CRITICAL: No token found in SDK or LocalStorage.");
-            toast({ title: "System Error", description: "You appear logged in, but your session token is missing. Please Logout and Login again.", variant: "destructive" });
-            setLoading(false);
-            return;
-        }
-
-        // Validation
-        if (!formData.destination || !formData.destination.location) {
-            toast({ title: "Validation Error", description: "Please select a valid destination from the list.", variant: "destructive" });
-            setLoading(false);
-            return;
-        }
-
-        try {
             // Simple budget mapping
             const budgetNum = Number(formData.budget);
             let budgetTier = 'Medium';
@@ -121,26 +95,26 @@ export default function NewTripPage() {
                 categories: []
             };
 
-            // --- EXECUTE REQUEST ---
-            const res = await fetch('/api/trips', {
+            // 4. SEND REQUEST
+            const response = await fetch('/api/trips', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}` // <--- Manually attach the found token
+                    'Authorization': `Bearer ${token}` // Explicitly attaching the token
                 },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
             });
 
-            if (!res.ok) {
-                const err = await res.json();
+            if (!response.ok) {
+                const err = await response.json();
                 throw new Error(err.error || 'Failed to create trip');
             }
 
-            const data = await res.json();
+            const data = await response.json();
             console.log("🎉 SUCCESS:", data);
             toast({ title: "Trip created!", description: "Redirecting to dashboard..." });
 
-            // Redirect to the specific trip
+            // Redirect
             if (data.trip && data.trip._id) {
                 window.location.href = `/trips/${data.trip._id}`;
             } else {
