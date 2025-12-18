@@ -1,37 +1,32 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-// Check the folder name (e.g. src/app/api/trips/[id] -> params.id)
 export async function GET(
     request: Request,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> } // Keeps Next.js 15 Fix
 ) {
     try {
-        // Next.js 15: params is a Promise, must be awaited
-        const { id } = await params;
-        const tripId = id;
+        const { id } = await params; // Keeps Next.js 15 Fix
 
-        if (!tripId) {
+        if (!id) {
             return NextResponse.json({ error: 'Trip ID missing' }, { status: 400 });
         }
 
-        // 1. ADMIN CLIENT: Bypass RLS to read the trip
+        // 1. ADMIN CLIENT
         const supabaseAdmin = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_ROLE_KEY!
         );
 
-        // 2. FETCH THE TRIP
-        // We select the trip and join related tables (days, activities) if needed
+        // 2. FETCH THE TRIP (Removed 'activities(*)' because table doesn't exist)
         const { data: trip, error } = await supabaseAdmin
             .from('trips')
-            .select('*, trip_days(*), activities(*)')
-            .eq('id', tripId)
+            .select('*, trip_days(*)')
+            .eq('id', id)
             .single();
 
         if (error) {
             console.error("Fetch Error:", error);
-            // If not found, return 404
             if (error.code === 'PGRST116') {
                 return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
             }
