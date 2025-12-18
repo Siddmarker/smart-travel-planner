@@ -3,14 +3,10 @@ import { NextResponse } from 'next/server';
 
 export async function GET(
     request: Request,
-    { params }: { params: Promise<{ id: string }> } // Keeps Next.js 15 Fix
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id } = await params; // Keeps Next.js 15 Fix
-
-        if (!id) {
-            return NextResponse.json({ error: 'Trip ID missing' }, { status: 400 });
-        }
+        const { id } = await params;
 
         // 1. ADMIN CLIENT
         const supabaseAdmin = createClient(
@@ -18,19 +14,21 @@ export async function GET(
             process.env.SUPABASE_SERVICE_ROLE_KEY!
         );
 
-        // 2. FETCH THE TRIP (Removed 'activities(*)' because table doesn't exist)
+        // 2. FETCH ONLY THE TRIP (Removed 'trip_days' to isolate the issue)
         const { data: trip, error } = await supabaseAdmin
             .from('trips')
-            .select('*, trip_days(*)')
+            .select('*') // <--- SIMPLEST POSSIBLE QUERY
             .eq('id', id)
             .single();
 
         if (error) {
             console.error("Fetch Error:", error);
-            if (error.code === 'PGRST116') {
-                return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
-            }
-            throw error;
+            // Log the specific error to the Vercel/Local console
+            return NextResponse.json({ error: error.message, details: error }, { status: 500 });
+        }
+
+        if (!trip) {
+            return NextResponse.json({ error: 'Trip found but is empty' }, { status: 404 });
         }
 
         return NextResponse.json(trip);
