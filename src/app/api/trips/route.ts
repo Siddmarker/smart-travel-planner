@@ -2,8 +2,8 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-// Helper to create the client inside the route
-function createClient(cookieStore: ReturnType<typeof cookies>) {
+// Helper function that accepts the *awaited* cookie store
+const createClient = (cookieStore: any) => {
     return createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -29,10 +29,11 @@ function createClient(cookieStore: ReturnType<typeof cookies>) {
             },
         }
     );
-}
+};
 
 export async function POST(request: Request) {
-    const cookieStore = cookies();
+    // FIX: Await the cookies() call
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     // 1. Auth Check
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
             start_date: startDate,
             end_date: endDate,
             budget_tier: budget,
-            trip_type: tripType || 'Friends', // Default to Friends if missing
+            trip_type: tripType || 'Friends',
             created_by: user.id
         })
         .select()
@@ -68,7 +69,8 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-    const cookieStore = cookies();
+    // FIX: Await the cookies() call
+    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     const { data: { user } } = await supabase.auth.getUser();
