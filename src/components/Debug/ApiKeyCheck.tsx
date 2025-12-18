@@ -37,7 +37,7 @@ export default function ApiKeyCheck() {
             <button
                 onClick={() => {
                     // Test the API key directly
-                    const testUrl = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=console.log`;
+                    const testUrl = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async&callback=console.log`;
                     console.log('Testing URL:', testUrl);
                     window.open(testUrl, '_blank');
                 }}
