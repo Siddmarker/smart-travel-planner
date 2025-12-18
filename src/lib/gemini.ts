@@ -78,5 +78,53 @@ export const geminiAI = {
             console.error('Gemini Suggest Error:', error);
             return [];
         }
+    },
+
+    // Empathy Engine: Vibe Check
+    ratePlaces: async (places: any[], userVibe: string) => {
+        try {
+            if (!apiKey) return places.map(p => ({ ...p, vibeScore: 50, reason: "Default (No API Key)" }));
+
+            const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+
+            // Minimal payload to save tokens
+            const placesPayload = places.map((p, index) => ({
+                id: index,
+                name: p.name,
+                types: p.types || p.category,
+                rating: p.rating,
+                reviews: p.reviews
+            }));
+
+            const prompt = `
+                Score these places 0-100 based on the user's vibe: [${userVibe}]. 
+                Identify 'Hidden Gems' (High rating > 4.5, low reviews < 500).
+                Return a JSON Object where keys are the place indices and values are objects with { "score": number, "reason": string }.
+                
+                Places: ${JSON.stringify(placesPayload)}
+            `;
+
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const scores = JSON.parse(jsonMatch[0]);
+                // Map scores back to places
+                return places.map((p, index) => {
+                    const scoreData = scores[index] || scores[String(index)];
+                    return {
+                        ...p,
+                        vibeScore: scoreData?.score || 50,
+                        geminiReasoning: scoreData?.reason || "AI Analysis"
+                    };
+                });
+            }
+            return places;
+        } catch (error) {
+            console.error('Gemini Rate Error:', error);
+            return places; // Fallback to original
+        }
     }
 };

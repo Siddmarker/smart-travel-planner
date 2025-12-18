@@ -40,7 +40,7 @@ const TripSchema = new Schema<ITripDocument>({
     },
     tripType: {
         type: String,
-        enum: ['friends', 'family', 'couple', 'solo', 'business'],
+        enum: ['friends', 'family', 'couple', 'solo', 'business', 'Solo', 'Friends', 'Family', 'Corporate'],
         required: true,
         default: 'friends'
     },

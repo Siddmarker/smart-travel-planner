@@ -47,6 +47,7 @@ export interface Currency {
 }
 
 
+
 export interface Place {
   id: string;
   name: string;
@@ -96,7 +97,12 @@ export interface Place {
   terrainDescription?: string;
   hazards?: string[];
 
+  // Empathy Engine Fields
+  contextScore?: number;
+  stateScore?: number;
+  empathyTags?: string[];
 }
+
 
 export interface PlaceDetails extends Place {
   longDescription: string;
@@ -327,7 +333,7 @@ export interface ITrip {
     end: string;
   };
   pax: number;
-  tripType: 'friends' | 'family' | 'couple' | 'solo' | 'business';
+  tripType: 'friends' | 'family' | 'couple' | 'solo' | 'business' | 'Solo' | 'Friends' | 'Family' | 'Corporate';
   categories: string[];
   members: ITripMember[];
   tripState: TripState;
