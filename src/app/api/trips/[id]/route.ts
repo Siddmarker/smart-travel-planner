@@ -36,18 +36,20 @@ export async function GET(
             .eq('id', id)
             .single();
 
-        if (error && error.code === 'PGRST116') {
+        // --- FIX: HANDLE ERRORS AND NULL TRIP GRACEFULLY ---
+        if (error || !trip) {
+            console.warn("Trip fetch failed or not found:", error);
             return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
         }
 
-        // 2. AUTO-GENERATE IF EMPTY (The "Real" Logic)
+        // 2. AUTO-GENERATE IF EMPTY (Now Safe to Run)
+        // We safely check trip.trip_days because we know trip exists
         if (!trip.trip_days || trip.trip_days.length === 0) {
             console.log("Trip is empty. Auto-generating days...");
 
-            const startDate = new Date(trip.start_date || '2025-12-19'); // Fallback if null
-            const endDate = new Date(trip.end_date || '2025-12-21');     // Fallback if null
+            const startDate = new Date(trip.start_date || '2025-12-19');
+            const endDate = new Date(trip.end_date || '2025-12-21');
 
-            // Calculate duration (min 1 day)
             const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
@@ -60,8 +62,8 @@ export async function GET(
                 daysToInsert.push({
                     trip_id: id,
                     day_index: i,
-                    day_date: currentDate.toISOString().split('T')[0], // YYYY-MM-DD
-                    status: 'active' // Important: Set to 'active' so UI shows it
+                    day_date: currentDate.toISOString().split('T')[0],
+                    status: 'active'
                 });
             }
 
@@ -73,7 +75,7 @@ export async function GET(
 
             if (insertError) throw insertError;
 
-            // Insert Default Activities for the newly created days
+            // Insert Default Activities
             const activitiesToInsert = [];
             for (const day of newDays) {
                 activitiesToInsert.push({
@@ -96,7 +98,7 @@ export async function GET(
 
             await supabaseAdmin.from('activities').insert(activitiesToInsert);
 
-            // Refetch the trip now that we have filled it
+            // Refetch
             const { data: refreshedTrip } = await supabaseAdmin
                 .from('trips')
                 .select(`
@@ -123,7 +125,6 @@ export async function GET(
                 .map((day: any) => ({
                     ...day,
                     date: day.day_date,
-                    // Ensure activities is an array
                     activities: day.activities || [],
                 }))
                 .sort((a: any, b: any) => a.day_index - b.day_index),
