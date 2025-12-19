@@ -8,24 +8,14 @@ export async function GET(
     try {
         const { id } = await params;
 
-        // 1. ADMIN CLIENT
         const supabaseAdmin = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_ROLE_KEY!
         );
 
-        // 2. FETCH TRIP + DAYS
         const { data: trip, error } = await supabaseAdmin
             .from('trips')
-            .select(`
-        *,
-        trip_days (
-          id,
-          day_index,
-          day_date,
-          status
-        )
-      `)
+            .select('*') // We don't even need trip_days from DB since we are mocking it
             .eq('id', id)
             .single();
 
@@ -36,35 +26,39 @@ export async function GET(
             throw error;
         }
 
-        // 3. TRANSFORM & INJECT DUMMY DATA
+        // --- FORCE DEMO DATA ---
+        // We manually create a day so the UI has something to show
+        const demoDays = [
+            {
+                id: 'demo-day-1',
+                day_index: 0,
+                date: trip.start_date || '2025-12-19', // Use the trip's start date
+                status: 'generated',
+                activities: [
+                    {
+                        id: 'demo-act-1',
+                        name: 'Morning Coffee at Cubbon Park',
+                        description: 'Start the day with a refreshing walk and coffee.',
+                        time_slot: 'Morning',
+                        location: { name: 'Cubbon Park, Bangalore', lat: 12.97, lng: 77.59 },
+                        category: 'Relaxation'
+                    },
+                    {
+                        id: 'demo-act-2',
+                        name: 'Bangalore Palace Tour',
+                        description: 'Explore the royal grounds and Tudor-style architecture.',
+                        time_slot: 'Afternoon',
+                        location: { name: 'Bangalore Palace', lat: 12.99, lng: 77.59 },
+                        category: 'History'
+                    }
+                ]
+            }
+        ];
+
         const formattedTrip = {
             ...trip,
             categories: trip.categories || [],
-            days: (trip.trip_days || [])
-                .map((day: any) => ({
-                    ...day,
-                    date: day.day_date,
-                    // DEMO MODE: Inject fake activities to test the UI
-                    activities: [
-                        {
-                            id: 'demo-1',
-                            name: 'Morning Coffee at Cubbon Park',
-                            description: 'Start the day with a refreshing walk and coffee.',
-                            time_slot: 'Morning',
-                            location: { name: 'Cubbon Park, Bangalore' },
-                            category: 'Relaxation'
-                        },
-                        {
-                            id: 'demo-2',
-                            name: 'Visit Bangalore Palace',
-                            description: 'Explore the historic architecture and gardens.',
-                            time_slot: 'Afternoon',
-                            location: { name: 'Bangalore Palace' },
-                            category: 'History'
-                        }
-                    ],
-                }))
-                .sort((a: any, b: any) => a.day_index - b.day_index),
+            days: demoDays, // <--- DIRECTLY INJECT THE DEMO ARRAY
         };
 
         return NextResponse.json(formattedTrip);
