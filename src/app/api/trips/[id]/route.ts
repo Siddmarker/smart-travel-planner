@@ -37,16 +37,16 @@ export async function GET(
             throw error;
         }
 
-        // 3. TRANSFORM THE DATA (The Critical Fix)
-        // We map 'trip_days' to 'days' and 'day_date' to 'date'
+        // 3. TRANSFORM THE DATA (The "Safety Net" Fix)
         const formattedTrip = {
             ...trip,
             days: (trip.trip_days || [])
                 .map((day: any) => ({
                     ...day,
-                    date: day.day_date, // Frontend likely wants 'date'
+                    date: day.day_date,      // Fix 1: Rename for Frontend
+                    activities: [],          // Fix 2: THE CRITICAL MISSING PIECE (Empty list instead of undefined)
                 }))
-                .sort((a: any, b: any) => a.day_index - b.day_index), // Ensure correct order
+                .sort((a: any, b: any) => a.day_index - b.day_index),
         };
 
         return NextResponse.json(formattedTrip);
