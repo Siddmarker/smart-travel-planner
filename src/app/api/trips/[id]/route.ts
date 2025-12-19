@@ -37,14 +37,16 @@ export async function GET(
             throw error;
         }
 
-        // 3. TRANSFORM THE DATA (The "Safety Net" Fix)
+        // 3. TRANSFORM & SANITIZE (The Fix)
+        // We force null fields to be empty arrays [] to prevent frontend crashes.
         const formattedTrip = {
             ...trip,
+            categories: trip.categories || [], // <--- FIX: Never let this be null
             days: (trip.trip_days || [])
                 .map((day: any) => ({
                     ...day,
-                    date: day.day_date,      // Fix 1: Rename for Frontend
-                    activities: [],          // Fix 2: THE CRITICAL MISSING PIECE (Empty list instead of undefined)
+                    date: day.day_date,            // Rename for Frontend
+                    activities: [],                // Force empty activities list
                 }))
                 .sort((a: any, b: any) => a.day_index - b.day_index),
         };
