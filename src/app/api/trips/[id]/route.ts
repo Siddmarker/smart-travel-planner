@@ -13,57 +13,126 @@ export async function GET(
             process.env.SUPABASE_SERVICE_ROLE_KEY!
         );
 
-        const { data: trip, error } = await supabaseAdmin
+        // 1. FETCH TRIP
+        let { data: trip, error } = await supabaseAdmin
             .from('trips')
-            .select('*') // We don't even need trip_days from DB since we are mocking it
+            .select(`
+        *,
+        trip_days (
+          id,
+          day_index,
+          day_date,
+          status,
+          activities (
+            id,
+            name,
+            description,
+            time_slot,
+            location,
+            category
+          )
+        )
+      `)
             .eq('id', id)
             .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') {
-                return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
-            }
-            throw error;
+        if (error && error.code === 'PGRST116') {
+            return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
         }
 
-        // --- FORCE DEMO DATA ---
-        // We manually create a day so the UI has something to show
-        const demoDays = [
-            {
-                id: 'demo-day-1',
-                day_index: 0,
-                date: trip.start_date || '2025-12-19', // Use the trip's start date
-                status: 'generated',
-                activities: [
-                    {
-                        id: 'demo-act-1',
-                        name: 'Morning Coffee at Cubbon Park',
-                        description: 'Start the day with a refreshing walk and coffee.',
-                        time_slot: 'Morning',
-                        location: { name: 'Cubbon Park, Bangalore', lat: 12.97, lng: 77.59 },
-                        category: 'Relaxation'
-                    },
-                    {
-                        id: 'demo-act-2',
-                        name: 'Bangalore Palace Tour',
-                        description: 'Explore the royal grounds and Tudor-style architecture.',
-                        time_slot: 'Afternoon',
-                        location: { name: 'Bangalore Palace', lat: 12.99, lng: 77.59 },
-                        category: 'History'
-                    }
-                ]
-            }
-        ];
+        // 2. AUTO-GENERATE IF EMPTY (The "Real" Logic)
+        if (!trip.trip_days || trip.trip_days.length === 0) {
+            console.log("Trip is empty. Auto-generating days...");
 
+            const startDate = new Date(trip.start_date || '2025-12-19'); // Fallback if null
+            const endDate = new Date(trip.end_date || '2025-12-21');     // Fallback if null
+
+            // Calculate duration (min 1 day)
+            const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+            const daysToInsert = [];
+
+            for (let i = 0; i < diffDays; i++) {
+                const currentDate = new Date(startDate);
+                currentDate.setDate(startDate.getDate() + i);
+
+                daysToInsert.push({
+                    trip_id: id,
+                    day_index: i,
+                    day_date: currentDate.toISOString().split('T')[0], // YYYY-MM-DD
+                    status: 'active' // Important: Set to 'active' so UI shows it
+                });
+            }
+
+            // Insert Days
+            const { data: newDays, error: insertError } = await supabaseAdmin
+                .from('trip_days')
+                .insert(daysToInsert)
+                .select();
+
+            if (insertError) throw insertError;
+
+            // Insert Default Activities for the newly created days
+            const activitiesToInsert = [];
+            for (const day of newDays) {
+                activitiesToInsert.push({
+                    day_id: day.id,
+                    name: 'Morning Start',
+                    description: 'Get ready for the day!',
+                    time_slot: 'Morning',
+                    category: 'General',
+                    location: { name: 'Hotel' }
+                });
+                activitiesToInsert.push({
+                    day_id: day.id,
+                    name: 'Evening Relaxation',
+                    description: 'Wind down and enjoy dinner.',
+                    time_slot: 'Evening',
+                    category: 'Food',
+                    location: { name: 'City Center' }
+                });
+            }
+
+            await supabaseAdmin.from('activities').insert(activitiesToInsert);
+
+            // Refetch the trip now that we have filled it
+            const { data: refreshedTrip } = await supabaseAdmin
+                .from('trips')
+                .select(`
+          *,
+          trip_days (
+            id,
+            day_index,
+            day_date,
+            status,
+            activities (*)
+          )
+        `)
+                .eq('id', id)
+                .single();
+
+            trip = refreshedTrip;
+        }
+
+        // 3. FORMAT FOR FRONTEND
         const formattedTrip = {
             ...trip,
             categories: trip.categories || [],
-            days: demoDays, // <--- DIRECTLY INJECT THE DEMO ARRAY
+            days: (trip.trip_days || [])
+                .map((day: any) => ({
+                    ...day,
+                    date: day.day_date,
+                    // Ensure activities is an array
+                    activities: day.activities || [],
+                }))
+                .sort((a: any, b: any) => a.day_index - b.day_index),
         };
 
         return NextResponse.json(formattedTrip);
 
     } catch (error: any) {
+        console.error("API Error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
