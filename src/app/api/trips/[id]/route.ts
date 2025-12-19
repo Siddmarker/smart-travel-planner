@@ -30,23 +30,39 @@ export async function GET(
             .single();
 
         if (error) {
-            console.error("Fetch Error:", error);
             if (error.code === 'PGRST116') {
                 return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
             }
             throw error;
         }
 
-        // 3. TRANSFORM & SANITIZE (The Fix)
-        // We force null fields to be empty arrays [] to prevent frontend crashes.
+        // 3. TRANSFORM & INJECT DUMMY DATA
         const formattedTrip = {
             ...trip,
-            categories: trip.categories || [], // <--- FIX: Never let this be null
+            categories: trip.categories || [],
             days: (trip.trip_days || [])
                 .map((day: any) => ({
                     ...day,
-                    date: day.day_date,            // Rename for Frontend
-                    activities: [],                // Force empty activities list
+                    date: day.day_date,
+                    // DEMO MODE: Inject fake activities to test the UI
+                    activities: [
+                        {
+                            id: 'demo-1',
+                            name: 'Morning Coffee at Cubbon Park',
+                            description: 'Start the day with a refreshing walk and coffee.',
+                            time_slot: 'Morning',
+                            location: { name: 'Cubbon Park, Bangalore' },
+                            category: 'Relaxation'
+                        },
+                        {
+                            id: 'demo-2',
+                            name: 'Visit Bangalore Palace',
+                            description: 'Explore the historic architecture and gardens.',
+                            time_slot: 'Afternoon',
+                            location: { name: 'Bangalore Palace' },
+                            category: 'History'
+                        }
+                    ],
                 }))
                 .sort((a: any, b: any) => a.day_index - b.day_index),
         };
