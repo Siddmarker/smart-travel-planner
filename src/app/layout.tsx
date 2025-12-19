@@ -5,6 +5,7 @@ import { LayoutContent } from "@/components/LayoutContent";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { Toaster } from "@/components/ui/toaster";
+import { Providers } from "@/components/Providers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,8 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "2wards - Smart Group Travel Planner",
-  description: "Plan your perfect trip with 2wards",
+  title: "2wards",
+  description: "AI Travel Planner",
 };
 
 export default function RootLayout({
@@ -32,12 +33,14 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
-        <AuthProvider>
-          <CurrencyProvider>
-            <LayoutContent>{children}</LayoutContent>
-            <Toaster />
-          </CurrencyProvider>
-        </AuthProvider>
+        <Providers>
+          <AuthProvider>
+            <CurrencyProvider>
+              <LayoutContent>{children}</LayoutContent>
+              <Toaster />
+            </CurrencyProvider>
+          </AuthProvider>
+        </Providers>
       </body>
     </html>
   );
