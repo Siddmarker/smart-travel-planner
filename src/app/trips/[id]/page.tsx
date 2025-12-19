@@ -30,7 +30,8 @@ export default function TripDashboard({ params }: { params: Promise<{ id: string
             const res = await fetch(`/api/trips/${id}`);
             if (res.ok) {
                 const data = await res.json();
-                setTrip(data.trip);
+                console.log("DEBUG: API Response Data:", data);
+                setTrip(data);
             } else {
                 console.error("Failed to fetch trip", await res.text());
                 setTrip(null);
@@ -64,8 +65,17 @@ export default function TripDashboard({ params }: { params: Promise<{ id: string
         }
     };
 
+    console.log("🕵️‍♂️ DEBUG SCOPE:");
+    console.log("1. Is Loading?", loading);
+    console.log("2. Trip Data:", trip);
+    console.log("3. Trip Days:", trip?.days);
+
     if (loading) return <div className="p-12 text-center">Loading Dashboard...</div>;
-    if (!trip) return <div className="p-12 text-center text-red-500">Trip not found</div>;
+
+    if (!trip) {
+        console.warn("❌ Trip is falsy, rendering NotFound");
+        return <div className="p-12 text-center text-red-500">Trip not found</div>;
+    }
 
     const currentDay = trip.days?.[currentDayIndex];
 
