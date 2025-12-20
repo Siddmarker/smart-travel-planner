@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { generateItinerary } from '@/lib/gemini'; // <--- Imports your new AI Brain
 
 export async function GET(
     request: Request,
@@ -8,61 +9,38 @@ export async function GET(
     try {
         const { id } = await params;
 
+        // 1. SETUP SUPABASE CLIENT
+        // Note: If this fails in Vercel, check your Environment Variables or use the hardcoded keys again.
         const supabaseAdmin = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_ROLE_KEY!
         );
 
-        // 1. FETCH TRIP
+        // 2. FETCH TRIP
         let { data: trip, error } = await supabaseAdmin
             .from('trips')
-            .select(`
-        *,
-        trip_days (
-          id,
-          day_index,
-          day_date,
-          status,
-          activities (
-            id,
-            name,
-            description,
-            time_slot,
-            location,
-            category
-          )
-        )
-      `)
+            .select(`*, trip_days (id, day_index, day_date, status, activities (*))`)
             .eq('id', id)
             .single();
 
-        // --- FIX: HANDLE ERRORS AND NULL TRIP GRACEFULLY ---
         if (error || !trip) {
-            console.warn("Trip fetch failed:", error);
-            return NextResponse.json({
-                error: 'Trip not found',
-                debug_db_error: error,  // <--- THIS IS WHAT WE NEED
-                debug_tried_id: id,
-                debug_message: "If debug_db_error is null, the ID just doesn't exist."
-            }, { status: 404 });
+            return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
         }
 
-        // 2. AUTO-GENERATE IF EMPTY (Now Safe to Run)
+        // 3. AUTO-GENERATE IF EMPTY (The AI Logic) 🧠
         if (!trip.trip_days || trip.trip_days.length === 0) {
-            console.log("Trip is empty. Auto-generating days...");
+            console.log(`Generating AI Itinerary for ${trip.destination}...`);
 
-            const startDate = new Date(trip.start_date || '2025-12-19');
-            const endDate = new Date(trip.end_date || '2025-12-21');
-
+            const startDate = new Date(trip.start_date);
+            const endDate = new Date(trip.end_date);
             const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
+            // --- A. CREATE DAYS FIRST ---
             const daysToInsert = [];
-
             for (let i = 0; i < diffDays; i++) {
                 const currentDate = new Date(startDate);
                 currentDate.setDate(startDate.getDate() + i);
-
                 daysToInsert.push({
                     trip_id: id,
                     day_index: i,
@@ -70,58 +48,72 @@ export async function GET(
                     status: 'active'
                 });
             }
-
-            // Insert Days
-            const { data: newDays, error: insertError } = await supabaseAdmin
+            
+            // Insert days and get their IDs back
+            const { data: newDays, error: daysError } = await supabaseAdmin
                 .from('trip_days')
                 .insert(daysToInsert)
                 .select();
+                
+            if (daysError) throw daysError;
 
-            if (insertError) throw insertError;
+            // --- B. CALL GEMINI AI ---
+            // This calls your gemini.ts function!
+            const aiItinerary = await generateItinerary(trip.destination, diffDays, trip.start_date);
 
-            // Insert Default Activities
             const activitiesToInsert = [];
-            for (const day of newDays) {
-                activitiesToInsert.push({
-                    day_id: day.id,
-                    name: 'Morning Start',
-                    description: 'Get ready for the day!',
-                    time_slot: 'Morning',
-                    category: 'General',
-                    location: { name: 'Hotel' }
+
+            if (aiItinerary && Array.isArray(aiItinerary)) {
+                console.log("AI Success! Parsing activities...");
+                
+                // Loop through our created days (newDays) and match them with AI's day_index
+                newDays.forEach((dayRecord) => {
+                    const aiDay = aiItinerary.find((d: any) => d.day_index === dayRecord.day_index);
+                    
+                    if (aiDay && aiDay.activities) {
+                        aiDay.activities.forEach((act: any) => {
+                            activitiesToInsert.push({
+                                day_id: dayRecord.id, // Link to the correct Day ID
+                                name: act.name,
+                                description: act.description,
+                                time_slot: act.time_slot,
+                                category: act.category,
+                                location: { name: act.location_name }
+                            });
+                        });
+                    }
                 });
-                activitiesToInsert.push({
-                    day_id: day.id,
-                    name: 'Evening Relaxation',
-                    description: 'Wind down and enjoy dinner.',
-                    time_slot: 'Evening',
-                    category: 'Food',
-                    location: { name: 'City Center' }
-                });
+            } else {
+                // FALLBACK: If AI fails or returns bad data, use old "Morning Start" logic
+                console.log("AI Failed. Using Fallback Data.");
+                for (const day of newDays) {
+                    activitiesToInsert.push({
+                        day_id: day.id,
+                        name: 'Morning Start',
+                        description: 'Get ready for the day!',
+                        time_slot: 'Morning',
+                        category: 'General',
+                        location: { name: 'Hotel' }
+                    });
+                }
             }
 
-            await supabaseAdmin.from('activities').insert(activitiesToInsert);
+            // --- C. INSERT ACTIVITIES ---
+            if (activitiesToInsert.length > 0) {
+                await supabaseAdmin.from('activities').insert(activitiesToInsert);
+            }
 
-            // Refetch
+            // Refetch the full trip to return to frontend
             const { data: refreshedTrip } = await supabaseAdmin
                 .from('trips')
-                .select(`
-          *,
-          trip_days (
-            id,
-            day_index,
-            day_date,
-            status,
-            activities (*)
-          )
-        `)
+                .select(`*, trip_days (id, day_index, day_date, status, activities (*))`)
                 .eq('id', id)
                 .single();
 
             trip = refreshedTrip;
         }
 
-        // 3. FORMAT FOR FRONTEND
+        // 4. FORMAT FOR FRONTEND
         const formattedTrip = {
             ...trip,
             categories: trip.categories || [],

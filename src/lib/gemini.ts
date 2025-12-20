@@ -1,130 +1,55 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Initialize Gemini
-const apiKey = process.env.GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(apiKey);
+// Initialize Gemini with your API Key
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
 
-export const geminiAI = {
-    // Generate Itinerary
-    generateItinerary: async (destination: any, dates: any, preferences: any) => {
-        try {
-            if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
-            const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+export async function generateItinerary(destination: string, days: number, startDate: string) {
+  try {
+    // UPDATED: Using 'gemini-1.5-flash' for speed and cost efficiency
+    const model = genAI.getGenerativeModel({ 
+        model: "gemini-1.5-flash",
+        generationConfig: { responseMimeType: "application/json" } // Force JSON response
+    });
 
-            const prompt = `
-        Create a detailed travel itinerary for a trip to ${destination.mainLocation.address} 
-        from ${new Date(dates.start).toDateString()} to ${new Date(dates.end).toDateString()}.
-        
-        Preferences:
-        - Budget: ${preferences.budget.range}
-        - Group Type: ${preferences.groupType}
-        - Interests: ${preferences?.categories?.join(', ') || 'General'}
-        
-        Please provide the response in a structured JSON format with the following schema:
+    const prompt = `
+      I am planning a trip to ${destination} for ${days} days starting on ${startDate}.
+      Create a detailed daily itinerary with 2 activities per day (Morning and Evening).
+      
+      The structure must be an ARRAY of objects, where each object represents a day and contains an 'activities' array.
+      
+      Example JSON format:
+      [
         {
-          "days": [
+          "day_index": 0,
+          "activities": [
             {
-              "dayNumber": 1,
-              "date": "YYYY-MM-DD",
-              "morning": { "activities": [], "notes": "" },
-              "afternoon": { "activities": [], "notes": "" },
-              "evening": { "activities": [], "notes": "" }
+              "name": "Eiffel Tower Visit",
+              "description": "Visit the iconic landmark and see the city views.",
+              "time_slot": "Morning",
+              "category": "Sightseeing",
+              "location_name": "Champ de Mars, Paris"
+            },
+            {
+              "name": "Seine River Cruise",
+              "description": "Enjoy a relaxing dinner cruise.",
+              "time_slot": "Evening",
+              "category": "Food",
+              "location_name": "Port de la Bourdonnais"
             }
-          ],
-          "highlights": [],
-          "tips": []
+          ]
         }
-      `;
+      ]
+    `;
 
-            const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text();
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
-            // Extract JSON from response (handling potential markdown code blocks)
-            const jsonMatch = text.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                return JSON.parse(jsonMatch[0]);
-            }
+    // Parse the JSON
+    return JSON.parse(text);
 
-            return { error: "Failed to parse AI response" };
-
-        } catch (error) {
-            console.error('Gemini AI Error:', error);
-            return {
-                days: [],
-                highlights: ["Error generating itinerary"],
-                tips: ["Please check API key or try again later"]
-            };
-        }
-    },
-
-    // Suggest Places
-    suggestPlaces: async (query: string, location: string) => {
-        try {
-            if (!apiKey) return [];
-            const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-            const prompt = `Suggest 5 popular places for "${query}" near ${location}. Return as JSON array of objects with name, description, and type.`;
-
-            const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text();
-
-            const jsonMatch = text.match(/\[[\s\S]*\]/);
-            if (jsonMatch) {
-                return JSON.parse(jsonMatch[0]);
-            }
-            return [];
-        } catch (error) {
-            console.error('Gemini Suggest Error:', error);
-            return [];
-        }
-    },
-
-    // Empathy Engine: Vibe Check
-    ratePlaces: async (places: any[], userVibe: string) => {
-        try {
-            if (!apiKey) return places.map(p => ({ ...p, vibeScore: 50, reason: "Default (No API Key)" }));
-
-            const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-
-            // Minimal payload to save tokens
-            const placesPayload = places.map((p, index) => ({
-                id: index,
-                name: p.name,
-                types: p.types || p.category,
-                rating: p.rating,
-                reviews: p.reviews
-            }));
-
-            const prompt = `
-                Score these places 0-100 based on the user's vibe: [${userVibe}]. 
-                Identify 'Hidden Gems' (High rating > 4.5, low reviews < 500).
-                Return a JSON Object where keys are the place indices and values are objects with { "score": number, "reason": string }.
-                
-                Places: ${JSON.stringify(placesPayload)}
-            `;
-
-            const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text();
-
-            const jsonMatch = text.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                const scores = JSON.parse(jsonMatch[0]);
-                // Map scores back to places
-                return places.map((p, index) => {
-                    const scoreData = scores[index] || scores[String(index)];
-                    return {
-                        ...p,
-                        vibeScore: scoreData?.score || 50,
-                        geminiReasoning: scoreData?.reason || "AI Analysis"
-                    };
-                });
-            }
-            return places;
-        } catch (error) {
-            console.error('Gemini Rate Error:', error);
-            return places; // Fallback to original
-        }
-    }
-};
+  } catch (error) {
+    console.error("AI Generation Failed:", error);
+    return null; // Signals the API route to use the fallback data
+  }
+}
