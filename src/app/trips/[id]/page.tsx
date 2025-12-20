@@ -1,183 +1,149 @@
-
 'use client';
 
-import { useEffect, useState, use } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ClusterView } from '@/components/Trips/ClusterView';
-import { ChatPanel } from '@/components/Social/ChatPanel';
-import { ExpensePanel } from '@/components/Social/ExpensePanel';
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
 
-// Placeholder for future components
-const MapView = () => <div className="p-4 bg-gray-50 rounded text-center">Map integration coming soon...</div>;
-
-interface Trip {
-    id: string;
-    name: string;
-    tripState: string;
-    days: any[]; // IDay[]
+// Simple types based on your database
+interface Activity {
+  id: string;
+  name: string;
+  description: string;
+  time_slot: string;
+  location: { name: string };
 }
 
-export default function TripDashboard({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
-    const [trip, setTrip] = useState<Trip | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [currentDayIndex, setCurrentDayIndex] = useState(0);
+interface TripDay {
+  id: string;
+  day_index: number;
+  date: string;
+  status: string;
+  activities: Activity[];
+}
 
-    const fetchTrip = async () => {
-        try {
-            const res = await fetch(`/api/trips/${id}`);
-            if (res.ok) {
-                const data = await res.json();
-                console.log("DEBUG: API Response Data:", data);
-                setTrip(data);
-            } else {
-                console.error("Failed to fetch trip", await res.text());
-                setTrip(null);
-            }
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
-        }
-    };
+interface Trip {
+  id: string;
+  name: string;
+  destination: string;
+  days: TripDay[];
+}
 
-    useEffect(() => {
-        fetchTrip();
-    }, [id]);
+export default function TripPage() {
+  const params = useParams();
+  const [trip, setTrip] = useState<Trip | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeDayIndex, setActiveDayIndex] = useState(0);
 
-    const handleStartTrip = async () => {
-        setLoading(true); // Show local loading state immediately
-        try {
-            const res = await fetch(`/api/trips/${id}/start`, { method: 'POST' });
-            if (res.ok) {
-                await fetchTrip(); // Refresh to see Active state and populated days
-            } else {
-                const err = await res.json();
-                alert(err.error || "Failed to start");
-            }
-        } catch (error) {
-            console.error("Failed to start trip", error);
-            alert("Network error starting trip");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    console.log("🕵️‍♂️ DEBUG SCOPE:");
-    console.log("1. Is Loading?", loading);
-    console.log("2. Trip Data:", trip);
-    console.log("3. Trip Days:", trip?.days);
-
-    if (loading) return <div className="p-12 text-center">Loading Dashboard...</div>;
-
-    if (!trip) {
-        console.warn("❌ Trip is falsy, rendering NotFound");
-        return <div className="p-12 text-center text-red-500">Trip not found</div>;
+  useEffect(() => {
+    async function fetchTrip() {
+      if (!params.id) return;
+      try {
+        const res = await fetch(`/api/trips/${params.id}`);
+        if (!res.ok) throw new Error('Failed to fetch');
+        const data = await res.json();
+        setTrip(data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
     }
+    fetchTrip();
+  }, [params.id]);
 
-    const currentDay = trip.days?.[currentDayIndex];
+  if (loading) return <div className="p-10 text-center">Loading Trip...</div>;
+  if (!trip) return <div className="p-10 text-center text-red-500">Trip not found</div>;
 
-    return (
-        <div className="container mx-auto h-[calc(100vh-64px)] flex flex-col">
-            {/* Header */}
-            <header className="border-b p-4 flex justify-between items-center bg-white shadow-sm z-10">
-                <div>
-                    <h1 className="text-2xl font-bold">{trip.name}</h1>
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${trip.tripState === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                            }`}>
-                            {trip.tripState}
-                        </span>
-                        <span>• Day {currentDayIndex + 1}</span>
-                    </div>
-                </div>
-                <div className="flex gap-2">
-                    {trip.tripState === 'DRAFT' && (
-                        <Button onClick={handleStartTrip} variant="default" disabled={loading}>
-                            {loading ? 'Generating...' : '🚀 Start Planning'}
-                        </Button>
-                    )}
-                    <Button variant="outline" size="sm">Invite Friends</Button>
-                </div>
-            </header>
+  const activeDay = trip.days?.[activeDayIndex];
 
-            {/* Main Layout */}
-            <div className="flex-1 flex overflow-hidden">
-                {/* Left: Timeline */}
-                <aside className="w-64 border-r bg-white p-4 overflow-y-auto hidden md:block">
-                    <h2 className="font-semibold mb-4 text-gray-700">Itinerary</h2>
-                    <div className="space-y-2">
-                        {trip.days?.map((day: any, idx: number) => (
-                            <div
-                                key={day.id || idx}
-                                onClick={() => setCurrentDayIndex(idx)}
-                                className={`p-3 rounded cursor-pointer border transition-colors ${idx === currentDayIndex ? 'bg-primary/10 border-primary' : 'hover:bg-gray-50 border-transparent'
-                                    }`}
-                            >
-                                <p className="font-medium text-sm">Day {day.dayIndex}</p>
-                                <p className="text-xs text-gray-500">{new Date(day.date).toLocaleDateString()}</p>
-                                <span className="text-[10px] text-gray-400 capitalize">{day.status}</span>
-                            </div>
-                        ))}
-                        {(!trip.days || trip.days.length === 0) && (
-                            <p className="text-sm text-gray-400 italic">No days generated yet. Start the trip to begin.</p>
-                        )}
-                    </div>
-                </aside>
-
-                {/* Center: Main View */}
-                <main className="flex-1 p-4 overflow-y-auto bg-gray-50">
-                    {currentDay ? (
-                        <Tabs defaultValue="clusters" className="h-full flex flex-col">
-                            <div className="flex justify-between items-center mb-4">
-                                <TabsList>
-                                    <TabsTrigger value="clusters">✨ Vibe Check</TabsTrigger>
-                                    <TabsTrigger value="map">🗺️ Map</TabsTrigger>
-                                </TabsList>
-                            </div>
-
-                            <TabsContent value="clusters" className="flex-1">
-                                <ClusterView day={currentDay} refreshDay={fetchTrip} />
-                            </TabsContent>
-                            <TabsContent value="map" className="flex-1 h-full min-h-[400px]">
-                                <MapView />
-                            </TabsContent>
-                        </Tabs>
-                    ) : (
-                        <div className="flex h-full flex-col items-center justify-center text-gray-400">
-                            <p className="mb-2">Ready to plan?</p>
-                            {trip.tripState === 'DRAFT' && (
-                                <Button onClick={handleStartTrip} disabled={loading}>
-                                    {loading ? 'Generating Custom Itinerary...' : 'Start Trip & Generate Itinerary'}
-                                </Button>
-                            )}
-                        </div>
-                    )}
-                </main>
-
-                {/* Right: Social Panel */}
-                <aside className="w-96 border-l bg-white flex flex-col border-l-2">
-                    <Tabs defaultValue="chat" className="flex-1 flex flex-col">
-                        <TabsList className="w-full rounded-none border-b p-0 h-10">
-                            <TabsTrigger value="chat" className="flex-1 rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary hover:bg-gray-50">Chat</TabsTrigger>
-                            <TabsTrigger value="expenses" className="flex-1 rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary hover:bg-gray-50">Bills</TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent value="chat" className="flex-1 m-0 p-0 overflow-hidden relative">
-                            <div className="absolute inset-0">
-                                <ChatPanel tripId={trip.id} />
-                            </div>
-                        </TabsContent>
-                        <TabsContent value="expenses" className="flex-1 m-0 p-0 overflow-hidden relative">
-                            <div className="absolute inset-0">
-                                <ExpensePanel tripId={trip.id} />
-                            </div>
-                        </TabsContent>
-                    </Tabs>
-                </aside>
-            </div>
+  return (
+    <div className="flex h-screen bg-gray-50">
+      {/* SIDEBAR */}
+      <div className="w-64 bg-white border-r border-gray-200 p-4 flex flex-col">
+        <div className="mb-6">
+          <Link href="/dashboard" className="text-gray-500 hover:text-gray-900 text-sm">
+            ← Back to Dashboard
+          </Link>
+          <h1 className="text-xl font-bold mt-2">{trip.name}</h1>
+          <p className="text-sm text-gray-500">{trip.destination}</p>
         </div>
-    );
+        
+        <div className="space-y-2">
+          {trip.days?.map((day, index) => (
+            <button
+              key={day.id}
+              onClick={() => setActiveDayIndex(index)}
+              className={`w-full text-left p-3 rounded-lg text-sm font-medium transition-colors ${
+                activeDayIndex === index
+                  ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                  : 'hover:bg-gray-100 text-gray-700'
+              }`}
+            >
+              Day {index + 1}
+              <div className="text-xs font-normal text-gray-400">
+                {new Date(day.date).toLocaleDateString()}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* MAIN CONTENT */}
+      <div className="flex-1 overflow-auto p-8">
+        <header className="flex justify-between items-center mb-8">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">
+              Day {activeDayIndex + 1} Itinerary
+            </h2>
+            <p className="text-gray-500">
+              {activeDay ? new Date(activeDay.date).toDateString() : ''}
+            </p>
+          </div>
+          <button className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+            Invite Friends
+          </button>
+        </header>
+
+        {/* THE CARDS (No Checks, Just Render) */}
+        <div className="max-w-3xl space-y-4">
+          {!activeDay?.activities?.length ? (
+            <div className="text-center p-10 bg-white rounded-xl border border-dashed border-gray-300">
+              <p className="text-gray-500">No activities for this day yet.</p>
+            </div>
+          ) : (
+            activeDay.activities.map((activity) => (
+              <div 
+                key={activity.id} 
+                className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex gap-4 hover:shadow-md transition-shadow"
+              >
+                {/* Time Column */}
+                <div className="w-20 pt-1">
+                  <span className="text-sm font-bold text-gray-900 block">
+                    {activity.time_slot}
+                  </span>
+                </div>
+
+                {/* Content Column */}
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {activity.name}
+                  </h3>
+                  <p className="text-gray-600 mt-1 text-sm">
+                    {activity.description}
+                  </p>
+                  
+                  {/* Location Tag */}
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                      📍 {activity.location?.name || 'Location TBD'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
