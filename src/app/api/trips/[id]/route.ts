@@ -38,12 +38,16 @@ export async function GET(
 
         // --- FIX: HANDLE ERRORS AND NULL TRIP GRACEFULLY ---
         if (error || !trip) {
-            console.warn("Trip fetch failed or not found:", error);
-            return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+            console.warn("Trip fetch failed:", error);
+            return NextResponse.json({
+                error: 'Trip not found',
+                debug_db_error: error,  // <--- THIS IS WHAT WE NEED
+                debug_tried_id: id,
+                debug_message: "If debug_db_error is null, the ID just doesn't exist."
+            }, { status: 404 });
         }
 
         // 2. AUTO-GENERATE IF EMPTY (Now Safe to Run)
-        // We safely check trip.trip_days because we know trip exists
         if (!trip.trip_days || trip.trip_days.length === 0) {
             console.log("Trip is empty. Auto-generating days...");
 
