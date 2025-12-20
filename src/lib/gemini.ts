@@ -5,37 +5,24 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
 
 export async function generateItinerary(destination: string, days: number, startDate: string) {
   try {
-    // UPDATED: Using 'gemini-1.5-flash' for speed and cost efficiency
     const model = genAI.getGenerativeModel({ 
         model: "gemini-1.5-flash",
-        generationConfig: { responseMimeType: "application/json" } // Force JSON response
+        generationConfig: { responseMimeType: "application/json" }
     });
 
     const prompt = `
       I am planning a trip to ${destination} for ${days} days starting on ${startDate}.
       Create a detailed daily itinerary with 2 activities per day (Morning and Evening).
       
-      The structure must be an ARRAY of objects, where each object represents a day and contains an 'activities' array.
+      RETURN ONLY JSON.
+      The structure should be an ARRAY of objects.
       
-      Example JSON format:
+      Example:
       [
         {
           "day_index": 0,
           "activities": [
-            {
-              "name": "Eiffel Tower Visit",
-              "description": "Visit the iconic landmark and see the city views.",
-              "time_slot": "Morning",
-              "category": "Sightseeing",
-              "location_name": "Champ de Mars, Paris"
-            },
-            {
-              "name": "Seine River Cruise",
-              "description": "Enjoy a relaxing dinner cruise.",
-              "time_slot": "Evening",
-              "category": "Food",
-              "location_name": "Port de la Bourdonnais"
-            }
+             { "name": "...", "description": "...", "time_slot": "Morning", "category": "...", "location_name": "..." }
           ]
         }
       ]
@@ -45,11 +32,26 @@ export async function generateItinerary(destination: string, days: number, start
     const response = await result.response;
     const text = response.text();
 
-    // Parse the JSON
-    return JSON.parse(text);
+    console.log("AI Raw Output:", text); // <--- DEBUG LOG (Check Vercel logs if this fails again)
+
+    let data = JSON.parse(text);
+
+    // --- THE FIX: SMART UNWRAPPING ---
+    // Sometimes Gemini wraps the array in an object like { "itinerary": [...] }
+    if (!Array.isArray(data)) {
+        if (data.itinerary && Array.isArray(data.itinerary)) {
+            data = data.itinerary;
+        } else if (data.days && Array.isArray(data.days)) {
+            data = data.days;
+        } else if (data.trip && Array.isArray(data.trip)) {
+             data = data.trip;
+        }
+    }
+
+    return data;
 
   } catch (error) {
     console.error("AI Generation Failed:", error);
-    return null; // Signals the API route to use the fallback data
+    return null; 
   }
 }
