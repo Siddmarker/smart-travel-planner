@@ -6,7 +6,7 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
 export async function generateItinerary(destination: string, days: number, startDate: string) {
   try {
     const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash",
+        model: "gemini-pro",
         generationConfig: { responseMimeType: "application/json" }
     });
 
