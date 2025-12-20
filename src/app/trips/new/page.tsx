@@ -68,12 +68,12 @@ export default function NewTripPage() {
             if (budgetNum > 3000) budgetTier = 'High';
 
             const payload = {
-                tripName: formData.name,
+                name: formData.name,
                 destination: formData.destination?.name || '',
                 startDate: formData.startDate,
                 endDate: formData.endDate,
                 budget: budgetTier,
-                tripType: formData.tripType,
+                travelerType: formData.tripType,
                 userId: user.id // <--- VITAL: Send the ID to the backend
             };
 
