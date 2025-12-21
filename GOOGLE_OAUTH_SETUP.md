@@ -41,11 +41,13 @@ Ensure these settings in Google Cloud Console:
 
 **Authorized JavaScript origins:**
 - `http://localhost:3000` (development)
-- `https://your-domain.vercel.app` (production)
+- `https://www.2wards.in` (production)
+- `https://2wards.in` (production root)
 
 **Authorized redirect URIs:**
 - `http://localhost:3000/api/auth/callback/google`
-- `https://your-domain.vercel.app/api/auth/callback/google`
+- `https://www.2wards.in/api/auth/callback/google`
+- `https://2wards.in/api/auth/callback/google`
 
 ### Debugging
 
