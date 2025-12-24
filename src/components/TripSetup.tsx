@@ -7,17 +7,19 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// --- UPDATED INTERFACE: Added 'onSkip' ---
 interface TripSetupProps {
   onComplete: (details: { city: string; type: string; days: number }) => void;
+  onSkip: () => void; // <--- This line was missing or not saved!
 }
 
-export default function TripSetup({ onComplete }: TripSetupProps) {
+export default function TripSetup({ onComplete, onSkip }: TripSetupProps) {
   const [cities, setCities] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [selectedCity, setSelectedCity] = useState('');
   const [travelerType, setTravelerType] = useState('SOLO');
-  const [days, setDays] = useState(2); // Default to 2 days
+  const [days, setDays] = useState(2);
 
   useEffect(() => {
     async function fetchCities() {
@@ -34,7 +36,6 @@ export default function TripSetup({ onComplete }: TripSetupProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // PASS THE 'days' VARIABLE UP
     onComplete({ city: selectedCity, type: travelerType, days });
   };
 
@@ -74,6 +75,16 @@ export default function TripSetup({ onComplete }: TripSetupProps) {
           </div>
 
           <button type="submit" className="w-full py-4 bg-black text-white rounded-xl font-bold shadow-lg hover:scale-[1.02] transition-all text-sm">Start Planning ➔</button>
+        
+          <div className="text-center pt-2">
+            <button 
+              type="button" 
+              onClick={onSkip} // Using the new prop here
+              className="text-xs text-gray-400 hover:text-black underline font-medium"
+            >
+              Or just explore the map directly
+            </button>
+          </div>
         </form>
       </div>
     </div>
