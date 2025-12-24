@@ -1,59 +1,66 @@
 'use client';
+import { useState } from 'react';
+import TravelMap from '@/components/TravelMap';
+import Sidebar from '@/components/Sidebar';
+import TripSetup from '@/components/TripSetup';
 
-import { useAuth } from '@/contexts/AuthContext';
-import { CompactHero } from '@/components/LandingPage/CompactHero';
-import { CompactFeatures } from '@/components/LandingPage/CompactFeatures';
-import { CompactHowItWorks } from '@/components/LandingPage/CompactHowItWorks';
-import { CompactCTA } from '@/components/LandingPage/CompactCTA';
-export default function LandingPage() {
-  const { user } = useAuth();
+export default function Home() {
+  const [hasStarted, setHasStarted] = useState(false);
+  const [city, setCity] = useState<string>('COORG'); 
+  const [filter, setFilter] = useState<string>('ALL');
+  const [tripPlan, setTripPlan] = useState<any[]>([]);
+  const [totalDays, setTotalDays] = useState(1);
+
+  const handleSetupComplete = (details: { city: string; type: string; days: number }) => {
+    setCity(details.city);
+    setFilter(details.type); // This ensures 'FAMILY' is set
+    setTotalDays(details.days);
+    setHasStarted(true);
+  };
+
+  // NEW: Function to fully reset the app to the white form
+  const resetApp = () => {
+    setHasStarted(false);
+    setTripPlan([]);
+    setFilter('ALL');
+  };
+
+  const addToTrip = (place: any) => {
+    if (!tripPlan.find((p) => p.id === place.id)) {
+      setTripPlan([...tripPlan, place]);
+    }
+  };
+
+  const removeFromTrip = (placeId: string) => {
+    setTripPlan(tripPlan.filter((p) => p.id !== placeId));
+  };
+
+  if (!hasStarted) {
+    return <TripSetup onComplete={handleSetupComplete} />;
+  }
 
   return (
-    <div className="min-h-screen bg-[#F2F2F7] dark:bg-black">
-      <CompactHero user={user} />
-      <CompactFeatures />
-      <CompactHowItWorks />
-      <CompactCTA user={user} />
-
-      {/* Footer / Final CTA */}
-      <footer className="bg-gray-900 text-white py-12">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div>
-              <h3 className="text-2xl font-bold mb-4">2wards</h3>
-              <p className="text-gray-300">
-                Your intelligent companion for seamless travel planning and unforgettable adventures.
-              </p>
-            </div>
-            <div>
-              <h4 className="font-bold mb-4 text-white">Product</h4>
-              <ul className="space-y-2 text-gray-300">
-                <li>Features</li>
-                <li>Pricing</li>
-                <li>About Us</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold mb-4 text-white">Resources</h4>
-              <ul className="space-y-2 text-gray-300">
-                <li>Blog</li>
-                <li>Community</li>
-                <li>Help Center</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold mb-4 text-white">Legal</h4>
-              <ul className="space-y-2 text-gray-300">
-                <li>Privacy Policy</li>
-                <li>Terms of Service</li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-gray-800 mt-12 pt-8 text-center text-gray-400">
-            <p>&copy; 2024 2wards. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
-    </div>
+    <main className="flex h-screen w-screen overflow-hidden">
+      <Sidebar 
+        onCitySelect={setCity} 
+        selectedCity={city}
+        onFilterChange={setFilter}
+        activeFilter={filter}
+        tripPlan={tripPlan}
+        onRemoveItem={removeFromTrip}
+        onAddToTrip={addToTrip}
+        isTripActive={hasStarted}
+        totalDays={totalDays}
+        onResetApp={resetApp} // Pass the reset function down
+      />
+      <div className="flex-1 relative">
+        <TravelMap 
+          selectedCity={city} 
+          activeFilter={filter}
+          onAddToTrip={addToTrip}
+          tripPlan={tripPlan} 
+        />
+      </div>
+    </main>
   );
 }

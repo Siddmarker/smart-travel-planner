@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { Sidebar } from '@/components/Sidebar';
+import  Sidebar  from '@/components/Sidebar';
 
 
 const publicRoutes = ['/', '/login', '/signup', '/features', '/pricing'];
