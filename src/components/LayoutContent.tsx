@@ -1,34 +1,19 @@
 'use client';
-
 import { usePathname } from 'next/navigation';
-import  Sidebar  from '@/components/Sidebar';
 
+export default function LayoutContent({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
 
-const publicRoutes = ['/', '/login', '/signup', '/features', '/pricing'];
-
-export function LayoutContent({ children }: { children: React.ReactNode }) {
-    const pathname = usePathname();
-    const isPublicRoute = publicRoutes.includes(pathname);
-
-    return (
-        <>
-            {isPublicRoute ? (
-                // Public routes (login/signup) - no sidebar
-                <div className="h-screen overflow-y-auto bg-background">
-                    {children}
-                </div>
-            ) : (
-                // Protected routes - with sidebar
-                <div className="flex h-screen overflow-hidden">
-                    <aside className="hidden md:block">
-                        <Sidebar />
-                    </aside>
-                    <main className="flex-1 overflow-y-auto bg-background">
-                        {children}
-                    </main>
-                </div>
-            )}
-
-        </>
-    );
+  return (
+    <div className="flex h-screen overflow-hidden bg-white">
+      {/* Sidebar removed from here because page.tsx handles it now! */}
+      <main className="flex-1 relative overflow-hidden">
+        {children}
+      </main>
+    </div>
+  );
 }
