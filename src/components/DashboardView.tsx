@@ -1,67 +1,83 @@
 'use client';
 
-export default function DashboardView({ onCreateTrip }: { onCreateTrip: () => void }) {
+// specific props for navigation
+interface DashboardProps {
+  onPlanTrip: () => void;
+  onDiscovery: () => void; // <--- Added this capability
+}
+
+export default function DashboardView({ onPlanTrip, onDiscovery }: DashboardProps) {
   return (
-    <div className="h-full w-full bg-gray-50 overflow-y-auto p-8">
+    <div className="h-full w-full bg-gray-50 overflow-y-auto p-8 font-sans">
+      
       {/* HEADER */}
-      <div className="mb-8">
+      <div className="mb-10">
         <h1 className="text-3xl font-black text-gray-900">Welcome back, Traveler! 👋</h1>
-        <p className="text-gray-500 mt-2">Here is a summary of your authentic journeys.</p>
+        <p className="text-gray-500 mt-2">Ready to explore the real India today?</p>
       </div>
 
-      {/* STATS CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <div className="text-4xl mb-2">🌏</div>
-          <h3 className="font-bold text-gray-500 text-xs uppercase tracking-wider">Total Trips</h3>
-          <p className="text-3xl font-black text-blue-600">12</p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <div className="text-4xl mb-2">⛺</div>
-          <h3 className="font-bold text-gray-500 text-xs uppercase tracking-wider">Hidden Gems Found</h3>
-          <p className="text-3xl font-black text-purple-600">47</p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <div className="text-4xl mb-2">🔥</div>
-          <h3 className="font-bold text-gray-500 text-xs uppercase tracking-wider">Travel Streak</h3>
-          <p className="text-3xl font-black text-orange-500">3 Months</p>
-        </div>
-      </div>
-
-      {/* RECENT HISTORY */}
-      <h2 className="text-xl font-bold text-gray-800 mb-4">Recent Memories</h2>
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm mb-8">
-        {[
-          { city: 'Coorg', date: 'Oct 2023', type: 'SOLO', img: 'https://images.unsplash.com/photo-1596328892606-44b70503f56e?q=80&w=200&auto=format&fit=crop' },
-          { city: 'Varkala', date: 'Aug 2023', type: 'FRIENDS', img: 'https://images.unsplash.com/photo-1588267246284-48616198df49?q=80&w=200&auto=format&fit=crop' },
-          { city: 'Udaipur', date: 'Dec 2022', type: 'FAMILY', img: 'https://images.unsplash.com/photo-1615836245337-f5b9b2303f10?q=80&w=200&auto=format&fit=crop' },
-        ].map((trip, i) => (
-          <div key={i} className="flex items-center gap-4 p-4 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors">
-            <img src={trip.img} className="w-16 h-16 rounded-lg object-cover" alt={trip.city} />
-            <div className="flex-1">
-              <h4 className="font-bold text-gray-800">{trip.city} Trip</h4>
-              <p className="text-xs text-gray-400">{trip.date}</p>
+      {/* MAIN FEATURES (THE NEW HUB) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+        
+        {/* CARD 1: MULTI-DAY PLANNER */}
+        <div 
+          onClick={onPlanTrip}
+          className="group bg-white p-8 rounded-3xl border border-gray-200 shadow-sm hover:shadow-xl hover:border-blue-500 transition-all cursor-pointer relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity text-9xl">📅</div>
+          <div className="relative z-10">
+            <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-2xl mb-6 text-blue-600">
+              ✨
             </div>
-            <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-3 py-1 rounded-full uppercase">
-              {trip.type}
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">AI Trip Planner</h2>
+            <p className="text-gray-500 text-sm mb-6">
+              Build a complete day-by-day itinerary for your next vacation based on your vibe and group type.
+            </p>
+            <span className="inline-flex items-center text-blue-600 font-bold text-sm group-hover:gap-2 transition-all">
+              Start Planning ➔
             </span>
           </div>
-        ))}
+        </div>
+
+        {/* CARD 2: DISCOVERY MODE (NEW) */}
+        <div 
+          onClick={onDiscovery}
+          className="group bg-white p-8 rounded-3xl border border-gray-200 shadow-sm hover:shadow-xl hover:border-purple-500 transition-all cursor-pointer relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity text-9xl">🧭</div>
+          <div className="relative z-10">
+            <div className="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center text-2xl mb-6 text-purple-600">
+              🔭
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Discovery Mode</h2>
+            <p className="text-gray-500 text-sm mb-6">
+              Find hidden gems, trending cafes, and local attractions near you right now. No itinerary needed.
+            </p>
+            <span className="inline-flex items-center text-purple-600 font-bold text-sm group-hover:gap-2 transition-all">
+              Explore Now ➔
+            </span>
+          </div>
+        </div>
+
       </div>
 
-      {/* CALL TO ACTION */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-white flex justify-between items-center shadow-lg">
-        <div>
-          <h2 className="text-2xl font-bold mb-1">Ready for your next adventure?</h2>
-          <p className="text-white/80 text-sm">Let AI curate your perfect itinerary.</p>
+      {/* USER STATS (Moved down) */}
+      <h3 className="font-bold text-gray-400 text-xs uppercase tracking-wider mb-4">Your Travel Stats</h3>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 flex items-center gap-4">
+          <div className="text-2xl">🌏</div>
+          <div><p className="text-2xl font-black text-gray-900">12</p><p className="text-xs text-gray-400 font-bold">Trips Taken</p></div>
         </div>
-        <button 
-          onClick={onCreateTrip}
-          className="bg-white text-blue-600 px-6 py-3 rounded-xl font-bold hover:scale-105 transition-transform shadow-md"
-        >
-          Plan New Trip ➔
-        </button>
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 flex items-center gap-4">
+          <div className="text-2xl">⛺</div>
+          <div><p className="text-2xl font-black text-gray-900">47</p><p className="text-xs text-gray-400 font-bold">Places Saved</p></div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 flex items-center gap-4">
+          <div className="text-2xl">🔥</div>
+          <div><p className="text-2xl font-black text-gray-900">Level 3</p><p className="text-xs text-gray-400 font-bold">Explorer Rank</p></div>
+        </div>
       </div>
+
     </div>
   );
 }

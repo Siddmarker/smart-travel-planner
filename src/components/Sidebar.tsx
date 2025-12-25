@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation'; // <--- Import Router
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -7,14 +8,11 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// Define the 4 Main Views
 export type NavView = 'DASHBOARD' | 'PLAN' | 'DISCOVERY' | 'TRIPS' | 'SETTINGS';
 
 interface SidebarProps {
   currentView: NavView;
   onChangeView: (view: NavView) => void;
-  
-  // Data Props for Planner/Discovery
   onCitySelect?: (city: string) => void;
   selectedCity?: string;
   onFilterChange?: (filter: string) => void;
@@ -28,6 +26,7 @@ interface SidebarProps {
 }
 
 type WizardStage = 'IDLE' | 'MORNING' | 'LUNCH' | 'AFTERNOON' | 'DINNER' | 'NIGHT' | 'COMPLETED';
+
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371; 
   const dLat = deg2rad(lat2 - lat1);
@@ -44,7 +43,15 @@ export default function Sidebar({
   isTripActive = false, totalDays = 1, onResetApp 
 }: SidebarProps) {
   
-  // --- PLANNER/DISCOVERY LOGIC ---
+  const router = useRouter(); // <--- Initialize Router
+
+  // --- LOGOUT LOGIC ---
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/'; // Force reload to clear state and go to Landing
+  };
+
+  // --- EXISTING LOGIC ---
   const [cities, setCities] = useState<string[]>([]);
   const [cityPlaces, setCityPlaces] = useState<any[]>([]);
   const [internalCity, setInternalCity] = useState('');
@@ -80,7 +87,6 @@ export default function Sidebar({
     fetch();
   }, [currentCity]);
 
-  // Wizard Generator Logic
   async function generateOptions(requiredType: string, timeTag?: string) {
     setLoadingOptions(true);
     setOptions([]);
@@ -135,8 +141,6 @@ export default function Sidebar({
   const handleCityClick = (city: string) => { if (onCitySelect) onCitySelect(city); else setInternalCity(city); };
   const handleFilterClick = (mode: string) => { if (onFilterChange) onFilterChange(mode); else setInternalFilter(mode); };
   
-  const filteredCityPlaces = cityPlaces.filter(place => currentFilter === 'ALL' || place.vibes?.includes(currentFilter));
-
   return (
     <div className="w-80 h-screen bg-white shadow-xl z-20 flex flex-col border-r border-gray-200">
       
@@ -147,7 +151,7 @@ export default function Sidebar({
         </h1>
       </div>
 
-      {/* 2. MAIN NAVIGATION BUTTONS */}
+      {/* 2. MAIN NAVIGATION */}
       <div className="p-3 grid gap-1 border-b border-gray-100 bg-gray-50/50">
         {[
            { id: 'DASHBOARD', icon: '🏠', label: 'Dashboard' },
@@ -170,7 +174,7 @@ export default function Sidebar({
         ))}
       </div>
 
-      {/* 3. DYNAMIC CONTENT AREA (Changes based on selection) */}
+      {/* 3. DYNAMIC CONTENT AREA */}
       <div className="flex-1 overflow-y-auto bg-gray-50">
         
         {/* VIEW: PLANNER */}
@@ -191,7 +195,6 @@ export default function Sidebar({
                 )}
               </div>
             ) : (
-               // WIZARD UI
                <div className="flex-1 flex flex-col">
                  <div className="flex justify-between items-center mb-4">
                   <div>
@@ -261,16 +264,29 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* 4. USER PROFILE (Fixed Bottom) */}
+      {/* 4. USER PROFILE + LOGOUT BUTTON */}
       <div className="p-4 border-t border-gray-200 bg-white">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden">
-             <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" />
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden">
+               <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" />
+            </div>
+            <div>
+               <h4 className="font-bold text-sm text-gray-900">John Doe</h4>
+               <p className="text-[10px] text-gray-500">Traveller Level 3</p>
+            </div>
           </div>
-          <div>
-             <h4 className="font-bold text-sm text-gray-900">John Doe</h4>
-             <p className="text-[10px] text-gray-500">Traveller Level 3</p>
-          </div>
+
+          {/* NEW LOGOUT BUTTON */}
+          <button 
+            onClick={handleLogout}
+            title="Sign Out"
+            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-all"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
+            </svg>
+          </button>
         </div>
       </div>
 
