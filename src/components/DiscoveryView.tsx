@@ -2,67 +2,68 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLoadScript } from '@react-google-maps/api';
 
-// LIBRARIES: We only need the 'places' library from Google
+// LIBRARIES
 const LIBRARIES: ("places")[] = ["places"];
 
-export default function DiscoveryView({ onAddToTrip }: { onAddToTrip: (place: any) => void }) {
+// --- 1. DEFINE PROPS CORRECTLY (Including onBack) ---
+interface DiscoveryProps {
+  onAddToTrip: (place: any) => void;
+  onBack?: () => void; // <--- This was missing!
+}
+
+export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
   // 1. LOAD GOOGLE MAPS SCRIPT
   const { isLoaded } = useLoadScript({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '', // Make sure to add this to .env.local!
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '',
     libraries: LIBRARIES,
   });
 
   const [searchTerm, setSearchTerm] = useState('');
   const [places, setPlaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('tourist_attraction'); // Default category
+  const [activeTab, setActiveTab] = useState('tourist_attraction'); 
 
   // Refs for Google Services
   const searchInputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
 
-  // 2. SETUP AUTOCOMPLETE (The Dropdown System)
+  // 2. SETUP AUTOCOMPLETE
   useEffect(() => {
     if (isLoaded && searchInputRef.current) {
-      // Initialize Autocomplete
       autocompleteRef.current = new google.maps.places.Autocomplete(searchInputRef.current, {
-        types: ['(cities)'], // Limit suggestions to Cities only
+        types: ['(cities)'], 
         fields: ['geometry', 'name'],
       });
 
-      // Initialize Places Service (using a hidden div, since we don't display a map here)
       const hiddenDiv = document.createElement('div');
       placesServiceRef.current = new google.maps.places.PlacesService(hiddenDiv);
 
-      // Listen for selection
       autocompleteRef.current.addListener('place_changed', () => {
         const place = autocompleteRef.current?.getPlace();
-        if (place?.name) setSearchTerm(place.name); // Auto-fill input
-        handleSearch(); // Auto-trigger search
+        if (place?.name) setSearchTerm(place.name); 
+        handleSearch(); 
       });
     }
   }, [isLoaded]);
 
-  // 3. FETCH REAL PLACES FROM GOOGLE
+  // 3. FETCH REAL PLACES
   const handleSearch = () => {
     if (!placesServiceRef.current || !searchTerm) return;
     setLoading(true);
     setPlaces([]);
 
     const request = {
-      query: `${activeTab} in ${searchTerm}`, // e.g., "tourist_attraction in Mumbai"
+      query: `${activeTab} in ${searchTerm}`,
       fields: ['name', 'formatted_address', 'rating', 'photos', 'geometry', 'place_id'],
     };
 
     placesServiceRef.current.textSearch(request, (results, status) => {
       if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-        // Transform Google data to match your app's format
         const formattedPlaces = results.map(place => ({
           id: place.place_id,
           name: place.name,
           description: place.formatted_address,
-          // Get the photo URL if it exists, otherwise use a placeholder
           image: place.photos?.[0]?.getUrl() || `https://source.unsplash.com/random/400x300/?${activeTab}`,
           rating: place.rating || 4.5,
           lat: place.geometry?.location?.lat(),
@@ -75,11 +76,8 @@ export default function DiscoveryView({ onAddToTrip }: { onAddToTrip: (place: an
     });
   };
 
-  // Trigger search when Tab changes
   useEffect(() => {
-    if (searchTerm && isLoaded) {
-      handleSearch();
-    }
+    if (searchTerm && isLoaded) handleSearch();
   }, [activeTab]);
 
   if (!isLoaded) return <div className="p-10 text-center">Loading Google Maps...</div>;
@@ -87,21 +85,31 @@ export default function DiscoveryView({ onAddToTrip }: { onAddToTrip: (place: an
   return (
     <div className="h-full w-full bg-gray-50 overflow-y-auto p-8 font-sans">
       
-      <div className="mb-8">
-        <h1 className="text-3xl font-black text-gray-900">Discover Places</h1>
-        <p className="text-gray-500 mt-1">Real-time suggestions powered by Google Maps</p>
+      {/* HEADER WITH BACK BUTTON */}
+      <div className="mb-8 flex items-center gap-4">
+        {onBack && (
+          <button 
+            onClick={onBack}
+            className="w-10 h-10 flex items-center justify-center bg-white rounded-full border border-gray-200 hover:shadow-md transition-all text-gray-600 font-bold"
+          >
+            ←
+          </button>
+        )}
+        <div>
+          <h1 className="text-3xl font-black text-gray-900">Discover Places</h1>
+          <p className="text-gray-500 mt-1">Real-time suggestions powered by Google Maps</p>
+        </div>
       </div>
 
-      {/* SEARCH BAR WITH AUTOCOMPLETE */}
+      {/* SEARCH BAR */}
       <div className="flex flex-wrap items-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-gray-200 mb-8 max-w-5xl">
         <div className="flex-1 flex items-center gap-3 px-4">
           <span className="text-gray-400">📍</span>
           <input 
-            ref={searchInputRef} // <--- Attached to Google Autocomplete
+            ref={searchInputRef}
             type="text" 
-            placeholder="Search any city (e.g., Delhi, Paris, Tokyo)..."
+            placeholder="Search any city (e.g., Delhi, Paris)..."
             className="w-full font-bold text-gray-700 outline-none placeholder-gray-300"
-            // We use uncontrolled input for Autocomplete to work best, keeping state in sync manually if needed
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
@@ -113,7 +121,7 @@ export default function DiscoveryView({ onAddToTrip }: { onAddToTrip: (place: an
         </button>
       </div>
 
-      {/* CATEGORIES (Updated to match Google Types) */}
+      {/* CATEGORIES */}
       <div className="flex gap-3 overflow-x-auto pb-4 mb-6 no-scrollbar">
         {[
           { id: 'tourist_attraction', label: '🔥 Trending', icon: '✨' },
