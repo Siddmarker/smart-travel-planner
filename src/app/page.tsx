@@ -35,7 +35,7 @@ function MainApp() {
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
         setIsLoggedIn(true);
-        // Clean URL
+        // Clean URL hash if present
         if (window.location.hash) {
           window.history.replaceState(null, '', window.location.pathname);
         }
@@ -52,23 +52,22 @@ function MainApp() {
   
   // Trip Details State
   const [city, setCity] = useState<string>('COORG'); 
-  const [filter, setFilter] = useState<string>('ALL'); // 'SOLO', 'FAMILY', etc.
+  const [filter, setFilter] = useState<string>('ALL'); // This maps to 'groupType'
   const [totalDays, setTotalDays] = useState(1);
-  const [travelers, setTravelers] = useState(1); // New
-  const [diet, setDiet] = useState('VEG');       // New
+  const [travelers, setTravelers] = useState(1); 
+  const [diet, setDiet] = useState('VEG');       
   
   const [tripPlan, setTripPlan] = useState<any[]>([]);
   const [isSetupDone, setIsSetupDone] = useState(false);
 
   // --- HANDLERS ---
   
-  // Updated to accept the new rich data from TripSetup
   const handleSetupComplete = (details: any) => {
     setCity(details.city);
-    setFilter(details.type);
+    setFilter(details.type); // e.g., 'SOLO', 'FAMILY'
     setTotalDays(details.days);
-    setTravelers(details.travelers); // Store for future use
-    setDiet(details.diet);           // Store for future use
+    setTravelers(details.travelers); 
+    setDiet(details.diet);           
     
     setIsSetupDone(true);
     setCurrentView('PLAN'); 
@@ -86,12 +85,11 @@ function MainApp() {
 
   // --- RENDER LOGIC ---
 
-  // 1. Not Logged In
   if (!isLoggedIn) {
     return <LandingPage />;
   }
 
-  // 2. Planning Mode but Setup Incomplete -> Show Wizard
+  // Sub-Scenario: Planning but setup incomplete -> Show Wizard
   if (currentView === 'PLAN' && !isSetupDone) {
      return (
        <TripSetup 
@@ -112,23 +110,29 @@ function MainApp() {
         <Sidebar 
           currentView={currentView}
           onChangeView={setCurrentView}
-          onCitySelect={setCity} 
+          
+          // --- FIXED PROPS HERE ---
           selectedCity={city}
-          onFilterChange={setFilter}
-          activeFilter={filter}
           tripPlan={tripPlan}
-          onRemoveItem={removeFromTrip}
-          onAddToTrip={addToTrip}
           isTripActive={currentView === 'PLAN'}
           totalDays={totalDays}
-          onResetApp={handleCreateNewTrip}
+          
+          // Actions
+          onRemoveItem={removeFromTrip}
+          onAddToTrip={addToTrip}
+          onResetApp={handleCreateNewTrip} // This allows restarting the wizard
+
+          // Smart Data
+          diet={diet}
+          travelers={travelers}
+          groupType={filter} // Mapping 'filter' state to 'groupType' prop
         />
       )}
 
       {/* MAIN CONTENT AREA */}
       <div className="flex-1 relative bg-gray-50 h-full overflow-hidden">
         
-        {/* VIEW: DASHBOARD (Full Screen) */}
+        {/* VIEW: DASHBOARD */}
         {currentView === 'DASHBOARD' && (
           <DashboardView 
             onPlanTrip={() => setCurrentView('PLAN')} 
@@ -136,7 +140,7 @@ function MainApp() {
           />
         )}
 
-        {/* VIEW: DISCOVERY (Full Screen) */}
+        {/* VIEW: DISCOVERY */}
         {currentView === 'DISCOVERY' && (
           <DiscoveryView 
             onAddToTrip={addToTrip} 
@@ -153,7 +157,7 @@ function MainApp() {
            </div>
         )}
 
-        {/* VIEW: MAP (Only for Plan & Trips) */}
+        {/* VIEW: MAP */}
         {showSidebar && (
           <TravelMap 
             selectedCity={city} 
