@@ -9,6 +9,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// LIBRARIES (Must be outside component to prevent reload loops)
 const LIBRARIES: ("places")[] = ["places"];
 
 export type NavView = 'DASHBOARD' | 'PLAN' | 'DISCOVERY' | 'TRIPS' | 'SETTINGS';
@@ -23,6 +24,8 @@ interface SidebarProps {
   isTripActive?: boolean;
   totalDays?: number;
   onResetApp?: () => void;
+  
+  // Smart Data Props
   diet?: string;      
   travelers?: number; 
   groupType?: string; 
@@ -34,12 +37,12 @@ export default function Sidebar({
   currentView, onChangeView,
   selectedCity = 'Delhi', tripPlan = [], onRemoveItem, onAddToTrip, 
   isTripActive = false, totalDays = 1, onResetApp,
-  diet = 'VEG', travelers = 1, groupType = 'SOLO'
+  diet = 'ANY', travelers = 1, groupType = 'SOLO'
 }: SidebarProps) {
   
   const router = useRouter();
   
-  // LOAD GOOGLE MAPS
+  // 1. LOAD GOOGLE MAPS SCRIPT
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '',
     libraries: LIBRARIES,
@@ -49,14 +52,19 @@ export default function Sidebar({
   const [currentDay, setCurrentDay] = useState(1);
   const [options, setOptions] = useState<any[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(false);
-  const [sourceUsed, setSourceUsed] = useState<'DB' | 'GOOGLE'>('DB'); // Track where data came from
+  const [sourceUsed, setSourceUsed] = useState<'DB' | 'GOOGLE'>('DB');
   
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
 
+  // 2. SAFE SERVICE INITIALIZATION (The Crash Fix)
   useEffect(() => {
-    if (isLoaded && !placesServiceRef.current) {
-      const hiddenDiv = document.createElement('div');
-      placesServiceRef.current = new google.maps.places.PlacesService(hiddenDiv);
+    if (isLoaded && window.google && window.google.maps && !placesServiceRef.current) {
+      try {
+        const hiddenDiv = document.createElement('div');
+        placesServiceRef.current = new google.maps.places.PlacesService(hiddenDiv);
+      } catch (error) {
+        console.error("Google Maps Service init failed:", error);
+      }
     }
   }, [isLoaded]);
 
@@ -66,7 +74,7 @@ export default function Sidebar({
     setLoadingOptions(true);
     setOptions([]);
 
-    // 1. DETERMINE CATEGORY
+    // A. Define Category based on Time
     let category = 'ACTIVITY';
     let timeTag = stageType; // e.g., 'MORNING'
 
@@ -75,14 +83,16 @@ export default function Sidebar({
 
     console.log(`🔎 Checking Database for: ${selectedCity} (${category})...`);
 
-    // 2. CHECK SUPABASE (DATABASE) FIRST
+    // B. CHECK SUPABASE (DATABASE) FIRST
     const { data: dbPlaces } = await supabase
       .from('places')
       .select('*')
-      .ilike('zone_id', selectedCity) // Case-insensitive match (Agra vs AGRA)
+      .ilike('zone_id', selectedCity) 
       .eq('type', category)
-      .contains('best_time_tags', [timeTag])
       .limit(5);
+
+    // Optional: Filter DB results by time tag manually if needed
+    // For now, if we find matching category in the city, we use it.
 
     if (dbPlaces && dbPlaces.length > 0) {
       // ✅ FOUND IN DB
@@ -90,23 +100,23 @@ export default function Sidebar({
       const formatted = dbPlaces.map(p => ({
         ...p,
         slot: `Day ${currentDay} - ${stageType}`,
-        source: 'Verified' // UI Badge
+        source: 'Verified'
       }));
       setOptions(formatted);
       setSourceUsed('DB');
       setLoadingOptions(false);
-      return; // STOP HERE. Do not call Google.
+      return; // STOP HERE. Don't use Google.
     }
 
-    // 3. FALLBACK TO GOOGLE (If DB was empty)
+    // C. FALLBACK TO GOOGLE (If DB empty)
     console.log("⚠️ DB Empty. Calling Google Maps...");
     setSourceUsed('GOOGLE');
     
     if (!placesServiceRef.current) return;
 
-    // Build Smart Query for Google
-    const dietTerm = diet === 'VEG' ? 'Pure Veg' : diet === 'JAIN' ? 'Jain Food' : 'Best';
-    const groupTerm = groupType === 'FAMILY' ? 'Family Friendly' : 'Popular';
+    // Build Smart Query
+    const dietTerm = diet === 'VEG' ? 'Pure Veg' : diet === 'NON_VEG' ? 'Non-Veg' : 'Best';
+    const groupTerm = groupType === 'FAMILY' ? 'Family Friendly' : groupType === 'COUPLE' ? 'Romantic' : 'Popular';
     
     let query = '';
     if (category === 'ACTIVITY') query = `Top ${groupTerm} attractions in ${selectedCity}`;
@@ -138,10 +148,11 @@ export default function Sidebar({
     });
   }
 
-  // --- PROGRESSION LOGIC ---
+  // --- WIZARD FLOW ---
   const handleSelection = (place: any) => {
     if(onAddToTrip) onAddToTrip({ ...place, slot: `Day ${currentDay} - ${stage}` }); 
     
+    // Auto-advance
     if (stage === 'MORNING') { setStage('LUNCH'); generateOptions('LUNCH'); }
     else if (stage === 'LUNCH') { setStage('AFTERNOON'); generateOptions('AFTERNOON'); }
     else if (stage === 'AFTERNOON') { setStage('DINNER'); generateOptions('DINNER'); }
@@ -179,7 +190,7 @@ export default function Sidebar({
           2wards India
         </h1>
         <p className="text-[10px] text-gray-400 mt-1 uppercase tracking-wider font-bold">
-           {selectedCity} • {diet === 'VEG' ? '🥬 Pure Veg' : '🍽️ Any Food'}
+           {selectedCity} • {diet === 'VEG' ? '🥬 Pure Veg' : diet === 'NON_VEG' ? '🍗 Non-Veg' : '🍽️ Any Food'}
         </p>
       </div>
 
@@ -212,24 +223,26 @@ export default function Sidebar({
         {currentView === 'PLAN' && (
           <div className="h-full flex flex-col">
             {stage === 'IDLE' ? (
-              <div className="text-center mt-5">
-                <div className="text-4xl mb-2">📅</div>
+              <div className="text-center mt-10">
+                <div className="text-4xl mb-4">📅</div>
                 <h3 className="font-bold text-gray-800 text-sm">AI Trip Generator</h3>
-                <p className="text-xs text-gray-500 mb-4 px-2">
+                <p className="text-xs text-gray-500 mb-6 px-4 leading-relaxed">
                   Ready to build Day 1 for <b>{selectedCity}</b>?
+                  <br/>We'll suggest spots based on your <b>{groupType}</b> vibe.
                 </p>
-                <button onClick={startPlanning} className="bg-blue-600 text-white w-full py-3 rounded-xl font-bold text-xs shadow-md">
-                  Start Day {currentDay}
+                <button onClick={startPlanning} className="bg-blue-600 text-white w-full py-4 rounded-xl font-bold text-xs shadow-lg hover:scale-105 transition-transform">
+                  Start Day {currentDay} Planning
                 </button>
                 {onResetApp && (
-                  <button onClick={onResetApp} className="mt-3 text-[10px] text-gray-400 underline">Change Settings</button>
+                  <button onClick={onResetApp} className="mt-4 text-[10px] text-gray-400 underline hover:text-black">Change Destination</button>
                 )}
               </div>
             ) : stage === 'COMPLETED' ? (
-               <div className="text-center mt-5">
+               <div className="text-center mt-10">
+                 <div className="text-4xl mb-2">✅</div>
                  <h3 className="font-bold text-green-600 mb-2">Trip Ready!</h3>
                  <p className="text-xs text-gray-500 mb-4">Check "Your Trips" tab to see the full plan.</p>
-                 <button onClick={resetPlanner} className="text-xs underline">Start Over</button>
+                 <button onClick={resetPlanner} className="text-xs underline text-blue-600">Start Over</button>
                </div>
             ) : (
                <div className="flex-1 flex flex-col">
@@ -238,8 +251,8 @@ export default function Sidebar({
                     <span className="text-[10px] font-bold text-gray-400 uppercase">DAY {currentDay}</span>
                     <h3 className="font-black text-lg text-blue-900">{stage}</h3>
                   </div>
-                  {/* SOURCE INDICATOR BADGE */}
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border
+                  {/* SOURCE BADGE */}
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded border
                     ${sourceUsed === 'DB' ? 'bg-purple-50 text-purple-600 border-purple-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
                     {sourceUsed === 'DB' ? '✨ Curated' : '🌐 Web Results'}
                   </span>
@@ -247,22 +260,24 @@ export default function Sidebar({
                 
                 {loadingOptions ? (
                   <div className="space-y-3">
-                     <div className="h-20 bg-gray-100 rounded-xl animate-pulse"></div>
-                     <div className="h-20 bg-gray-100 rounded-xl animate-pulse"></div>
+                     <div className="h-24 bg-gray-200 rounded-xl animate-pulse"></div>
+                     <div className="h-24 bg-gray-200 rounded-xl animate-pulse"></div>
+                     <div className="h-24 bg-gray-200 rounded-xl animate-pulse"></div>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {options.map((option) => (
-                      <div key={option.id} onClick={() => handleSelection(option)} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-blue-500 cursor-pointer group">
+                      <div key={option.id} onClick={() => handleSelection(option)} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-blue-500 cursor-pointer group hover:shadow-md transition-all">
                          <div className="h-24 bg-gray-100 rounded-lg mb-2 overflow-hidden relative">
                             <img src={option.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                             {option.source === 'Verified' && (
-                              <span className="absolute top-1 left-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded backdrop-blur-sm">Verified</span>
+                              <span className="absolute top-2 left-2 bg-black/60 text-white text-[9px] px-2 py-0.5 rounded backdrop-blur-sm font-bold">Verified</span>
                             )}
                          </div>
-                         <h4 className="font-bold text-xs text-gray-800 line-clamp-1">{option.name}</h4>
-                         <div className="flex items-center gap-1 mt-1">
-                           <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1 rounded">⭐ {option.rating || 'New'}</span>
+                         <h4 className="font-bold text-xs text-gray-900 line-clamp-1">{option.name}</h4>
+                         <div className="flex items-center justify-between mt-1">
+                           <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded font-bold">⭐ {option.rating || 'New'}</span>
+                           <span className="text-[9px] text-gray-400 font-bold">+ Add</span>
                          </div>
                       </div>
                     ))}
@@ -278,15 +293,18 @@ export default function Sidebar({
           <div>
             <h3 className="font-bold text-gray-800 mb-3 text-sm">Your Itinerary</h3>
             {tripPlan.length === 0 ? (
-              <p className="text-xs text-gray-400">No places added yet.</p>
+              <div className="text-center py-10 px-4">
+                <p className="text-xs text-gray-400 mb-2">No places added yet.</p>
+                <button onClick={() => onChangeView('PLAN')} className="text-blue-600 font-bold text-xs">Go to Planner</button>
+              </div>
             ) : (
-              <div className="space-y-2 relative border-l-2 border-gray-200 ml-2 pl-4">
+              <div className="space-y-3 relative border-l-2 border-gray-200 ml-3 pl-5 pb-5">
                  {tripPlan.map((item, idx) => (
-                   <div key={idx} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm relative mb-4">
-                      <div className="absolute -left-[25px] top-4 w-4 h-4 rounded-full bg-blue-500 border-2 border-white"></div>
+                   <div key={idx} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm relative group">
+                      <div className="absolute -left-[29px] top-4 w-4 h-4 rounded-full bg-blue-500 border-2 border-white shadow-sm"></div>
                       <div className="text-[9px] font-bold text-blue-500 uppercase mb-1">{item.slot}</div>
-                      <div className="font-bold text-xs text-gray-800">{item.name}</div>
-                      {onRemoveItem && <button onClick={() => onRemoveItem(item.id)} className="absolute top-2 right-2 text-gray-300 hover:text-red-500">×</button>}
+                      <div className="font-bold text-xs text-gray-800 line-clamp-1">{item.name}</div>
+                      {onRemoveItem && <button onClick={() => onRemoveItem(item.id)} className="absolute top-2 right-2 text-gray-300 hover:text-red-500 text-lg leading-none">×</button>}
                    </div>
                  ))}
               </div>
@@ -297,11 +315,16 @@ export default function Sidebar({
 
       {/* FOOTER */}
       <div className="p-4 border-t border-gray-200 bg-white flex justify-between items-center">
-         <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-xs">{travelers}👤</div>
-            <div className="text-xs font-bold text-gray-500">{diet === 'VEG' ? 'Veg' : 'Any'}</div>
+         <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center font-bold text-blue-600 text-xs shadow-sm border border-blue-100">
+              {travelers}
+            </div>
+            <div>
+              <div className="text-[10px] font-bold text-gray-400 uppercase">Profile</div>
+              <div className="text-xs font-bold text-gray-800">Admin</div>
+            </div>
          </div>
-         <button onClick={handleLogout} className="text-xs text-red-500 font-bold hover:underline">Logout</button>
+         <button onClick={handleLogout} className="text-xs text-red-500 font-bold hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors">Logout</button>
       </div>
 
     </div>
