@@ -10,6 +10,7 @@ import TripSetup from '@/components/TripSetup';
 import DashboardView from '@/components/DashboardView';
 import LandingPage from '@/components/LandingPage';
 import DiscoveryView from '@/components/DiscoveryView';
+import InviteModal from '@/components/InviteModal'; // <--- NEW IMPORT
 
 // Initialize Supabase
 const supabase = createClient(
@@ -52,23 +53,33 @@ function MainApp() {
   
   // Trip Details State
   const [city, setCity] = useState<string>('COORG'); 
-  const [filter, setFilter] = useState<string>('ALL'); // This maps to 'groupType'
+  const [filter, setFilter] = useState<string>('ALL'); // maps to 'groupType'
   const [totalDays, setTotalDays] = useState(1);
   const [travelers, setTravelers] = useState(1); 
   const [diet, setDiet] = useState('VEG');       
   
+  // CLOUD STATE (NEW)
+  const [tripId, setTripId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+
   const [tripPlan, setTripPlan] = useState<any[]>([]);
   const [isSetupDone, setIsSetupDone] = useState(false);
 
   // --- HANDLERS ---
   
   const handleSetupComplete = (details: any) => {
+    // Basic Details
     setCity(details.city);
-    setFilter(details.type); // e.g., 'SOLO', 'FAMILY'
+    setFilter(details.type); // 'SOLO', 'FAMILY'
     setTotalDays(details.days);
     setTravelers(details.travelers); 
     setDiet(details.diet);           
     
+    // Cloud Details (NEW)
+    setTripId(details.tripId);
+    setIsAdmin(details.isAdmin);
+
     setIsSetupDone(true);
     setCurrentView('PLAN'); 
   };
@@ -103,33 +114,50 @@ function MainApp() {
   const showSidebar = currentView === 'PLAN' || currentView === 'TRIPS';
 
   return (
-    <main className="flex h-screen w-screen overflow-hidden bg-white">
+    <main className="flex h-screen w-screen overflow-hidden bg-white relative">
       
-      {/* SIDEBAR (Only visible in Plan/Trips) */}
-      {showSidebar && (
-        <Sidebar 
-          currentView={currentView}
-          onChangeView={setCurrentView}
-          
-          // --- FIXED PROPS HERE ---
-          selectedCity={city}
-          tripPlan={tripPlan}
-          isTripActive={currentView === 'PLAN'}
-          totalDays={totalDays}
-          
-          // Actions
-          onRemoveItem={removeFromTrip}
-          onAddToTrip={addToTrip}
-          onResetApp={handleCreateNewTrip} // This allows restarting the wizard
-
-          // Smart Data
-          diet={diet}
-          travelers={travelers}
-          groupType={filter} // Mapping 'filter' state to 'groupType' prop
-        />
+      {/* 1. INVITE MODAL OVERLAY */}
+      {showInvite && tripId && (
+        <InviteModal tripId={tripId} onClose={() => setShowInvite(false)} />
       )}
 
-      {/* MAIN CONTENT AREA */}
+      {/* 2. SIDEBAR (Only visible in Plan/Trips) */}
+      {showSidebar && (
+        <>
+          <Sidebar 
+            currentView={currentView}
+            onChangeView={setCurrentView}
+            
+            // Data Props
+            selectedCity={city}
+            tripPlan={tripPlan}
+            isTripActive={currentView === 'PLAN'}
+            totalDays={totalDays}
+            
+            // Actions
+            onRemoveItem={removeFromTrip}
+            onAddToTrip={addToTrip}
+            onResetApp={handleCreateNewTrip}
+
+            // Smart Data
+            diet={diet}
+            travelers={travelers}
+            groupType={filter}
+          />
+          
+          {/* FLOATING ADMIN BUTTON (Only if Admin & Sidebar is visible) */}
+          {isAdmin && (
+            <button 
+               onClick={() => setShowInvite(true)}
+               className="fixed bottom-6 right-6 z-40 bg-black text-white px-6 py-3 rounded-full font-bold shadow-xl hover:scale-105 transition-transform flex items-center gap-2 border-2 border-white/20"
+            >
+              <span>👤+</span> Invite Friends
+            </button>
+          )}
+        </>
+      )}
+
+      {/* 3. MAIN CONTENT AREA */}
       <div className="flex-1 relative bg-gray-50 h-full overflow-hidden">
         
         {/* VIEW: DASHBOARD */}
