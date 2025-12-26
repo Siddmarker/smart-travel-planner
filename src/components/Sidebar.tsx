@@ -2,15 +2,15 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { useLoadScript } from '@react-google-maps/api';
+import { useLoadScript, Libraries } from '@react-google-maps/api';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// LIBRARIES (Must be outside component to prevent reload loops)
-const LIBRARIES: ("places")[] = ["places"];
+// 1. STATIC LIBRARY DEFINITION (Prevents reload loops)
+const LIBRARIES: Libraries = ["places"];
 
 export type NavView = 'DASHBOARD' | 'PLAN' | 'DISCOVERY' | 'TRIPS' | 'SETTINGS';
 
@@ -24,26 +24,23 @@ interface SidebarProps {
   isTripActive?: boolean;
   totalDays?: number;
   onResetApp?: () => void;
-  
-  // Smart Data Props
   diet?: string;      
   travelers?: number; 
   groupType?: string; 
+  budget?: string; // NEW PROP
 }
 
 type WizardStage = 'IDLE' | 'MORNING' | 'LUNCH' | 'AFTERNOON' | 'DINNER' | 'NIGHT' | 'COMPLETED';
 
 export default function Sidebar({ 
   currentView, onChangeView,
-  selectedCity = 'Delhi', tripPlan = [], onRemoveItem, onAddToTrip, 
+  selectedCity = 'Bengaluru', tripPlan = [], onRemoveItem, onAddToTrip, 
   isTripActive = false, totalDays = 1, onResetApp,
-  diet = 'ANY', travelers = 1, groupType = 'SOLO'
+  diet = 'ANY', travelers = 1, groupType = 'SOLO', budget = 'MEDIUM'
 }: SidebarProps) {
   
-  const router = useRouter();
-  
-  // 1. LOAD GOOGLE MAPS SCRIPT
-  const { isLoaded } = useLoadScript({
+  // 2. LOAD GOOGLE MAPS
+  const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '',
     libraries: LIBRARIES,
   });
@@ -54,50 +51,46 @@ export default function Sidebar({
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [sourceUsed, setSourceUsed] = useState<'DB' | 'GOOGLE'>('DB');
   
+  // 3. TRACK USED PLACES (Prevents Repeats)
+  const [usedPlaceIds, setUsedPlaceIds] = useState<Set<string>>(new Set());
+
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
 
-  // 2. SAFE SERVICE INITIALIZATION (The Crash Fix)
+  // 4. BULLETPROOF INITIALIZATION
   useEffect(() => {
-    if (isLoaded && window.google && window.google.maps && !placesServiceRef.current) {
+    if (isLoaded && !loadError && window.google && !placesServiceRef.current) {
       try {
         const hiddenDiv = document.createElement('div');
         placesServiceRef.current = new google.maps.places.PlacesService(hiddenDiv);
-      } catch (error) {
-        console.error("Google Maps Service init failed:", error);
+      } catch (err) {
+        console.error("Maps Init Error:", err);
       }
     }
-  }, [isLoaded]);
+  }, [isLoaded, loadError]);
 
-  // --- HYBRID GENERATOR ENGINE ---
+  // --- THE "SALESMAN" ENGINE ---
   async function generateOptions(stageType: WizardStage) {
     if (!selectedCity) return;
     setLoadingOptions(true);
     setOptions([]);
 
-    // A. Define Category based on Time
     let category = 'ACTIVITY';
-    let timeTag = stageType; // e.g., 'MORNING'
-
     if (['LUNCH', 'DINNER'].includes(stageType)) category = 'FOOD';
     if (stageType === 'NIGHT') category = 'STAY';
 
-    console.log(`🔎 Checking Database for: ${selectedCity} (${category})...`);
-
-    // B. CHECK SUPABASE (DATABASE) FIRST
+    // A. CHECK DATABASE (Curated Gems)
     const { data: dbPlaces } = await supabase
       .from('places')
       .select('*')
       .ilike('zone_id', selectedCity) 
       .eq('type', category)
-      .limit(5);
+      .limit(10);
 
-    // Optional: Filter DB results by time tag manually if needed
-    // For now, if we find matching category in the city, we use it.
+    // Filter out used places from DB results
+    const freshDbPlaces = dbPlaces?.filter(p => !usedPlaceIds.has(p.id)) || [];
 
-    if (dbPlaces && dbPlaces.length > 0) {
-      // ✅ FOUND IN DB
-      console.log("✅ Found in DB!", dbPlaces.length);
-      const formatted = dbPlaces.map(p => ({
+    if (freshDbPlaces.length > 0) {
+      const formatted = freshDbPlaces.slice(0, 4).map(p => ({
         ...p,
         slot: `Day ${currentDay} - ${stageType}`,
         source: 'Verified'
@@ -105,54 +98,71 @@ export default function Sidebar({
       setOptions(formatted);
       setSourceUsed('DB');
       setLoadingOptions(false);
-      return; // STOP HERE. Don't use Google.
+      return;
     }
 
-    // C. FALLBACK TO GOOGLE (If DB empty)
-    console.log("⚠️ DB Empty. Calling Google Maps...");
+    // B. GOOGLE MAPS FALLBACK (The Smart Query)
     setSourceUsed('GOOGLE');
-    
     if (!placesServiceRef.current) return;
 
-    // Build Smart Query
-    const dietTerm = diet === 'VEG' ? 'Pure Veg' : diet === 'NON_VEG' ? 'Non-Veg' : 'Best';
-    const groupTerm = groupType === 'FAMILY' ? 'Family Friendly' : groupType === 'COUPLE' ? 'Romantic' : 'Popular';
-    
+    // --- SMART QUERY CONSTRUCTION ---
     let query = '';
-    if (category === 'ACTIVITY') query = `Top ${groupTerm} attractions in ${selectedCity}`;
-    if (category === 'FOOD') query = `${dietTerm} Restaurants for ${stageType.toLowerCase()} in ${selectedCity}`;
-    if (category === 'STAY') query = `Safe hotels in ${selectedCity}`;
+    const dietStr = diet === 'NON_VEG' ? 'Famous Non-Veg' : diet === 'VEG' ? 'Pure Veg' : 'Best';
+    const budgetStr = budget === 'LUXURY' ? 'Luxury 5-star' : budget === 'LOW' ? 'Affordable' : 'Top rated';
+    
+    if (category === 'ACTIVITY') {
+       if (stageType === 'MORNING') query = `Famous landmarks or breakfast spots in ${selectedCity}`;
+       if (stageType === 'AFTERNOON') query = `Museums, Parks or Shopping in ${selectedCity}`;
+    }
+    else if (category === 'FOOD') {
+       query = `${dietStr} Restaurants for ${stageType.toLowerCase()} in ${selectedCity}`;
+    }
+    else if (category === 'STAY') {
+       query = `${budgetStr} Hotels in ${selectedCity}`;
+    }
 
     const request = {
       query: query,
-      fields: ['name', 'formatted_address', 'rating', 'photos', 'geometry', 'place_id'],
+      fields: ['name', 'formatted_address', 'rating', 'user_ratings_total', 'photos', 'geometry', 'place_id'],
     };
 
     placesServiceRef.current.textSearch(request, (results, status) => {
       setLoadingOptions(false);
       if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-        const formatted = results.slice(0, 4).map(place => ({
-          id: place.place_id,
-          name: place.name,
-          description: place.formatted_address,
-          rating: place.rating,
-          lat: place.geometry?.location?.lat(),
-          lng: place.geometry?.location?.lng(),
-          image: place.photos?.[0]?.getUrl() || `https://source.unsplash.com/random/400x300/?${category}`,
-          type: category,
-          slot: `Day ${currentDay} - ${stageType}`,
-          source: 'Google'
-        }));
-        setOptions(formatted);
+        
+        // C. INTELLIGENT FILTERING
+        const smartResults = results
+          .filter(p => !usedPlaceIds.has(p.place_id!)) // Remove duplicates
+          .filter(p => (p.rating || 0) >= 4.0)         // Only Good places (4.0+)
+          .filter(p => (p.user_ratings_total || 0) > 50) // Must be popular
+          .slice(0, 4)                                 // Take top 4
+          .map(place => ({
+            id: place.place_id,
+            name: place.name,
+            description: place.formatted_address,
+            rating: place.rating,
+            lat: place.geometry?.location?.lat(),
+            lng: place.geometry?.location?.lng(),
+            image: place.photos?.[0]?.getUrl() || `https://source.unsplash.com/random/400x300/?${category}`,
+            type: category,
+            slot: `Day ${currentDay} - ${stageType}`,
+            source: 'Google'
+          }));
+        
+        setOptions(smartResults);
       }
     });
   }
 
-  // --- WIZARD FLOW ---
+  // --- FLOW LOGIC ---
   const handleSelection = (place: any) => {
+    // 1. Add to Used List (So we don't show it again)
+    setUsedPlaceIds(prev => new Set(prev).add(place.id));
+    
+    // 2. Add to Trip
     if(onAddToTrip) onAddToTrip({ ...place, slot: `Day ${currentDay} - ${stage}` }); 
     
-    // Auto-advance
+    // 3. Advance Stage
     if (stage === 'MORNING') { setStage('LUNCH'); generateOptions('LUNCH'); }
     else if (stage === 'LUNCH') { setStage('AFTERNOON'); generateOptions('AFTERNOON'); }
     else if (stage === 'AFTERNOON') { setStage('DINNER'); generateOptions('DINNER'); }
@@ -169,6 +179,7 @@ export default function Sidebar({
   };
 
   const startPlanning = () => {
+    setUsedPlaceIds(new Set()); // Reset history
     setStage('MORNING');
     setCurrentDay(1);
     generateOptions('MORNING');
@@ -181,6 +192,8 @@ export default function Sidebar({
     window.location.href = '/'; 
   };
   
+  if (loadError) return <div className="p-4 text-red-500">Error loading Maps</div>;
+
   return (
     <div className="w-80 h-screen bg-white shadow-xl z-20 flex flex-col border-r border-gray-200">
       
@@ -190,7 +203,7 @@ export default function Sidebar({
           2wards India
         </h1>
         <p className="text-[10px] text-gray-400 mt-1 uppercase tracking-wider font-bold">
-           {selectedCity} • {diet === 'VEG' ? '🥬 Pure Veg' : diet === 'NON_VEG' ? '🍗 Non-Veg' : '🍽️ Any Food'}
+           {selectedCity} • {budget} • {diet === 'NON_VEG' ? '🍗 Non-Veg' : '🍽️ Any'}
         </p>
       </div>
 
@@ -228,10 +241,10 @@ export default function Sidebar({
                 <h3 className="font-bold text-gray-800 text-sm">AI Trip Generator</h3>
                 <p className="text-xs text-gray-500 mb-6 px-4 leading-relaxed">
                   Ready to build Day 1 for <b>{selectedCity}</b>?
-                  <br/>We'll suggest spots based on your <b>{groupType}</b> vibe.
+                  <br/>We'll hunt for the best {diet.toLowerCase().replace('_',' ')} spots.
                 </p>
                 <button onClick={startPlanning} className="bg-blue-600 text-white w-full py-4 rounded-xl font-bold text-xs shadow-lg hover:scale-105 transition-transform">
-                  Start Day {currentDay} Planning
+                  Start Planning
                 </button>
                 {onResetApp && (
                   <button onClick={onResetApp} className="mt-4 text-[10px] text-gray-400 underline hover:text-black">Change Destination</button>
@@ -251,7 +264,6 @@ export default function Sidebar({
                     <span className="text-[10px] font-bold text-gray-400 uppercase">DAY {currentDay}</span>
                     <h3 className="font-black text-lg text-blue-900">{stage}</h3>
                   </div>
-                  {/* SOURCE BADGE */}
                   <span className={`text-[10px] font-bold px-2 py-1 rounded border
                     ${sourceUsed === 'DB' ? 'bg-purple-50 text-purple-600 border-purple-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
                     {sourceUsed === 'DB' ? '✨ Curated' : '🌐 Web Results'}
@@ -262,11 +274,12 @@ export default function Sidebar({
                   <div className="space-y-3">
                      <div className="h-24 bg-gray-200 rounded-xl animate-pulse"></div>
                      <div className="h-24 bg-gray-200 rounded-xl animate-pulse"></div>
-                     <div className="h-24 bg-gray-200 rounded-xl animate-pulse"></div>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {options.map((option) => (
+                    {options.length === 0 ? (
+                       <div className="text-center text-gray-400 text-xs py-10">No specific matches found. Try searching manually.</div>
+                    ) : options.map((option) => (
                       <div key={option.id} onClick={() => handleSelection(option)} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-blue-500 cursor-pointer group hover:shadow-md transition-all">
                          <div className="h-24 bg-gray-100 rounded-lg mb-2 overflow-hidden relative">
                             <img src={option.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />

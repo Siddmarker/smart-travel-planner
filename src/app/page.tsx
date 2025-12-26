@@ -10,7 +10,7 @@ import TripSetup from '@/components/TripSetup';
 import DashboardView from '@/components/DashboardView';
 import LandingPage from '@/components/LandingPage';
 import DiscoveryView from '@/components/DiscoveryView';
-import InviteModal from '@/components/InviteModal'; // <--- NEW IMPORT
+import InviteModal from '@/components/InviteModal';
 
 // Initialize Supabase
 const supabase = createClient(
@@ -52,13 +52,14 @@ function MainApp() {
   const [currentView, setCurrentView] = useState<NavView>('DASHBOARD');
   
   // Trip Details State
-  const [city, setCity] = useState<string>('COORG'); 
-  const [filter, setFilter] = useState<string>('ALL'); // maps to 'groupType'
+  const [city, setCity] = useState<string>('Bengaluru'); 
+  const [filter, setFilter] = useState<string>('SOLO'); // maps to 'groupType'
   const [totalDays, setTotalDays] = useState(1);
   const [travelers, setTravelers] = useState(1); 
-  const [diet, setDiet] = useState('VEG');       
+  const [diet, setDiet] = useState('ANY');
+  const [budget, setBudget] = useState('MEDIUM'); // <--- NEW BUDGET STATE
   
-  // CLOUD STATE (NEW)
+  // Cloud State
   const [tripId, setTripId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
@@ -71,12 +72,13 @@ function MainApp() {
   const handleSetupComplete = (details: any) => {
     // Basic Details
     setCity(details.city);
-    setFilter(details.type); // 'SOLO', 'FAMILY'
+    setFilter(details.type); // 'SOLO', 'FAMILY', etc.
     setTotalDays(details.days);
     setTravelers(details.travelers); 
-    setDiet(details.diet);           
+    setDiet(details.diet);
+    setBudget(details.budget); // <--- CAPTURE BUDGET
     
-    // Cloud Details (NEW)
+    // Cloud Details
     setTripId(details.tripId);
     setIsAdmin(details.isAdmin);
 
@@ -143,6 +145,7 @@ function MainApp() {
             diet={diet}
             travelers={travelers}
             groupType={filter}
+            budget={budget} // <--- PASS BUDGET TO SIDEBAR
           />
           
           {/* FLOATING ADMIN BUTTON (Only if Admin & Sidebar is visible) */}
