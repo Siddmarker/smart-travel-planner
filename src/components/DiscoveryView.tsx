@@ -38,10 +38,10 @@ export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('tourist_attraction'); 
   
-  // NEW FILTERS STATE
+  // FILTERS
   const [diet, setDiet] = useState('ANY');
   const [budget, setBudget] = useState('ANY');
-  const [radius, setRadius] = useState(10); // Default 10km
+  const [radius, setRadius] = useState(10); 
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [usingGPS, setUsingGPS] = useState(false);
 
@@ -63,13 +63,13 @@ export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
         const place = autocompleteRef.current?.getPlace();
         if (place?.name) {
           setSearchTerm(place.name);
-          setUsingGPS(false); // Manually typed overrides GPS
+          setUsingGPS(false);
         }
       });
     }
   }, [isLoaded]);
 
-  // --- 2. GEOLOCATION HANDLER ---
+  // --- GEOLOCATION ---
   const handleUseMyLocation = () => {
     if (!navigator.geolocation) return alert("Geolocation not supported");
     
@@ -81,7 +81,6 @@ export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
         setUsingGPS(true);
         setSearchTerm("Current Location");
         setLoading(false);
-        // Trigger search immediately with new location
         performSearch(loc, activeTab, diet, budget, radius);
       },
       (error) => {
@@ -95,7 +94,7 @@ export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
     performSearch(usingGPS ? userLocation : null, activeTab, diet, budget, radius);
   };
 
-  // --- 3. SMART SEARCH ENGINE ---
+  // --- SEARCH ENGINE ---
   const performSearch = (
     location: {lat: number, lng: number} | null, 
     category: string, 
@@ -109,61 +108,70 @@ export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
     setLoading(true);
     setPlaces([]);
 
-    // A. Construct the Query
-    let baseQuery = category.replace(/_/g, ' '); // e.g., "turf grounds"
+    // 1. Construct Query
+    let baseQuery = category.replace(/_/g, ' '); 
     
-    // Add Diet Context (Only for food categories)
     if (['restaurant', 'cafe', 'bakery'].includes(category) || category === 'food') {
        if (dietFilter !== 'ANY') baseQuery = `${DIET_OPTIONS.find(d => d.id === dietFilter)?.label.split(' ')[1]} ${baseQuery}`;
     }
 
-    // Add Budget Context
     if (budgetFilter !== 'ANY') {
       const budgetTerm = budgetFilter === 'LOW' ? 'Cheap' : budgetFilter === 'HIGH' ? 'Luxury' : 'Best';
       baseQuery = `${budgetTerm} ${baseQuery}`;
     }
 
-    // B. Contextual Search String
-    // If using GPS: "Veg Restaurants" (location passed in options)
-    // If Text Search: "Veg Restaurants in Indiranagar"
     const finalTextQuery = usingGPS ? baseQuery : `${baseQuery} in ${searchTerm}`;
 
-    // --- FIX IS HERE: Removed 'fields' property ---
     const request: google.maps.places.TextSearchRequest = {
       query: finalTextQuery,
-      // fields: [...] <--- REMOVED THIS LINE
     };
 
-    // Apply Location Biasing if GPS is active
     if (usingGPS && location) {
       request.location = location;
-      request.radius = searchRadius * 1000; // Convert km to meters
+      request.radius = searchRadius * 1000; 
     }
 
     placesServiceRef.current.textSearch(request, (results, status) => {
       if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-        const formattedPlaces = results.map(place => ({
+        
+        // --- 2. QUALITY CONTROL FILTERS ---
+        const validPlaces = results.filter(place => {
+            // A. Must be Operational (No 'Permanently Closed')
+            if (place.business_status !== 'OPERATIONAL') return false;
+
+            // B. Must have a decent rating (Avoids absolute disasters)
+            if ((place.rating || 0) < 3.5) return false;
+
+            // C. CRITICAL: Must have at least 10 reviews
+            // This filters out "Joke" locations like "Dakar Rally Pothole" 
+            // because they usually have very few ratings (e.g. 2 or 3).
+            if ((place.user_ratings_total || 0) < 10) return false;
+
+            return true;
+        });
+
+        const formattedPlaces = validPlaces.map(place => ({
           id: place.place_id,
           name: place.name,
           description: place.formatted_address,
           image: place.photos?.[0]?.getUrl() || `https://source.unsplash.com/random/400x300/?${category.split('_')[0]}`,
-          rating: place.rating || 4.0,
+          rating: place.rating,
           lat: place.geometry?.location?.lat(),
           lng: place.geometry?.location?.lng(),
-          type: category
+          type: category,
+          reviewCount: place.user_ratings_total
         }));
+
         setPlaces(formattedPlaces);
       }
       setLoading(false);
     });
   };
 
-  // Auto-run search when category changes (only if we already have a location/term)
   useEffect(() => {
     if (searchTerm || usingGPS) handleSearchClick();
   }, [activeTab]);
 
-  // --- 4. NAVIGATION HANDLER ---
   const handleGetDirections = (place: any) => {
     const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place.name)}&destination_place_id=${place.id}`;
     window.open(url, '_blank');
@@ -225,7 +233,6 @@ export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
         {/* ROW 2: SMART FILTERS */}
         <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-gray-100">
           
-          {/* DIET FILTER (Show only for food categories to reduce clutter) */}
           {['restaurant', 'cafe'].includes(activeTab) && (
              <div className="flex items-center gap-2">
                <span className="text-[10px] font-bold text-gray-400 uppercase">Diet:</span>
@@ -239,7 +246,6 @@ export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
              </div>
           )}
 
-          {/* BUDGET FILTER */}
           <div className="flex items-center gap-2">
              <span className="text-[10px] font-bold text-gray-400 uppercase">Budget:</span>
              <select 
@@ -251,31 +257,28 @@ export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
              </select>
           </div>
 
-          {/* RADIUS SLIDER */}
-          <div className="flex items-center gap-3 flex-1 min-w-[200px]">
-             <span className="text-[10px] font-bold text-gray-400 uppercase whitespace-nowrap">Radius: {radius} km</span>
+          <div className="flex items-center gap-2">
+             <span className="text-[10px] font-bold text-gray-400 uppercase whitespace-nowrap">Radius (km):</span>
              <input 
-               type="range" min="1" max="50" value={radius} 
-               onChange={(e) => setRadius(parseInt(e.target.value))}
-               className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+               type="number" 
+               min="1" 
+               max="50" 
+               value={radius} 
+               onChange={(e) => setRadius(Number(e.target.value))}
+               className="w-16 bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg p-2 outline-none focus:border-blue-500 text-center"
              />
           </div>
-
         </div>
       </div>
 
-      {/* CATEGORIES (Updated List) */}
+      {/* CATEGORIES */}
       <div className="flex gap-3 overflow-x-auto pb-4 mb-2 no-scrollbar">
         {[
           { id: 'tourist_attraction', label: '🔥 Trending', icon: '✨' },
           { id: 'restaurant', label: 'Eat', icon: '🍽️' },
-          
-          // --- NEW CATEGORIES ---
           { id: 'night_club', label: 'Nightlife', icon: '🍻' }, 
           { id: 'off_road_trails', label: 'Off-Roading', icon: '🏍️' },
-          { id: 'play_spots', label: 'Play & Sports', icon: '🏏' }, // Covers cricket, badminton, bowling
-          // --------------------
-
+          { id: 'play_spots', label: 'Play & Sports', icon: '🏏' },
           { id: 'turf_grounds', label: 'Turfs', icon: '⚽' },
           { id: 'lodging', label: 'Stay', icon: '🏨' },
           { id: 'shopping_mall', label: 'Shop', icon: '🛍️' },
@@ -300,8 +303,7 @@ export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
 
         {places.length === 0 && !loading ? (
           <div className="text-center py-20 text-gray-300 border-2 border-dashed border-gray-200 rounded-3xl">
-            <div className="text-4xl mb-2">🔭</div>
-            Use "Use My Location" or type an area to start.
+             {searchTerm ? 'No quality places found. Try a different category.' : 'Use "Use My Location" or type an area to start.'}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -310,7 +312,7 @@ export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
                 <div className="h-40 bg-gray-200 w-full relative">
                   <img src={place.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={place.name} />
                   <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-bold shadow-sm flex items-center gap-1">
-                    ⭐ {place.rating}
+                    ⭐ {place.rating} <span className="text-gray-400">({place.reviewCount})</span>
                   </div>
                 </div>
                 
@@ -319,7 +321,6 @@ export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
                   <p className="text-[10px] text-gray-500 mb-4 line-clamp-2 min-h-[30px]">{place.description}</p>
                   
                   <div className="flex gap-2">
-                     {/* GET DIRECTIONS BUTTON (Primary) */}
                      <button 
                        onClick={() => handleGetDirections(place)}
                        className="flex-1 py-2.5 bg-blue-600 text-white text-[11px] font-bold rounded-xl hover:bg-blue-700 flex items-center justify-center gap-1 shadow-blue-100 shadow-lg"
