@@ -128,9 +128,10 @@ export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
     // If Text Search: "Veg Restaurants in Indiranagar"
     const finalTextQuery = usingGPS ? baseQuery : `${baseQuery} in ${searchTerm}`;
 
+    // --- FIX IS HERE: Removed 'fields' property ---
     const request: google.maps.places.TextSearchRequest = {
       query: finalTextQuery,
-      fields: ['name', 'formatted_address', 'rating', 'photos', 'geometry', 'place_id'],
+      // fields: [...] <--- REMOVED THIS LINE
     };
 
     // Apply Location Biasing if GPS is active
@@ -181,7 +182,6 @@ export default function DiscoveryView({ onAddToTrip, onBack }: DiscoveryProps) {
           )}
           <div>
             <h1 className="text-2xl md:text-3xl font-black text-gray-900">Discover</h1>
-            {/* UPDATED TAGLINE HERE */}
             <p className="text-gray-500 text-xs md:text-sm mt-1 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent font-bold">
                Real-time suggestions by AI based on your VIBE!!
             </p>
