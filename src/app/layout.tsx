@@ -1,12 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister"; // <--- IMPORT THIS
 
 const inter = Inter({ subsets: ["latin"] });
 
-// 1. APP METADATA
 export const metadata: Metadata = {
-  title: "2wards", // <--- Updated Name
+  title: "2wards", 
   description: "AI-Powered Travel Planning",
   manifest: "/manifest.json",
   appleWebApp: {
@@ -16,7 +16,6 @@ export const metadata: Metadata = {
   },
 };
 
-// 2. MOBILE VIEWPORT SETTINGS
 export const viewport: Viewport = {
   themeColor: "#000000",
   width: "device-width",
@@ -32,7 +31,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <ServiceWorkerRegister /> {/* <--- ADD THIS LINE HERE */}
+        {children}
+      </body>
     </html>
   );
 }
