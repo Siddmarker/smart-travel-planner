@@ -1,11 +1,14 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { useLoadScript } from '@react-google-maps/api';
 
 // COMPONENTS
 import LandingPage from '@/components/LandingPage';
 import Sidebar, { NavView } from '@/components/Sidebar';
 import DiscoveryView from '@/components/DiscoveryView';
+
+const LIBRARIES: ("places")[] = ["places"];
 
 // TYPES
 interface Place {
@@ -26,6 +29,13 @@ interface Place {
 export default function Home() {
   const [session, setSession] = useState<any>(null);
   
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '',
+    libraries: LIBRARIES,
+  });
+
+  const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -34,8 +44,14 @@ export default function Home() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    
+    if (isLoaded && !placesServiceRef.current) {
+        const hiddenDiv = document.createElement('div');
+        placesServiceRef.current = new google.maps.places.PlacesService(hiddenDiv);
+    }
+
     return () => subscription.unsubscribe();
-  }, []);
+  }, [isLoaded]);
 
   const [activeView, setActiveView] = useState<NavView>('DASHBOARD');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -43,10 +59,45 @@ export default function Home() {
 
   // TRIP DATA
   const [selectedCity, setSelectedCity] = useState('');
+  const [citySuggestions, setCitySuggestions] = useState<string[]>([]); // <--- NEW: For Dropdown
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  
   const [dates, setDates] = useState({ start: '', end: '' });
   const [budget, setBudget] = useState('MEDIUM'); 
   const [groupType, setGroupType] = useState('FRIENDS'); 
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
+
+  // --- NEW: AUTOCOMPLETE HANDLER ---
+  const handleCitySearch = async (query: string) => {
+    setSelectedCity(query);
+    
+    if (query.length < 3) {
+      setCitySuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    // Query Supabase for places that match the typing
+    const { data } = await supabase
+      .from('places')
+      .select('name')
+      .ilike('name', `%${query}%`) // Search Place Names
+      .limit(5); // Show top 5 matches
+
+    if (data && data.length > 0) {
+      // Extract names and remove duplicates
+      const uniqueNames = Array.from(new Set(data.map((p: any) => p.name)));
+      setCitySuggestions(uniqueNames as string[]);
+      setShowSuggestions(true);
+    } else {
+      setShowSuggestions(false);
+    }
+  };
+
+  const selectSuggestion = (name: string) => {
+    setSelectedCity(name);
+    setShowSuggestions(false);
+  };
 
   // --- ALGORITHM ---
   const calculateRelevanceScore = (place: Place, group: string) => {
@@ -97,70 +148,73 @@ export default function Home() {
     const usedIds: string[] = [];
 
     try {
-      console.log("Searching database for:", selectedCity);
-
-      // --- FIX: SEARCH BY NAME OR DESCRIPTION INSTEAD OF 'CITY' ---
-      // This solves the "column city does not exist" error
-      const { data: rawPlaces, error } = await supabase
+      // 1. TRY SUPABASE
+      const { data: rawPlaces } = await supabase
         .from('places') 
         .select('*')
         .or(`description.ilike.%${selectedCity}%,name.ilike.%${selectedCity}%`);
 
-      if (error) {
-        console.error("Supabase Error:", error);
-        throw error;
-      }
-      
-      if (!rawPlaces || rawPlaces.length === 0) {
-        alert("No curated data found. Switching to manual mode.");
-        setIsGenerating(false);
-        setActiveView('DISCOVERY');
-        return;
-      }
+      if (rawPlaces && rawPlaces.length > 0) {
+          // --- PATH A: CURATED ---
+          currentLoc = { lat: rawPlaces[0].lat, lng: rawPlaces[0].lng };
+          
+          const scoredPlaces = rawPlaces.map(p => ({ ...p, aiScore: calculateRelevanceScore(p, groupType) }));
+          scoredPlaces.sort((a, b) => b.aiScore - a.aiScore);
 
-      currentLoc = { lat: rawPlaces[0].lat, lng: rawPlaces[0].lng };
-      
-      const scoredPlaces = rawPlaces.map(p => ({
-        ...p,
-        aiScore: calculateRelevanceScore(p, groupType)
-      }));
-      scoredPlaces.sort((a, b) => b.aiScore - a.aiScore);
+          const slots = [
+            { name: 'Morning', types: ['tourist_attraction', 'religious_place', 'park'] },
+            { name: 'Lunch', types: ['restaurant', 'cafe', 'food'] },
+            { name: 'Afternoon', types: ['museum', 'art_gallery', 'tourist_attraction'] },
+            { name: 'Evening', types: ['shopping_mall', 'point_of_interest', 'park'] },
+            { name: 'Dinner', types: ['restaurant', 'bar', 'food'] }
+          ];
 
-      const slots = [
-        { name: 'Morning', types: ['tourist_attraction', 'religious_place', 'park'] },
-        { name: 'Lunch', types: ['restaurant', 'cafe', 'food'] },
-        { name: 'Afternoon', types: ['museum', 'art_gallery', 'tourist_attraction'] },
-        { name: 'Evening', types: ['shopping_mall', 'point_of_interest', 'park'] },
-        { name: 'Dinner', types: ['restaurant', 'bar', 'food'] }
-      ];
+          for (const slot of slots) {
+            const candidates = scoredPlaces.filter(p => 
+              !usedIds.includes(p.id) && p.aiScore > 0 && slot.types.some(t => (p.type || '').includes(t))
+            );
+            if (candidates.length > 0) {
+              const winner = candidates[0]; 
+              itinerary.push(winner);
+              usedIds.push(winner.id);
+            }
+          }
+      } else {
+          // --- PATH B: GOOGLE FALLBACK ---
+          if (!placesServiceRef.current) throw new Error("Google Maps not loaded yet");
 
-      for (const slot of slots) {
-        const candidates = scoredPlaces.filter(p => 
-          !usedIds.includes(p.id) && 
-          p.aiScore > 0 && 
-          slot.types.some(t => (p.type || '').includes(t))
-        );
+          const request = {
+            query: `Top tourist attractions in ${selectedCity}`,
+            fields: ['place_id', 'name', 'formatted_address', 'geometry', 'photos', 'rating', 'user_ratings_total', 'types', 'price_level']
+          };
 
-        if (candidates.length > 0) {
-          let bestCandidate = null;
-          let bestCompositeScore = -Infinity;
-
-          candidates.slice(0, 10).forEach(p => {
-             const dist = Math.sqrt(Math.pow(p.lat - currentLoc.lat, 2) + Math.pow(p.lng - currentLoc.lng, 2));
-             const composite = p.aiScore - (dist * 100); 
-             if (composite > bestCompositeScore) {
-               bestCompositeScore = composite;
-               bestCandidate = p;
-             }
+          const googleResults = await new Promise<any[]>((resolve) => {
+             placesServiceRef.current?.textSearch(request, (results, status) => {
+                if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+                   resolve(results);
+                } else {
+                   resolve([]);
+                }
+             });
           });
 
-          if (bestCandidate) {
-             const winner: Place = bestCandidate;
-             itinerary.push(winner);
-             usedIds.push(winner.id);
-             currentLoc = { lat: winner.lat, lng: winner.lng }; 
-          }
-        }
+          if (googleResults.length === 0) throw new Error("Google found nothing either.");
+
+          const formatted = googleResults.slice(0, 5).map(p => ({
+            id: p.place_id,
+            name: p.name,
+            lat: p.geometry.location.lat(),
+            lng: p.geometry.location.lng(),
+            type: p.types?.[0] || 'tourist_attraction',
+            rating: p.rating,
+            user_ratings_total: p.user_ratings_total,
+            price_level: p.price_level,
+            types: p.types,
+            description: p.formatted_address,
+            image: p.photos?.[0]?.getUrl()
+          }));
+
+          itinerary.push(...formatted);
       }
 
       setTripPlan(itinerary);
@@ -169,8 +223,7 @@ export default function Home() {
 
     } catch (err: any) {
       console.error("AI FAIL:", err);
-      // Fallback nicely instead of showing a scary error
-      alert("Note: Could not load curated plan. Opening manual discovery.");
+      alert("Could not generate a plan. Please try manually.");
       setIsGenerating(false);
       setActiveView('DISCOVERY');
     }
@@ -244,9 +297,31 @@ export default function Home() {
                  <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-lg relative">
                    <h3 className="font-bold text-xl text-gray-900 mb-6">Create Your Vibe</h3>
                    
-                   <div className="mb-4">
+                   {/* DESTINATION INPUT + SUGGESTIONS DROPDOWN */}
+                   <div className="mb-4 relative">
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Destination</label>
-                     <input className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="City (e.g. Madurai)" value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)} />
+                     <input 
+                       className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                       placeholder="Search from your database (e.g. Bang...)" 
+                       value={selectedCity} 
+                       onChange={(e) => handleCitySearch(e.target.value)}
+                       autoComplete="off"
+                     />
+                     
+                     {/* --- THE DROPDOWN --- */}
+                     {showSuggestions && (
+                       <div className="absolute top-full left-0 w-full bg-white border border-gray-100 rounded-xl shadow-xl z-50 mt-1 max-h-40 overflow-y-auto">
+                         {citySuggestions.map((suggestion, index) => (
+                           <div 
+                             key={index}
+                             onClick={() => selectSuggestion(suggestion)}
+                             className="p-3 hover:bg-blue-50 cursor-pointer text-sm font-bold text-gray-700 border-b border-gray-50 last:border-0"
+                           >
+                             📍 {suggestion}
+                           </div>
+                         ))}
+                       </div>
+                     )}
                    </div>
 
                    <div className="flex gap-3 mb-4">
@@ -282,10 +357,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* VIEW 2: DISCOVERY */}
         {activeView === 'DISCOVERY' && <DiscoveryView onAddToTrip={addToTrip} onBack={() => setActiveView('PLAN')} initialCity={selectedCity} />}
-
-        {/* VIEW 3: PLAN */}
         {activeView === 'PLAN' && (
            <div className="h-full w-full relative">
              <iframe width="100%" height="100%" frameBorder="0" scrolling="no" src={`https://maps.google.com/maps?q=${encodeURIComponent(selectedCity || 'India')}&t=&z=13&ie=UTF8&iwloc=&output=embed`} className="grayscale hover:grayscale-0 transition-all duration-700 block"></iframe>
@@ -297,7 +369,6 @@ export default function Home() {
              )}
            </div>
         )}
-
         {(activeView === 'TRIPS' || activeView === 'SETTINGS') && <div className="h-full flex items-center justify-center font-bold text-gray-400">Coming Soon...</div>}
       </main>
     </div>
