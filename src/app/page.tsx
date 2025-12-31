@@ -29,6 +29,7 @@ interface Place {
 export default function Home() {
   const [session, setSession] = useState<any>(null);
   
+  // 1. Google Maps Hook (For Fallback & Map)
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '',
     libraries: LIBRARIES,
@@ -36,6 +37,7 @@ export default function Home() {
 
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
 
+  // 2. Supabase Client
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -45,6 +47,7 @@ export default function Home() {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
     
+    // Initialize Google Service
     if (isLoaded && !placesServiceRef.current) {
         const hiddenDiv = document.createElement('div');
         placesServiceRef.current = new google.maps.places.PlacesService(hiddenDiv);
@@ -53,13 +56,14 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, [isLoaded]);
 
+  // APP STATE
   const [activeView, setActiveView] = useState<NavView>('DASHBOARD');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
   // TRIP DATA
   const [selectedCity, setSelectedCity] = useState('');
-  const [citySuggestions, setCitySuggestions] = useState<string[]>([]); // <--- NEW: For Dropdown
+  const [citySuggestions, setCitySuggestions] = useState<string[]>([]); // Dropdown Data
   const [showSuggestions, setShowSuggestions] = useState(false);
   
   const [dates, setDates] = useState({ start: '', end: '' });
@@ -67,7 +71,7 @@ export default function Home() {
   const [groupType, setGroupType] = useState('FRIENDS'); 
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
-  // --- NEW: AUTOCOMPLETE HANDLER ---
+  // --- 1. SMART CITY SEARCH (Deduplicated Dropdown) ---
   const handleCitySearch = async (query: string) => {
     setSelectedCity(query);
     
@@ -77,19 +81,32 @@ export default function Home() {
       return;
     }
 
-    // Query Supabase for places that match the typing
-    const { data } = await supabase
-      .from('places')
-      .select('name')
-      .ilike('name', `%${query}%`) // Search Place Names
-      .limit(5); // Show top 5 matches
+    try {
+      // Query the 'city' column to avoid listing every single venue
+      const { data, error } = await supabase
+        .from('places')
+        .select('city') 
+        .ilike('city', `%${query}%`)
+        .limit(20);
 
-    if (data && data.length > 0) {
-      // Extract names and remove duplicates
-      const uniqueNames = Array.from(new Set(data.map((p: any) => p.name)));
-      setCitySuggestions(uniqueNames as string[]);
-      setShowSuggestions(true);
-    } else {
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        // Remove Duplicates (Set ensures 'Bangalore' appears once)
+        const uniqueCities = Array.from(new Set(
+          data
+            .map((p: any) => p.city) // Extract city string
+            .filter((c: any) => c)   // Remove nulls
+        ));
+
+        setCitySuggestions(uniqueCities as string[]);
+        setShowSuggestions(uniqueCities.length > 0);
+      } else {
+        setShowSuggestions(false);
+      }
+    } catch (err) {
+      // If 'city' column doesn't exist yet, we fail silently
+      console.warn("City search warning:", err);
       setShowSuggestions(false);
     }
   };
@@ -99,24 +116,28 @@ export default function Home() {
     setShowSuggestions(false);
   };
 
-  // --- ALGORITHM ---
+  // --- 2. GEN 3.0 ALGORITHM (The Brain) ---
   const calculateRelevanceScore = (place: Place, group: string) => {
     try {
       let score = 0;
+      // Safeguards for missing data
       const rating = place.rating || 3.0;
       const reviews = place.user_ratings_total || 10;
       const price = place.price_level || 2; 
       const tags = (place.types || []).join(' ').toLowerCase();
       const desc = (place.description || '').toLowerCase();
 
+      // Value Velocity Formula
       const confidence = Math.max(1, Math.log10(reviews));
       let baseScore = (rating * confidence) / (price === 0 ? 1 : price);
 
+      // Hole-in-the-Wall Detector
       if (price <= 1 && (desc.includes('authentic') || desc.includes('best') || desc.includes('queue'))) {
          baseScore *= 1.5; 
       }
       score = baseScore;
 
+      // Persona Weights
       switch (group) {
         case 'SOLO': 
           if (reviews < 500 && rating > 4.5) score *= 2.0;
@@ -139,6 +160,7 @@ export default function Home() {
     } catch (e) { return 0; }
   };
 
+  // --- 3. HYBRID GENERATOR (Supabase -> Google Fallback) ---
   const generateItinerary = async () => {
     setIsGenerating(true);
     setShowCreateModal(false);
@@ -148,19 +170,24 @@ export default function Home() {
     const usedIds: string[] = [];
 
     try {
-      // 1. TRY SUPABASE
+      console.log("Searching curated DB for:", selectedCity);
+
+      // Try searching both 'city' column and 'description' (for backward compatibility)
       const { data: rawPlaces } = await supabase
         .from('places') 
         .select('*')
-        .or(`description.ilike.%${selectedCity}%,name.ilike.%${selectedCity}%`);
+        .or(`city.ilike.%${selectedCity}%,description.ilike.%${selectedCity}%`);
 
       if (rawPlaces && rawPlaces.length > 0) {
-          // --- PATH A: CURATED ---
+          // --- PATH A: CURATED DATA FOUND ---
+          console.log(`Found ${rawPlaces.length} curated places.`);
           currentLoc = { lat: rawPlaces[0].lat, lng: rawPlaces[0].lng };
           
+          // Score and Sort
           const scoredPlaces = rawPlaces.map(p => ({ ...p, aiScore: calculateRelevanceScore(p, groupType) }));
           scoredPlaces.sort((a, b) => b.aiScore - a.aiScore);
 
+          // Assemble Timeline
           const slots = [
             { name: 'Morning', types: ['tourist_attraction', 'religious_place', 'park'] },
             { name: 'Lunch', types: ['restaurant', 'cafe', 'food'] },
@@ -174,13 +201,16 @@ export default function Home() {
               !usedIds.includes(p.id) && p.aiScore > 0 && slot.types.some(t => (p.type || '').includes(t))
             );
             if (candidates.length > 0) {
+              // Proximity Logic (Simplified)
               const winner = candidates[0]; 
               itinerary.push(winner);
               usedIds.push(winner.id);
             }
           }
       } else {
-          // --- PATH B: GOOGLE FALLBACK ---
+          // --- PATH B: FALLBACK TO GOOGLE MAPS ---
+          console.log("No curated data. Switching to Live Google Search...");
+          
           if (!placesServiceRef.current) throw new Error("Google Maps not loaded yet");
 
           const request = {
@@ -200,6 +230,7 @@ export default function Home() {
 
           if (googleResults.length === 0) throw new Error("Google found nothing either.");
 
+          // Format Google Results
           const formatted = googleResults.slice(0, 5).map(p => ({
             id: p.place_id,
             name: p.name,
@@ -251,6 +282,8 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
+      
+      {/* SIDEBAR */}
       <Sidebar 
         currentView={activeView}
         onChangeView={setActiveView}
@@ -260,8 +293,8 @@ export default function Home() {
         totalDays={calculateDays()}
         budget={budget}
         travelers={groupType === 'SOLO' ? 1 : (groupType === 'FRIENDS' ? 4 : 2)}
-        diet="ANY"             
-        groupType={groupType}  
+        diet="ANY"             // Crash Fix 1
+        groupType={groupType}  // Crash Fix 2
         onRemoveItem={removeFromTrip}
         onAddToTrip={addToTrip}
         onResetApp={() => {
@@ -270,7 +303,7 @@ export default function Home() {
       />
 
       <main className="flex-1 relative h-full flex flex-col">
-        {/* HEADER */}
+        {/* HEADER (Profile & Logout) */}
         <header className="absolute top-0 right-0 p-6 z-20 flex items-center gap-4">
            <div className="flex items-center gap-3 bg-white/80 backdrop-blur-md p-2 rounded-full shadow-sm border border-gray-100">
              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">
@@ -290,14 +323,21 @@ export default function Home() {
         {activeView === 'DASHBOARD' && (
           <div className="h-full flex flex-col items-center justify-center p-8 bg-white relative">
             <h2 className="text-3xl font-black mb-6">Where to next?</h2>
-            <button onClick={() => setShowCreateModal(true)} className="bg-black text-white text-lg font-bold px-8 py-4 rounded-2xl shadow-xl hover:scale-105 transition-transform">+ Plan a New Trip</button>
+            
+            <button 
+              onClick={() => setShowCreateModal(true)}
+              className="bg-black text-white text-lg font-bold px-8 py-4 rounded-2xl shadow-xl hover:scale-105 transition-transform"
+            >
+              + Plan a New Trip
+            </button>
 
+            {/* MODAL */}
             {showCreateModal && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
                  <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-lg relative">
                    <h3 className="font-bold text-xl text-gray-900 mb-6">Create Your Vibe</h3>
                    
-                   {/* DESTINATION INPUT + SUGGESTIONS DROPDOWN */}
+                   {/* DESTINATION + DROPDOWN */}
                    <div className="mb-4 relative">
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Destination</label>
                      <input 
@@ -308,7 +348,7 @@ export default function Home() {
                        autoComplete="off"
                      />
                      
-                     {/* --- THE DROPDOWN --- */}
+                     {/* Smart Dropdown */}
                      {showSuggestions && (
                        <div className="absolute top-full left-0 w-full bg-white border border-gray-100 rounded-xl shadow-xl z-50 mt-1 max-h-40 overflow-y-auto">
                          {citySuggestions.map((suggestion, index) => (
@@ -324,6 +364,7 @@ export default function Home() {
                      )}
                    </div>
 
+                   {/* Dates */}
                    <div className="flex gap-3 mb-4">
                      <div className="flex-1">
                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Start</label>
@@ -335,11 +376,22 @@ export default function Home() {
                      </div>
                    </div>
 
+                   {/* GROUP TYPE SELECTOR */}
                    <div className="mb-6">
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Who is traveling?</label>
                      <div className="grid grid-cols-2 gap-2">
-                        {[{ id: 'SOLO', label: '🧍 Solo', desc: 'Hidden Gems' }, { id: 'FRIENDS', label: '👯 Friends', desc: 'Vibes & Fun' }, { id: 'FAMILY', label: '👨‍👩‍👧‍👦 Family', desc: 'Safe & Easy' }, { id: 'CORPORATE', label: '💼 Corporate', desc: 'Premium' }].map((type) => (
-                          <button key={type.id} onClick={() => setGroupType(type.id)} className={`p-3 rounded-xl border text-left transition-all ${groupType === type.id ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'border-gray-200 hover:bg-gray-50'}`}>
+                        {[
+                          { id: 'SOLO', label: '🧍 Solo', desc: 'Hidden Gems' },
+                          { id: 'FRIENDS', label: '👯 Friends', desc: 'Vibes & Fun' },
+                          { id: 'FAMILY', label: '👨‍👩‍👧‍👦 Family', desc: 'Safe & Easy' },
+                          { id: 'CORPORATE', label: '💼 Corporate', desc: 'Premium' },
+                        ].map((type) => (
+                          <button
+                            key={type.id}
+                            onClick={() => setGroupType(type.id)}
+                            className={`p-3 rounded-xl border text-left transition-all
+                              ${groupType === type.id ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'border-gray-200 hover:bg-gray-50'}`}
+                          >
                             <div className="font-bold text-xs text-gray-900">{type.label}</div>
                             <div className="text-[10px] text-gray-500">{type.desc}</div>
                           </button>
@@ -347,7 +399,11 @@ export default function Home() {
                      </div>
                    </div>
 
-                   <button onClick={generateItinerary} disabled={!selectedCity || isGenerating} className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center">
+                   <button 
+                     onClick={generateItinerary}
+                     disabled={!selectedCity || isGenerating}
+                     className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center"
+                   >
                      {isGenerating ? '🔮 AI is Analyzing...' : 'Generate Itinerary ➔'}
                    </button>
                    <button onClick={() => setShowCreateModal(false)} className="w-full mt-2 text-gray-400 text-xs font-bold py-2">Cancel</button>
@@ -357,10 +413,20 @@ export default function Home() {
           </div>
         )}
 
-        {activeView === 'DISCOVERY' && <DiscoveryView onAddToTrip={addToTrip} onBack={() => setActiveView('PLAN')} initialCity={selectedCity} />}
+        {/* VIEW 2: DISCOVERY */}
+        {activeView === 'DISCOVERY' && (
+           <DiscoveryView onAddToTrip={addToTrip} onBack={() => setActiveView('PLAN')} initialCity={selectedCity} />
+        )}
+
+        {/* VIEW 3: PLAN */}
         {activeView === 'PLAN' && (
            <div className="h-full w-full relative">
-             <iframe width="100%" height="100%" frameBorder="0" scrolling="no" src={`https://maps.google.com/maps?q=${encodeURIComponent(selectedCity || 'India')}&t=&z=13&ie=UTF8&iwloc=&output=embed`} className="grayscale hover:grayscale-0 transition-all duration-700 block"></iframe>
+             <iframe 
+               width="100%" height="100%" frameBorder="0" scrolling="no" 
+               src={`https://maps.google.com/maps?q=${encodeURIComponent(selectedCity || 'India')}&t=&z=13&ie=UTF8&iwloc=&output=embed`}
+               className="grayscale hover:grayscale-0 transition-all duration-700 block"
+             ></iframe>
+             
              {tripPlan.length === 0 && !isGenerating && (
                <div className="absolute top-24 left-1/2 transform -translate-x-1/2 bg-white px-6 py-4 rounded-2xl shadow-xl text-center">
                  <p className="font-bold text-gray-800 mb-2">No curated plan found for {selectedCity}.</p>
@@ -369,7 +435,10 @@ export default function Home() {
              )}
            </div>
         )}
-        {(activeView === 'TRIPS' || activeView === 'SETTINGS') && <div className="h-full flex items-center justify-center font-bold text-gray-400">Coming Soon...</div>}
+
+        {(activeView === 'TRIPS' || activeView === 'SETTINGS') && (
+           <div className="h-full flex items-center justify-center font-bold text-gray-400">Coming Soon...</div>
+        )}
       </main>
     </div>
   );
