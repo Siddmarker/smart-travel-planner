@@ -26,7 +26,7 @@ interface Place {
 export default function Home() {
   const [session, setSession] = useState<any>(null);
   
-  // Initialize Supabase (Using core library to avoid auth-helpers bugs)
+  // Initialize Supabase
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -118,7 +118,6 @@ export default function Home() {
 
     try {
       // STEP 1: FETCH RAW DATA FROM SUPABASE
-      // (Change 'places' to your actual table name if different)
       const { data: rawPlaces, error } = await supabase
         .from('places') 
         .select('*')
@@ -229,7 +228,8 @@ export default function Home() {
         totalDays={calculateDays()}
         budget={budget}
         travelers={groupType === 'SOLO' ? 1 : (groupType === 'FRIENDS' ? 4 : 2)}
-        diet="ANY" // <--- FIX: ADDED BACK TO PREVENT ERROR
+        diet="ANY"             // <--- FIX 1
+        groupType={groupType}  // <--- FIX 2: Added missing prop
         onRemoveItem={removeFromTrip}
         onAddToTrip={addToTrip}
         onResetApp={() => {
