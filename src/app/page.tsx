@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+// FIX: Switch to the core library to avoid "Module has no exported member" errors
+import { createClient } from '@supabase/supabase-js';
 
 // COMPONENTS
 import LandingPage from '@/components/LandingPage';
@@ -19,7 +20,12 @@ interface Place {
 export default function Home() {
   // AUTH STATE
   const [session, setSession] = useState<any>(null);
-  const supabase = createClientComponentClient();
+
+  // FIX: Initialize Supabase Manually
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  );
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
