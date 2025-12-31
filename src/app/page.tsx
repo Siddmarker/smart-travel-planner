@@ -24,7 +24,7 @@ interface Place {
   description?: string; 
   image?: string;
   aiScore?: number;     
-  Zone_id?: string; // Added for type safety
+  zone_id?: string; // Added for type safety
 }
 
 export default function Home() {
@@ -48,7 +48,6 @@ export default function Home() {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
     
-    // Initialize Google Service
     if (isLoaded && !placesServiceRef.current) {
         const hiddenDiv = document.createElement('div');
         placesServiceRef.current = new google.maps.places.PlacesService(hiddenDiv);
@@ -72,7 +71,7 @@ export default function Home() {
   const [groupType, setGroupType] = useState('FRIENDS'); 
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
-  // --- 1. SMART SEARCH (Targeting Zone_id) ---
+  // --- 1. SMART SEARCH (Targeting zone_id) ---
   const handleCitySearch = async (query: string) => {
     setSelectedCity(query);
     
@@ -83,21 +82,28 @@ export default function Home() {
     }
 
     try {
-      // CHANGED: Query 'Zone_id' column
+      console.log("🔍 Searching DB for:", query);
+
+      // CHANGED: Query 'zone_id' column
       const { data, error } = await supabase
         .from('places')
-        .select('Zone_id') 
-        .ilike('Zone_id', `%${query}%`)
+        .select('zone_id') 
+        .ilike('zone_id', `%${query}%`)
         .limit(20);
 
-      if (error) throw error;
+      if (error) {
+        console.error("❌ DB Error:", error.message);
+        throw error;
+      }
+
+      console.log("✅ DB Result:", data);
 
       if (data && data.length > 0) {
-        // Remove Duplicates
+        // Remove Duplicates (case-insensitive cleanup)
         const uniqueCities = Array.from(new Set(
           data
-            .map((p: any) => p.Zone_id) 
-            .filter((c: any) => c)
+            .map((p: any) => p.zone_id) 
+            .filter((c: any) => c) // Remove nulls
         ));
 
         setCitySuggestions(uniqueCities as string[]);
@@ -106,7 +112,7 @@ export default function Home() {
         setShowSuggestions(false);
       }
     } catch (err) {
-      console.warn("Zone_id search warning:", err);
+      console.warn("Search warning:", err);
       setShowSuggestions(false);
     }
   };
@@ -166,13 +172,13 @@ export default function Home() {
     const usedIds: string[] = [];
 
     try {
-      console.log("Searching curated DB for:", selectedCity);
+      console.log("Generating plan for:", selectedCity);
 
-      // CHANGED: Include Zone_id in the search
+      // CHANGED: Include zone_id in the search
       const { data: rawPlaces } = await supabase
         .from('places') 
         .select('*')
-        .or(`Zone_id.ilike.%${selectedCity}%,description.ilike.%${selectedCity}%,name.ilike.%${selectedCity}%`);
+        .or(`zone_id.ilike.%${selectedCity}%,description.ilike.%${selectedCity}%,name.ilike.%${selectedCity}%`);
 
       if (rawPlaces && rawPlaces.length > 0) {
           console.log(`Found ${rawPlaces.length} curated places.`);
