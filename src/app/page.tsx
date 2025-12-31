@@ -7,7 +7,7 @@ import LandingPage from '@/components/LandingPage';
 import Sidebar, { NavView } from '@/components/Sidebar';
 import DiscoveryView from '@/components/DiscoveryView';
 
-// 1. TYPES
+// TYPES
 interface Place {
   id: string;
   name: string;
@@ -16,11 +16,11 @@ interface Place {
   type: string;
   rating?: number;
   user_ratings_total?: number;
-  price_level?: number; // 0=Free, 1=Cheap, 2=Moderate, 3=Expensive, 4=Very Expensive
-  types?: string[];     // e.g. ['bar', 'restaurant']
-  description?: string; // keywords like "authentic", "lively"
+  price_level?: number; 
+  types?: string[];     
+  description?: string; 
   image?: string;
-  aiScore?: number;     // For our algorithm
+  aiScore?: number;     
 }
 
 export default function Home() {
@@ -47,83 +47,75 @@ export default function Home() {
   const [selectedCity, setSelectedCity] = useState('');
   const [dates, setDates] = useState({ start: '', end: '' });
   const [budget, setBudget] = useState('MEDIUM'); 
-  const [groupType, setGroupType] = useState('FRIENDS'); // Default Persona
+  const [groupType, setGroupType] = useState('FRIENDS'); 
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
-  // --- 2. GEN 3.0 ALGORITHM: "THE PERSONA ENGINE" ---
+  // --- ALGORITHM SAFETY FIX ---
   const calculateRelevanceScore = (place: Place, group: string) => {
-    let score = 0;
+    try {
+      let score = 0;
+      // SAFEGUARDS: Handle missing/null data gracefully
+      const rating = place.rating || 3.0;
+      const reviews = place.user_ratings_total || 10;
+      const price = place.price_level || 2; 
+      const tags = (place.types || []).join(' ').toLowerCase();
+      const desc = (place.description || '').toLowerCase();
 
-    // A. DATA NORMALIZATION
-    const rating = place.rating || 3.0;
-    const reviews = place.user_ratings_total || 10;
-    const price = place.price_level || 2; 
-    const tags = (place.types || []).join(' ').toLowerCase();
-    const desc = (place.description || '').toLowerCase();
+      // Value Velocity
+      const confidence = Math.max(1, Math.log10(reviews));
+      let baseScore = (rating * confidence) / (price === 0 ? 1 : price);
 
-    // B. VALUE VELOCITY FORMULA: (Rating x Log(Reviews)) / Price
-    const confidence = Math.max(1, Math.log10(reviews));
-    let baseScore = (rating * confidence) / (price === 0 ? 1 : price);
+      // Hole-in-the-Wall
+      if (price <= 1 && (desc.includes('authentic') || desc.includes('best') || desc.includes('queue'))) {
+         baseScore *= 1.5; 
+      }
+      score = baseScore;
 
-    // C. "HOLE-IN-THE-WALL" DETECTOR
-    // If Cheap AND (Authentic OR Queue OR No Frills) -> Boost 50%
-    if (price <= 1 && (desc.includes('authentic') || desc.includes('best') || desc.includes('queue'))) {
-       baseScore *= 1.5; 
+      // Persona Logic
+      switch (group) {
+        case 'SOLO': 
+          if (reviews < 500 && rating > 4.5) score *= 2.0;
+          if (tags.includes('hostel') || tags.includes('cafe') || tags.includes('bar')) score *= 1.3;
+          break;
+        case 'FRIENDS': 
+          if (tags.includes('night_club') || tags.includes('bar') || desc.includes('lively')) score *= 1.4;
+          if (reviews < 50) score *= 0.5;
+          break;
+        case 'FAMILY': 
+          if (tags.includes('night_club') || tags.includes('bar')) score = 0;
+          if (desc.includes('parking') || desc.includes('kid') || desc.includes('family')) score *= 2.0;
+          break;
+        case 'CORPORATE': 
+          if (reviews < 200) score *= 0.2; 
+          if (price >= 3) score *= 1.5; 
+          break;
+      }
+      return score;
+    } catch (e) {
+      return 0; // If data is corrupt, skip this place instead of crashing
     }
-
-    score = baseScore;
-
-    // D. PERSONA ADJUSTMENTS
-    switch (group) {
-      case 'SOLO': // "The Seeker"
-        // Hidden Gem Weight: Boost things with fewer reviews but high ratings
-        if (reviews < 500 && rating > 4.5) score *= 2.0;
-        // Social Weight
-        if (tags.includes('hostel') || tags.includes('cafe') || tags.includes('bar')) score *= 1.3;
-        break;
-
-      case 'FRIENDS': // "The Vibe Chasers"
-        // "Vibe" Boost
-        if (tags.includes('night_club') || tags.includes('bar') || desc.includes('lively')) score *= 1.4;
-        // Avoid "Too Quiet"
-        if (reviews < 50) score *= 0.5;
-        break;
-
-      case 'FAMILY': // "The Protectors"
-        // Safety Filter: Strictly penalize bars/nightlife
-        if (tags.includes('night_club') || tags.includes('bar')) score = 0;
-        // Convenience Boost
-        if (desc.includes('parking') || desc.includes('kid') || desc.includes('family')) score *= 2.0;
-        break;
-
-      case 'CORPORATE': // "The Team Builders"
-        // Reliability Weight: Must have high review count
-        if (reviews < 200) score *= 0.2; 
-        // Expense Account: Boost higher price tiers
-        if (price >= 3) score *= 1.5; 
-        break;
-    }
-
-    return score;
   };
 
   const generateItinerary = async () => {
     setIsGenerating(true);
     setShowCreateModal(false);
     
-    // Initial Context
     let currentLoc = { lat: 0, lng: 0 };
     const itinerary: Place[] = [];
     const usedIds: string[] = [];
 
     try {
-      // STEP 1: FETCH RAW DATA FROM SUPABASE
+      // 1. FETCH
+      console.log("Fetching places for:", selectedCity);
       const { data: rawPlaces, error } = await supabase
         .from('places') 
         .select('*')
         .ilike('city', `%${selectedCity}%`);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase Error:", error);
+        throw error;
+      }
       
       if (!rawPlaces || rawPlaces.length === 0) {
         alert("No curated data found for this city. Switching to Manual Discovery.");
@@ -132,19 +124,16 @@ export default function Home() {
         return;
       }
 
-      // Initialize location center
+      // 2. SCORE & SORT
       currentLoc = { lat: rawPlaces[0].lat, lng: rawPlaces[0].lng };
-
-      // STEP 2: SCORE PLACES
+      
       const scoredPlaces = rawPlaces.map(p => ({
         ...p,
         aiScore: calculateRelevanceScore(p, groupType)
       }));
-
-      // Sort by AI Score descending
       scoredPlaces.sort((a, b) => b.aiScore - a.aiScore);
 
-      // STEP 3: ROLLING STATE ASSEMBLY (Timeline)
+      // 3. ASSEMBLE
       const slots = [
         { name: 'Morning', types: ['tourist_attraction', 'religious_place', 'park'] },
         { name: 'Lunch', types: ['restaurant', 'cafe', 'food'] },
@@ -154,7 +143,6 @@ export default function Home() {
       ];
 
       for (const slot of slots) {
-        // Filter candidates by Type & Score
         const candidates = scoredPlaces.filter(p => 
           !usedIds.includes(p.id) && 
           p.aiScore > 0 && 
@@ -162,16 +150,12 @@ export default function Home() {
         );
 
         if (candidates.length > 0) {
-          // Proximity Optimization: Find best mix of "High Score" + "Close Distance"
           let bestCandidate = null;
           let bestCompositeScore = -Infinity;
 
-          // Only check top 10 candidates to save time
           candidates.slice(0, 10).forEach(p => {
              const dist = Math.sqrt(Math.pow(p.lat - currentLoc.lat, 2) + Math.pow(p.lng - currentLoc.lng, 2));
-             // Composite Score = AI Score - Distance Penalty
              const composite = p.aiScore - (dist * 100); 
-             
              if (composite > bestCompositeScore) {
                bestCompositeScore = composite;
                bestCandidate = p;
@@ -182,7 +166,7 @@ export default function Home() {
              const winner: Place = bestCandidate;
              itinerary.push(winner);
              usedIds.push(winner.id);
-             currentLoc = { lat: winner.lat, lng: winner.lng }; // Update Rolling State
+             currentLoc = { lat: winner.lat, lng: winner.lng }; 
           }
         }
       }
@@ -192,13 +176,17 @@ export default function Home() {
       setActiveView('PLAN'); 
 
     } catch (err: any) {
-      console.error("AI Error:", err);
-      alert("Something went wrong generating the plan.");
+      console.error("CRITICAL ALGORITHM ERROR:", err);
+      alert(`Error: ${err.message || "Please check console for details."}`);
       setIsGenerating(false);
     }
   };
 
-  // HANDLERS
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.reload();
+  };
+
   const addToTrip = (place: any) => {
     if (!tripPlan.find((p) => p.id === place.id)) setTripPlan((prev) => [...prev, place]);
   };
@@ -212,7 +200,6 @@ export default function Home() {
     return Math.ceil(diff / (1000 * 3600 * 24)) + 1; 
   };
 
-  // 3. RENDER
   if (!session) return <LandingPage />;
 
   return (
@@ -228,8 +215,8 @@ export default function Home() {
         totalDays={calculateDays()}
         budget={budget}
         travelers={groupType === 'SOLO' ? 1 : (groupType === 'FRIENDS' ? 4 : 2)}
-        diet="ANY"             // <--- FIX 1
-        groupType={groupType}  // <--- FIX 2: Added missing prop
+        diet="ANY"             
+        groupType={groupType}  
         onRemoveItem={removeFromTrip}
         onAddToTrip={addToTrip}
         onResetApp={() => {
@@ -237,8 +224,32 @@ export default function Home() {
         }}
       />
 
-      <main className="flex-1 relative h-full">
+      <main className="flex-1 relative h-full flex flex-col">
         
+        {/* --- 🆕 NEW: HEADER (Profile & Logout) --- */}
+        <header className="absolute top-0 right-0 p-6 z-20 flex items-center gap-4">
+           <div className="flex items-center gap-3 bg-white/80 backdrop-blur-md p-2 rounded-full shadow-sm border border-gray-100">
+             {/* Avatar */}
+             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">
+               {session.user.email?.[0].toUpperCase()}
+             </div>
+             {/* Email (Hidden on mobile) */}
+             <span className="text-xs font-bold text-gray-600 hidden md:block pr-2">
+               {session.user.email}
+             </span>
+           </div>
+           
+           <button 
+             onClick={handleLogout}
+             className="bg-white text-gray-500 hover:text-red-500 p-2 rounded-full shadow-sm border border-gray-100 transition-colors"
+             title="Sign Out"
+           >
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+             </svg>
+           </button>
+        </header>
+
         {/* VIEW 1: DASHBOARD */}
         {activeView === 'DASHBOARD' && (
           <div className="h-full flex flex-col items-center justify-center p-8 bg-white relative">
@@ -254,7 +265,7 @@ export default function Home() {
             {/* MODAL */}
             {showCreateModal && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-                 <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-lg">
+                 <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-lg relative">
                    
                    <h3 className="font-bold text-xl text-gray-900 mb-6">Create Your Vibe</h3>
                    
@@ -280,7 +291,7 @@ export default function Home() {
                      </div>
                    </div>
 
-                   {/* GROUP TYPE SELECTOR (Vibe) */}
+                   {/* GROUP TYPE SELECTOR */}
                    <div className="mb-6">
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Who is traveling?</label>
                      <div className="grid grid-cols-2 gap-2">
