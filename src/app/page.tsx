@@ -24,12 +24,13 @@ interface Place {
   description?: string; 
   image?: string;
   aiScore?: number;     
+  Zone_id?: string; // Added for type safety
 }
 
 export default function Home() {
   const [session, setSession] = useState<any>(null);
   
-  // 1. Google Maps Hook (For Fallback & Map)
+  // 1. Google Maps Hook
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '',
     libraries: LIBRARIES,
@@ -63,7 +64,7 @@ export default function Home() {
 
   // TRIP DATA
   const [selectedCity, setSelectedCity] = useState('');
-  const [citySuggestions, setCitySuggestions] = useState<string[]>([]); // Dropdown Data
+  const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   
   const [dates, setDates] = useState({ start: '', end: '' });
@@ -71,7 +72,7 @@ export default function Home() {
   const [groupType, setGroupType] = useState('FRIENDS'); 
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
-  // --- 1. SMART CITY SEARCH (Deduplicated Dropdown) ---
+  // --- 1. SMART SEARCH (Targeting Zone_id) ---
   const handleCitySearch = async (query: string) => {
     setSelectedCity(query);
     
@@ -82,21 +83,21 @@ export default function Home() {
     }
 
     try {
-      // Query the 'city' column to avoid listing every single venue
+      // CHANGED: Query 'Zone_id' column
       const { data, error } = await supabase
         .from('places')
-        .select('city') 
-        .ilike('city', `%${query}%`)
+        .select('Zone_id') 
+        .ilike('Zone_id', `%${query}%`)
         .limit(20);
 
       if (error) throw error;
 
       if (data && data.length > 0) {
-        // Remove Duplicates (Set ensures 'Bangalore' appears once)
+        // Remove Duplicates
         const uniqueCities = Array.from(new Set(
           data
-            .map((p: any) => p.city) // Extract city string
-            .filter((c: any) => c)   // Remove nulls
+            .map((p: any) => p.Zone_id) 
+            .filter((c: any) => c)
         ));
 
         setCitySuggestions(uniqueCities as string[]);
@@ -105,8 +106,7 @@ export default function Home() {
         setShowSuggestions(false);
       }
     } catch (err) {
-      // If 'city' column doesn't exist yet, we fail silently
-      console.warn("City search warning:", err);
+      console.warn("Zone_id search warning:", err);
       setShowSuggestions(false);
     }
   };
@@ -116,28 +116,24 @@ export default function Home() {
     setShowSuggestions(false);
   };
 
-  // --- 2. GEN 3.0 ALGORITHM (The Brain) ---
+  // --- 2. GEN 3.0 ALGORITHM ---
   const calculateRelevanceScore = (place: Place, group: string) => {
     try {
       let score = 0;
-      // Safeguards for missing data
       const rating = place.rating || 3.0;
       const reviews = place.user_ratings_total || 10;
       const price = place.price_level || 2; 
       const tags = (place.types || []).join(' ').toLowerCase();
       const desc = (place.description || '').toLowerCase();
 
-      // Value Velocity Formula
       const confidence = Math.max(1, Math.log10(reviews));
       let baseScore = (rating * confidence) / (price === 0 ? 1 : price);
 
-      // Hole-in-the-Wall Detector
       if (price <= 1 && (desc.includes('authentic') || desc.includes('best') || desc.includes('queue'))) {
          baseScore *= 1.5; 
       }
       score = baseScore;
 
-      // Persona Weights
       switch (group) {
         case 'SOLO': 
           if (reviews < 500 && rating > 4.5) score *= 2.0;
@@ -160,7 +156,7 @@ export default function Home() {
     } catch (e) { return 0; }
   };
 
-  // --- 3. HYBRID GENERATOR (Supabase -> Google Fallback) ---
+  // --- 3. HYBRID GENERATOR (Supabase -> Google) ---
   const generateItinerary = async () => {
     setIsGenerating(true);
     setShowCreateModal(false);
@@ -172,22 +168,19 @@ export default function Home() {
     try {
       console.log("Searching curated DB for:", selectedCity);
 
-      // Try searching both 'city' column and 'description' (for backward compatibility)
+      // CHANGED: Include Zone_id in the search
       const { data: rawPlaces } = await supabase
         .from('places') 
         .select('*')
-        .or(`city.ilike.%${selectedCity}%,description.ilike.%${selectedCity}%`);
+        .or(`Zone_id.ilike.%${selectedCity}%,description.ilike.%${selectedCity}%,name.ilike.%${selectedCity}%`);
 
       if (rawPlaces && rawPlaces.length > 0) {
-          // --- PATH A: CURATED DATA FOUND ---
           console.log(`Found ${rawPlaces.length} curated places.`);
           currentLoc = { lat: rawPlaces[0].lat, lng: rawPlaces[0].lng };
           
-          // Score and Sort
           const scoredPlaces = rawPlaces.map(p => ({ ...p, aiScore: calculateRelevanceScore(p, groupType) }));
           scoredPlaces.sort((a, b) => b.aiScore - a.aiScore);
 
-          // Assemble Timeline
           const slots = [
             { name: 'Morning', types: ['tourist_attraction', 'religious_place', 'park'] },
             { name: 'Lunch', types: ['restaurant', 'cafe', 'food'] },
@@ -201,14 +194,13 @@ export default function Home() {
               !usedIds.includes(p.id) && p.aiScore > 0 && slot.types.some(t => (p.type || '').includes(t))
             );
             if (candidates.length > 0) {
-              // Proximity Logic (Simplified)
               const winner = candidates[0]; 
               itinerary.push(winner);
               usedIds.push(winner.id);
             }
           }
       } else {
-          // --- PATH B: FALLBACK TO GOOGLE MAPS ---
+          // GOOGLE FALLBACK
           console.log("No curated data. Switching to Live Google Search...");
           
           if (!placesServiceRef.current) throw new Error("Google Maps not loaded yet");
@@ -230,7 +222,6 @@ export default function Home() {
 
           if (googleResults.length === 0) throw new Error("Google found nothing either.");
 
-          // Format Google Results
           const formatted = googleResults.slice(0, 5).map(p => ({
             id: p.place_id,
             name: p.name,
@@ -293,8 +284,8 @@ export default function Home() {
         totalDays={calculateDays()}
         budget={budget}
         travelers={groupType === 'SOLO' ? 1 : (groupType === 'FRIENDS' ? 4 : 2)}
-        diet="ANY"             // Crash Fix 1
-        groupType={groupType}  // Crash Fix 2
+        diet="ANY"
+        groupType={groupType}
         onRemoveItem={removeFromTrip}
         onAddToTrip={addToTrip}
         onResetApp={() => {
@@ -303,7 +294,7 @@ export default function Home() {
       />
 
       <main className="flex-1 relative h-full flex flex-col">
-        {/* HEADER (Profile & Logout) */}
+        {/* HEADER */}
         <header className="absolute top-0 right-0 p-6 z-20 flex items-center gap-4">
            <div className="flex items-center gap-3 bg-white/80 backdrop-blur-md p-2 rounded-full shadow-sm border border-gray-100">
              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">
@@ -342,7 +333,7 @@ export default function Home() {
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Destination</label>
                      <input 
                        className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                       placeholder="Search from your database (e.g. Bang...)" 
+                       placeholder="Search database (e.g. Bang...)" 
                        value={selectedCity} 
                        onChange={(e) => handleCitySearch(e.target.value)}
                        autoComplete="off"
