@@ -2,11 +2,12 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
+// COMPONENTS
 import LandingPage from '@/components/LandingPage';
 import Sidebar, { NavView } from '@/components/Sidebar';
 import DiscoveryView from '@/components/DiscoveryView';
 
-// TYPES
+// 1. TYPES
 interface Place {
   id: string;
   name: string;
@@ -18,10 +19,14 @@ interface Place {
   price_level?: number; // 0=Free, 1=Cheap, 2=Moderate, 3=Expensive, 4=Very Expensive
   types?: string[];     // e.g. ['bar', 'restaurant']
   description?: string; // keywords like "authentic", "lively"
+  image?: string;
+  aiScore?: number;     // For our algorithm
 }
 
 export default function Home() {
   const [session, setSession] = useState<any>(null);
+  
+  // Initialize Supabase (Using core library to avoid auth-helpers bugs)
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -29,7 +34,8 @@ export default function Home() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    return () => subscription.unsubscribe();
   }, []);
 
   // APP STATE
@@ -41,26 +47,25 @@ export default function Home() {
   const [selectedCity, setSelectedCity] = useState('');
   const [dates, setDates] = useState({ start: '', end: '' });
   const [budget, setBudget] = useState('MEDIUM'); 
-  const [groupType, setGroupType] = useState('FRIENDS'); // Default: The Vibe Chasers
+  const [groupType, setGroupType] = useState('FRIENDS'); // Default Persona
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
-  // --- THE "PERSONA ENGINE" ALGORITHM ---
+  // --- 2. GEN 3.0 ALGORITHM: "THE PERSONA ENGINE" ---
   const calculateRelevanceScore = (place: Place, group: string) => {
     let score = 0;
 
-    // 1. DATA NORMALIZATION
+    // A. DATA NORMALIZATION
     const rating = place.rating || 3.0;
     const reviews = place.user_ratings_total || 10;
-    const price = place.price_level || 2; // Default to Moderate if unknown
+    const price = place.price_level || 2; 
     const tags = (place.types || []).join(' ').toLowerCase();
     const desc = (place.description || '').toLowerCase();
 
-    // 2. VALUE VELOCITY FORMULA: (Rating x Log(Reviews)) / Price
-    // We use Math.log10(reviews) to dampen the effect of having 10,000 reviews vs 1,000
+    // B. VALUE VELOCITY FORMULA: (Rating x Log(Reviews)) / Price
     const confidence = Math.max(1, Math.log10(reviews));
     let baseScore = (rating * confidence) / (price === 0 ? 1 : price);
 
-    // 3. "HOLE-IN-THE-WALL" DETECTOR
+    // C. "HOLE-IN-THE-WALL" DETECTOR
     // If Cheap AND (Authentic OR Queue OR No Frills) -> Boost 50%
     if (price <= 1 && (desc.includes('authentic') || desc.includes('best') || desc.includes('queue'))) {
        baseScore *= 1.5; 
@@ -68,7 +73,7 @@ export default function Home() {
 
     score = baseScore;
 
-    // 4. PERSONA ADJUSTMENTS
+    // D. PERSONA ADJUSTMENTS
     switch (group) {
       case 'SOLO': // "The Seeker"
         // Hidden Gem Weight: Boost things with fewer reviews but high ratings
@@ -80,7 +85,7 @@ export default function Home() {
       case 'FRIENDS': // "The Vibe Chasers"
         // "Vibe" Boost
         if (tags.includes('night_club') || tags.includes('bar') || desc.includes('lively')) score *= 1.4;
-        // Avoid "Too Quiet" (Low reviews often mean quiet)
+        // Avoid "Too Quiet"
         if (reviews < 50) score *= 0.5;
         break;
 
@@ -93,9 +98,9 @@ export default function Home() {
 
       case 'CORPORATE': // "The Team Builders"
         // Reliability Weight: Must have high review count
-        if (reviews < 200) score *= 0.2; // Huge penalty for unproven spots
-        // Capacity Check: Boost large establishments (often correlated with price/type)
-        if (price >= 3) score *= 1.5; // Expense account friendly
+        if (reviews < 200) score *= 0.2; 
+        // Expense Account: Boost higher price tiers
+        if (price >= 3) score *= 1.5; 
         break;
     }
 
@@ -112,7 +117,8 @@ export default function Home() {
     const usedIds: string[] = [];
 
     try {
-      // A. FETCH RAW DATA
+      // STEP 1: FETCH RAW DATA FROM SUPABASE
+      // (Change 'places' to your actual table name if different)
       const { data: rawPlaces, error } = await supabase
         .from('places') 
         .select('*')
@@ -121,16 +127,16 @@ export default function Home() {
       if (error) throw error;
       
       if (!rawPlaces || rawPlaces.length === 0) {
-        alert("No data found. Switching to Discovery.");
+        alert("No curated data found for this city. Switching to Manual Discovery.");
         setIsGenerating(false);
         setActiveView('DISCOVERY');
         return;
       }
 
-      // Initialize location to first place found
+      // Initialize location center
       currentLoc = { lat: rawPlaces[0].lat, lng: rawPlaces[0].lng };
 
-      // B. SCORE ALL PLACES based on selected PERSONA
+      // STEP 2: SCORE PLACES
       const scoredPlaces = rawPlaces.map(p => ({
         ...p,
         aiScore: calculateRelevanceScore(p, groupType)
@@ -139,7 +145,7 @@ export default function Home() {
       // Sort by AI Score descending
       scoredPlaces.sort((a, b) => b.aiScore - a.aiScore);
 
-      // C. ROLLING STATE ASSEMBLY (Morning -> Lunch -> Afternoon -> Evening -> Dinner)
+      // STEP 3: ROLLING STATE ASSEMBLY (Timeline)
       const slots = [
         { name: 'Morning', types: ['tourist_attraction', 'religious_place', 'park'] },
         { name: 'Lunch', types: ['restaurant', 'cafe', 'food'] },
@@ -149,27 +155,22 @@ export default function Home() {
       ];
 
       for (const slot of slots) {
-        // 1. Filter by Category & Usage
-        // We take the top 50% of scored places to ensure quality, then sort by distance
+        // Filter candidates by Type & Score
         const candidates = scoredPlaces.filter(p => 
           !usedIds.includes(p.id) && 
-          p.aiScore > 0 && // Filter out 0 scores (like bars for families)
-          slot.types.some(t => (p.type || '').includes(t)) // Fuzzy type match
+          p.aiScore > 0 && 
+          slot.types.some(t => (p.type || '').includes(t))
         );
 
         if (candidates.length > 0) {
-          // 2. Proximity Optimization (State Constraint)
-          // Find the candidate closest to currentLoc, but Weighted by AI Score
-          // We don't want the closest place if it sucks. We want the best place reasonably close.
-          
+          // Proximity Optimization: Find best mix of "High Score" + "Close Distance"
           let bestCandidate = null;
           let bestCompositeScore = -Infinity;
 
+          // Only check top 10 candidates to save time
           candidates.slice(0, 10).forEach(p => {
-             // Distance heuristic (Euclidean is fine for sorting)
              const dist = Math.sqrt(Math.pow(p.lat - currentLoc.lat, 2) + Math.pow(p.lng - currentLoc.lng, 2));
-             // Composite = AI Score - Distance Penalty
-             // (Adjust penalty weight as needed)
+             // Composite Score = AI Score - Distance Penalty
              const composite = p.aiScore - (dist * 100); 
              
              if (composite > bestCompositeScore) {
@@ -193,6 +194,7 @@ export default function Home() {
 
     } catch (err: any) {
       console.error("AI Error:", err);
+      alert("Something went wrong generating the plan.");
       setIsGenerating(false);
     }
   };
@@ -202,7 +204,16 @@ export default function Home() {
     if (!tripPlan.find((p) => p.id === place.id)) setTripPlan((prev) => [...prev, place]);
   };
   const removeFromTrip = (id: string) => setTripPlan(tripPlan.filter(p => p.id !== id));
+  
+  const calculateDays = () => {
+    if(!dates.start || !dates.end) return 1;
+    const start = new Date(dates.start);
+    const end = new Date(dates.end);
+    const diff = end.getTime() - start.getTime();
+    return Math.ceil(diff / (1000 * 3600 * 24)) + 1; 
+  };
 
+  // 3. RENDER
   if (!session) return <LandingPage />;
 
   return (
@@ -215,9 +226,10 @@ export default function Home() {
         selectedCity={selectedCity}
         tripPlan={tripPlan}
         isTripActive={!!selectedCity}
-        totalDays={1} 
+        totalDays={calculateDays()}
         budget={budget}
-        travelers={groupType === 'SOLO' ? 1 : 4} // Visual helper
+        travelers={groupType === 'SOLO' ? 1 : (groupType === 'FRIENDS' ? 4 : 2)}
+        diet="ANY" // <--- FIX: ADDED BACK TO PREVENT ERROR
         onRemoveItem={removeFromTrip}
         onAddToTrip={addToTrip}
         onResetApp={() => {
@@ -241,16 +253,16 @@ export default function Home() {
 
             {/* MODAL */}
             {showCreateModal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
                  <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-lg">
                    
                    <h3 className="font-bold text-xl text-gray-900 mb-6">Create Your Vibe</h3>
                    
-                   {/* City */}
+                   {/* City Input */}
                    <div className="mb-4">
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Destination</label>
                      <input 
-                       className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold" 
+                       className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" 
                        placeholder="City (e.g. Madurai)" 
                        value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)}
                      />
@@ -260,20 +272,20 @@ export default function Home() {
                    <div className="flex gap-3 mb-4">
                      <div className="flex-1">
                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Start</label>
-                        <input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold" onChange={e => setDates({...dates, start: e.target.value})} />
+                        <input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" onChange={e => setDates({...dates, start: e.target.value})} />
                      </div>
                      <div className="flex-1">
                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">End</label>
-                        <input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold" onChange={e => setDates({...dates, end: e.target.value})} />
+                        <input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" onChange={e => setDates({...dates, end: e.target.value})} />
                      </div>
                    </div>
 
-                   {/* GROUP TYPE SELECTOR (Crucial for Persona Engine) */}
+                   {/* GROUP TYPE SELECTOR (Vibe) */}
                    <div className="mb-6">
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Who is traveling?</label>
                      <div className="grid grid-cols-2 gap-2">
                         {[
-                          { id: 'SOLO', label: '🧍 Solo Explorer', desc: 'Hidden Gems' },
+                          { id: 'SOLO', label: '🧍 Solo', desc: 'Hidden Gems' },
                           { id: 'FRIENDS', label: '👯 Friends', desc: 'Vibes & Fun' },
                           { id: 'FAMILY', label: '👨‍👩‍👧‍👦 Family', desc: 'Safe & Easy' },
                           { id: 'CORPORATE', label: '💼 Corporate', desc: 'Premium' },
@@ -294,7 +306,7 @@ export default function Home() {
                    <button 
                      onClick={generateItinerary}
                      disabled={!selectedCity || isGenerating}
-                     className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition-all disabled:opacity-50"
+                     className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center"
                    >
                      {isGenerating ? '🔮 AI is Analyzing...' : 'Generate Itinerary ➔'}
                    </button>
