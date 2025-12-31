@@ -26,7 +26,6 @@ interface Place {
 export default function Home() {
   const [session, setSession] = useState<any>(null);
   
-  // Initialize Supabase
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -38,7 +37,6 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // APP STATE
   const [activeView, setActiveView] = useState<NavView>('DASHBOARD');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -50,28 +48,24 @@ export default function Home() {
   const [groupType, setGroupType] = useState('FRIENDS'); 
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
-  // --- ALGORITHM SAFETY FIX ---
+  // --- ALGORITHM ---
   const calculateRelevanceScore = (place: Place, group: string) => {
     try {
       let score = 0;
-      // SAFEGUARDS: Handle missing/null data gracefully
       const rating = place.rating || 3.0;
       const reviews = place.user_ratings_total || 10;
       const price = place.price_level || 2; 
       const tags = (place.types || []).join(' ').toLowerCase();
       const desc = (place.description || '').toLowerCase();
 
-      // Value Velocity
       const confidence = Math.max(1, Math.log10(reviews));
       let baseScore = (rating * confidence) / (price === 0 ? 1 : price);
 
-      // Hole-in-the-Wall
       if (price <= 1 && (desc.includes('authentic') || desc.includes('best') || desc.includes('queue'))) {
          baseScore *= 1.5; 
       }
       score = baseScore;
 
-      // Persona Logic
       switch (group) {
         case 'SOLO': 
           if (reviews < 500 && rating > 4.5) score *= 2.0;
@@ -91,9 +85,7 @@ export default function Home() {
           break;
       }
       return score;
-    } catch (e) {
-      return 0; // If data is corrupt, skip this place instead of crashing
-    }
+    } catch (e) { return 0; }
   };
 
   const generateItinerary = async () => {
@@ -105,12 +97,14 @@ export default function Home() {
     const usedIds: string[] = [];
 
     try {
-      // 1. FETCH
-      console.log("Fetching places for:", selectedCity);
+      console.log("Searching database for:", selectedCity);
+
+      // --- FIX: SEARCH BY NAME OR DESCRIPTION INSTEAD OF 'CITY' ---
+      // This solves the "column city does not exist" error
       const { data: rawPlaces, error } = await supabase
         .from('places') 
         .select('*')
-        .ilike('city', `%${selectedCity}%`);
+        .or(`description.ilike.%${selectedCity}%,name.ilike.%${selectedCity}%`);
 
       if (error) {
         console.error("Supabase Error:", error);
@@ -118,13 +112,12 @@ export default function Home() {
       }
       
       if (!rawPlaces || rawPlaces.length === 0) {
-        alert("No curated data found for this city. Switching to Manual Discovery.");
+        alert("No curated data found. Switching to manual mode.");
         setIsGenerating(false);
         setActiveView('DISCOVERY');
         return;
       }
 
-      // 2. SCORE & SORT
       currentLoc = { lat: rawPlaces[0].lat, lng: rawPlaces[0].lng };
       
       const scoredPlaces = rawPlaces.map(p => ({
@@ -133,7 +126,6 @@ export default function Home() {
       }));
       scoredPlaces.sort((a, b) => b.aiScore - a.aiScore);
 
-      // 3. ASSEMBLE
       const slots = [
         { name: 'Morning', types: ['tourist_attraction', 'religious_place', 'park'] },
         { name: 'Lunch', types: ['restaurant', 'cafe', 'food'] },
@@ -176,9 +168,11 @@ export default function Home() {
       setActiveView('PLAN'); 
 
     } catch (err: any) {
-      console.error("CRITICAL ALGORITHM ERROR:", err);
-      alert(`Error: ${err.message || "Please check console for details."}`);
+      console.error("AI FAIL:", err);
+      // Fallback nicely instead of showing a scary error
+      alert("Note: Could not load curated plan. Opening manual discovery.");
       setIsGenerating(false);
+      setActiveView('DISCOVERY');
     }
   };
 
@@ -204,8 +198,6 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      
-      {/* SIDEBAR */}
       <Sidebar 
         currentView={activeView}
         onChangeView={setActiveView}
@@ -225,28 +217,19 @@ export default function Home() {
       />
 
       <main className="flex-1 relative h-full flex flex-col">
-        
-        {/* --- 🆕 NEW: HEADER (Profile & Logout) --- */}
+        {/* HEADER */}
         <header className="absolute top-0 right-0 p-6 z-20 flex items-center gap-4">
            <div className="flex items-center gap-3 bg-white/80 backdrop-blur-md p-2 rounded-full shadow-sm border border-gray-100">
-             {/* Avatar */}
              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">
                {session.user.email?.[0].toUpperCase()}
              </div>
-             {/* Email (Hidden on mobile) */}
              <span className="text-xs font-bold text-gray-600 hidden md:block pr-2">
                {session.user.email}
              </span>
            </div>
            
-           <button 
-             onClick={handleLogout}
-             className="bg-white text-gray-500 hover:text-red-500 p-2 rounded-full shadow-sm border border-gray-100 transition-colors"
-             title="Sign Out"
-           >
-             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-             </svg>
+           <button onClick={handleLogout} className="bg-white text-gray-500 hover:text-red-500 p-2 rounded-full shadow-sm border border-gray-100 transition-colors">
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" /></svg>
            </button>
         </header>
 
@@ -254,59 +237,34 @@ export default function Home() {
         {activeView === 'DASHBOARD' && (
           <div className="h-full flex flex-col items-center justify-center p-8 bg-white relative">
             <h2 className="text-3xl font-black mb-6">Where to next?</h2>
-            
-            <button 
-              onClick={() => setShowCreateModal(true)}
-              className="bg-black text-white text-lg font-bold px-8 py-4 rounded-2xl shadow-xl hover:scale-105 transition-transform"
-            >
-              + Plan a New Trip
-            </button>
+            <button onClick={() => setShowCreateModal(true)} className="bg-black text-white text-lg font-bold px-8 py-4 rounded-2xl shadow-xl hover:scale-105 transition-transform">+ Plan a New Trip</button>
 
-            {/* MODAL */}
             {showCreateModal && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
                  <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-lg relative">
-                   
                    <h3 className="font-bold text-xl text-gray-900 mb-6">Create Your Vibe</h3>
                    
-                   {/* City Input */}
                    <div className="mb-4">
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Destination</label>
-                     <input 
-                       className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                       placeholder="City (e.g. Madurai)" 
-                       value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)}
-                     />
+                     <input className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="City (e.g. Madurai)" value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)} />
                    </div>
 
-                   {/* Dates */}
                    <div className="flex gap-3 mb-4">
                      <div className="flex-1">
                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Start</label>
-                        <input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" onChange={e => setDates({...dates, start: e.target.value})} />
+                        <input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold" onChange={e => setDates({...dates, start: e.target.value})} />
                      </div>
                      <div className="flex-1">
                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">End</label>
-                        <input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" onChange={e => setDates({...dates, end: e.target.value})} />
+                        <input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold" onChange={e => setDates({...dates, end: e.target.value})} />
                      </div>
                    </div>
 
-                   {/* GROUP TYPE SELECTOR */}
                    <div className="mb-6">
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Who is traveling?</label>
                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { id: 'SOLO', label: '🧍 Solo', desc: 'Hidden Gems' },
-                          { id: 'FRIENDS', label: '👯 Friends', desc: 'Vibes & Fun' },
-                          { id: 'FAMILY', label: '👨‍👩‍👧‍👦 Family', desc: 'Safe & Easy' },
-                          { id: 'CORPORATE', label: '💼 Corporate', desc: 'Premium' },
-                        ].map((type) => (
-                          <button
-                            key={type.id}
-                            onClick={() => setGroupType(type.id)}
-                            className={`p-3 rounded-xl border text-left transition-all
-                              ${groupType === type.id ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'border-gray-200 hover:bg-gray-50'}`}
-                          >
+                        {[{ id: 'SOLO', label: '🧍 Solo', desc: 'Hidden Gems' }, { id: 'FRIENDS', label: '👯 Friends', desc: 'Vibes & Fun' }, { id: 'FAMILY', label: '👨‍👩‍👧‍👦 Family', desc: 'Safe & Easy' }, { id: 'CORPORATE', label: '💼 Corporate', desc: 'Premium' }].map((type) => (
+                          <button key={type.id} onClick={() => setGroupType(type.id)} className={`p-3 rounded-xl border text-left transition-all ${groupType === type.id ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'border-gray-200 hover:bg-gray-50'}`}>
                             <div className="font-bold text-xs text-gray-900">{type.label}</div>
                             <div className="text-[10px] text-gray-500">{type.desc}</div>
                           </button>
@@ -314,11 +272,7 @@ export default function Home() {
                      </div>
                    </div>
 
-                   <button 
-                     onClick={generateItinerary}
-                     disabled={!selectedCity || isGenerating}
-                     className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center"
-                   >
+                   <button onClick={generateItinerary} disabled={!selectedCity || isGenerating} className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center">
                      {isGenerating ? '🔮 AI is Analyzing...' : 'Generate Itinerary ➔'}
                    </button>
                    <button onClick={() => setShowCreateModal(false)} className="w-full mt-2 text-gray-400 text-xs font-bold py-2">Cancel</button>
@@ -329,19 +283,12 @@ export default function Home() {
         )}
 
         {/* VIEW 2: DISCOVERY */}
-        {activeView === 'DISCOVERY' && (
-           <DiscoveryView onAddToTrip={addToTrip} onBack={() => setActiveView('PLAN')} initialCity={selectedCity} />
-        )}
+        {activeView === 'DISCOVERY' && <DiscoveryView onAddToTrip={addToTrip} onBack={() => setActiveView('PLAN')} initialCity={selectedCity} />}
 
         {/* VIEW 3: PLAN */}
         {activeView === 'PLAN' && (
            <div className="h-full w-full relative">
-             <iframe 
-               width="100%" height="100%" frameBorder="0" scrolling="no" 
-               src={`https://maps.google.com/maps?q=${encodeURIComponent(selectedCity || 'India')}&t=&z=13&ie=UTF8&iwloc=&output=embed`}
-               className="grayscale hover:grayscale-0 transition-all duration-700 block"
-             ></iframe>
-             
+             <iframe width="100%" height="100%" frameBorder="0" scrolling="no" src={`https://maps.google.com/maps?q=${encodeURIComponent(selectedCity || 'India')}&t=&z=13&ie=UTF8&iwloc=&output=embed`} className="grayscale hover:grayscale-0 transition-all duration-700 block"></iframe>
              {tripPlan.length === 0 && !isGenerating && (
                <div className="absolute top-24 left-1/2 transform -translate-x-1/2 bg-white px-6 py-4 rounded-2xl shadow-xl text-center">
                  <p className="font-bold text-gray-800 mb-2">No curated plan found for {selectedCity}.</p>
@@ -351,9 +298,7 @@ export default function Home() {
            </div>
         )}
 
-        {(activeView === 'TRIPS' || activeView === 'SETTINGS') && (
-           <div className="h-full flex items-center justify-center font-bold text-gray-400">Coming Soon...</div>
-        )}
+        {(activeView === 'TRIPS' || activeView === 'SETTINGS') && <div className="h-full flex items-center justify-center font-bold text-gray-400">Coming Soon...</div>}
       </main>
     </div>
   );
