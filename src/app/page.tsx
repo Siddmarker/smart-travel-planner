@@ -30,7 +30,7 @@ interface Place {
   trend_score?: number;       
   authenticity_score?: number;
   price_tier?: string;        
-  price_level?: number;       // 0-4 scale
+  price_level?: number;
   vibes?: string[];           
   best_time_tags?: string[];  
   capacity_tier?: string;     
@@ -42,19 +42,21 @@ interface Place {
 
 // DAILY TEMPLATE
 const DAILY_TEMPLATE = [
-  { id: 'MORNING', label: '🌞 Morning Exploration', types: ['park', 'religious_place', 'tourist_attraction', 'landmark', 'museum'] },
-  { id: 'LUNCH', label: '🍛 Lunch Break', types: ['restaurant', 'cafe', 'food'] },
-  { id: 'AFTERNOON', label: '🎨 Afternoon Vibe', types: ['museum', 'art_gallery', 'shopping_mall', 'tourist_attraction', 'zoo'] },
-  { id: 'EVENING', label: '🌆 Evening Chill', types: ['park', 'night_club', 'bar', 'point_of_interest', 'movie_theater'] },
-  { id: 'DINNER', label: '🍽️ Dinner Feast', types: ['restaurant', 'food', 'bar'] }
+  { id: 'MORNING', label: '🌞 Morning Exploration', types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'beach'] },
+  { id: 'LUNCH', label: '🍛 Lunch Break', types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery'] },
+  { id: 'AFTERNOON', label: '🎨 Afternoon Vibe', types: ['museum', 'gallery', 'mall', 'shopping', 'zoo', 'aquarium', 'hall', 'monument', 'market'] },
+  { id: 'EVENING', label: '🌆 Evening Chill', types: ['park', 'sunset', 'lake', 'club', 'pub', 'bar', 'theater', 'cinema', 'beach'] },
+  { id: 'DINNER', label: '🍽️ Dinner Feast', types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine'] }
 ];
 
 // MAP STYLES
 const mapContainerStyle = { width: '100%', height: '100%' };
 const pathOptions = { strokeColor: '#2563EB', strokeOpacity: 0.8, strokeWeight: 4 };
 
-// DIET KEYWORDS FOR STRICT FILTERING
-const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'non-veg', 'seafood', 'fish', 'kebab', 'biryani']; // "Biryani" is tricky, but often implies meat unless specified "Veg Biryani"
+// KEYWORDS FOR FILTERING
+const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani']; 
+// Expanded Hotel Keywords to catch everything
+const HOTEL_KEYWORDS = ['hotel', 'resort', 'inn', 'stay', 'suites', 'cottage', 'residency', 'lodge', 'grand', 'plaza', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb'];
 
 // FAKE DATA
 interface ChatMessage { id: string; user: string; text: string; time: string; isMe: boolean; }
@@ -91,7 +93,7 @@ export default function Home() {
   const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [dates, setDates] = useState({ start: '', end: '' });
-  const [budget, setBudget] = useState('MEDIUM'); // LOW, MEDIUM, HIGH
+  const [budget, setBudget] = useState('MEDIUM'); 
   const [groupType, setGroupType] = useState('FRIENDS'); 
   const [diet, setDiet] = useState('ANY'); 
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
@@ -125,48 +127,28 @@ export default function Home() {
   };
   const selectSuggestion = (name: string) => { setSelectedCity(name); setShowSuggestions(false); };
 
-  // **NEW: LIVE LOCATION HANDLER**
   const handleUseLiveLocation = () => {
-    if (!navigator.geolocation) { alert("Geolocation is not supported by your browser."); return; }
-    
-    // Show temporary loading text
-    setSelectedCity("Locating you...");
-
-    navigator.geolocation.getCurrentPosition((position) => {
-        const { latitude, longitude } = position.coords;
+    if (!navigator.geolocation) { alert("Geolocation not supported."); return; }
+    setSelectedCity("Locating...");
+    navigator.geolocation.getCurrentPosition((pos) => {
+        const { latitude, longitude } = pos.coords;
         const geocoder = new google.maps.Geocoder();
-        
-        geocoder.geocode({ location: { lat: latitude, lng: longitude } }, (results, status) => {
-            if (status === "OK" && results && results[0]) {
-                // Find the city/locality component
-                const cityComponent = results[0].address_components.find(c => c.types.includes('locality'));
-                if (cityComponent) {
-                    setSelectedCity(cityComponent.long_name);
-                    // Trigger DB search immediately
-                    handleCitySearch(cityComponent.long_name);
-                } else {
-                    alert("Could not detect city name.");
-                    setSelectedCity("");
-                }
-            } else {
-                alert("Geocoder failed.");
-                setSelectedCity("");
-            }
+        geocoder.geocode({ location: { lat: latitude, lng: longitude } }, (res, status) => {
+            if (status === "OK" && res?.[0]) {
+                const city = res[0].address_components.find(c => c.types.includes('locality'))?.long_name;
+                if (city) { setSelectedCity(city); handleCitySearch(city); }
+            } else { alert("Could not detect city."); setSelectedCity(""); }
         });
-    }, () => {
-        alert("Unable to retrieve your location.");
-        setSelectedCity("");
-    });
+    }, () => { alert("Permission denied."); setSelectedCity(""); });
   };
 
-  // --- 2. MULTI-DAY WIZARD GENERATOR ---
+  // --- 2. MULTI-DAY WIZARD ---
   const startWizard = async () => {
     let totalDays = 1;
     if (dates.start && dates.end) {
         const start = new Date(dates.start);
         const end = new Date(dates.end);
-        const diff = end.getTime() - start.getTime();
-        totalDays = Math.max(1, Math.ceil(diff / (1000 * 3600 * 24)) + 1);
+        totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
     }
 
     const fullItinerarySteps: any[] = []; 
@@ -195,56 +177,71 @@ export default function Home() {
     setIsLoadingOptions(true);
     const stepConfig = stepsList[stepIdx];
     
-    // A. FILTER CANDIDATES
+    // 1. PRIMARY FILTER
     let candidates = allPlaces.filter(p => {
-        const typeMatch = stepConfig.types.some((t: string) => (p.type || '').toLowerCase().includes(t));
-        const descMatch = stepConfig.types.some((t: string) => (p.description || '').toLowerCase().includes(t));
+        const searchStr = `${p.type} ${p.description} ${p.name} ${p.vibes?.join(' ')}`.toLowerCase();
+        const matchesType = stepConfig.types.some((t: string) => searchStr.includes(t));
         const alreadyPicked = currentTrip.some(picked => picked.id === p.id);
-        return (typeMatch || descMatch) && !alreadyPicked;
+        return matchesType && !alreadyPicked;
     });
 
-    // **NEW: STRICT DIET FILTER**
-    if (diet === 'VEG' || diet === 'VEGAN' || diet === 'JAIN') {
-        candidates = candidates.filter(p => {
-            const text = (p.name + " " + p.description).toLowerCase();
-            // If it contains "non-veg" keyword, EXCLUDE IT.
-            // Exception: "Veg Biryani" is okay, but "Biryani" usually implies meat.
-            const hasMeatKeyword = NON_VEG_KEYWORDS.some(keyword => text.includes(keyword));
-            
-            // Allow if name explicitly says "Veg" (e.g. "Pure Veg")
-            const explicitlyVeg = text.includes('pure veg') || text.includes('vegetarian');
-            
-            return !hasMeatKeyword || explicitlyVeg;
-        });
+    // 2. HELPER: Hotel Checker Function
+    const isLikelyHotel = (p: Place) => {
+        const text = (p.name + " " + (p.type || "")).toLowerCase();
+        return HOTEL_KEYWORDS.some(kw => text.includes(kw));
+    };
+
+    // 3. STRICT ANTI-HOTEL (For Activity Slots)
+    if (!stepConfig.id.includes('DINNER') && !stepConfig.id.includes('LUNCH')) {
+        // Filter out hotels from primary candidates
+        const nonHotelCandidates = candidates.filter(p => !isLikelyHotel(p));
+        // Only use the strict list if we have enough options, otherwise we might be forced to show a resort (but try not to)
+        if (nonHotelCandidates.length > 0) {
+            candidates = nonHotelCandidates;
+        }
     }
 
-    // **NEW: BUDGET FILTER**
+    // 4. DIET & BUDGET
+    if (diet !== 'ANY') {
+        candidates = candidates.filter(p => {
+            const text = (p.name + " " + p.description).toLowerCase();
+            const isNonVeg = NON_VEG_KEYWORDS.some(kw => text.includes(kw));
+            return !isNonVeg || text.includes('pure veg');
+        });
+    }
     candidates = candidates.filter(p => {
         const price = p.price_tier || (p.price_level === 0 ? 'Budget' : p.price_level === 4 ? 'Luxury' : 'Standard');
         if (budget === 'LOW') return price === 'Budget' || (p.price_level !== undefined && p.price_level <= 1);
         if (budget === 'HIGH') return price === 'Luxury' || price === 'Premium' || (p.price_level !== undefined && p.price_level >= 3);
-        return true; // Medium includes everything approx
+        return true; 
     });
 
-    // Fallback if filters killed everything
+    // 5. SMART FALLBACK (The Fix for "Stay Suggestions Only")
     if (candidates.length < 4) {
-        // Relax filters slightly for fallback (e.g. ignore budget constraint if needed)
-        const fallbackCandidates = allPlaces.filter(p => 
-            !currentTrip.some(picked => picked.id === p.id) && !candidates.some(c => c.id === p.id)
+        const remainingNeeded = 4 - candidates.length;
+        
+        // Find fallbacks but STRICTLY EXCLUDE HOTELS for activity slots
+        let fallbackCandidates = allPlaces.filter(p => 
+            !currentTrip.some(picked => picked.id === p.id) && 
+            !candidates.some(c => c.id === p.id)
         );
-        candidates = [...candidates, ...fallbackCandidates.slice(0, 4 - candidates.length)];
+
+        // Apply Anti-Hotel Logic to Fallbacks too!
+        if (!stepConfig.id.includes('DINNER') && !stepConfig.id.includes('LUNCH')) {
+             fallbackCandidates = fallbackCandidates.filter(p => !isLikelyHotel(p));
+        }
+
+        // Sort by Score
+        fallbackCandidates.sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
+        
+        // Rotate to vary results
+        const offset = stepIdx * 2; 
+        const rotatedFallbacks = fallbackCandidates.slice(offset, offset + remainingNeeded);
+        
+        candidates = [...candidates, ...rotatedFallbacks];
     }
 
-    // B. PROXIMITY
-    if (currentTrip.length > 0 && !stepConfig.id.includes('MORNING')) {
-        const lastPlace = currentTrip[currentTrip.length - 1];
-        candidates = candidates.map(p => {
-             const dist = Math.sqrt(Math.pow(p.lat - lastPlace.lat, 2) + Math.pow(p.lng - lastPlace.lng, 2));
-             return { ...p, _dist: dist };
-        }).sort((a: any, b: any) => a._dist - b._dist).slice(0, 15);
-    }
-
-    // C. SCORE
+    // 6. FINAL SCORE
     candidates = candidates.map(p => ({ ...p, aiScore: calculateRelevanceScore(p, groupType) })).sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
     setStepOptions(candidates.slice(0, 4)); 
     setIsLoadingOptions(false);
@@ -267,7 +264,6 @@ export default function Home() {
     let score = 50;
     const safety = place.safety_score || 5;
     const trend = place.trend_score || 5;
-    
     if (group === 'FRIENDS') { score += trend * 5; }
     if (group === 'FAMILY') { score += safety * 5; }
     if (diet !== 'ANY' && place.description?.toLowerCase().includes(diet.toLowerCase())) score += 30;
