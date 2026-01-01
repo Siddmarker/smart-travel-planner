@@ -132,8 +132,8 @@ export default function Home() {
         totalDays = Math.max(1, Math.ceil(diff / (1000 * 3600 * 24)) + 1);
     }
 
-    // B. Build Steps
-    const fullItinerarySteps = [];
+    // B. Build Steps (FIXED LINE BELOW)
+    const fullItinerarySteps: any[] = []; 
     for (let i = 1; i <= totalDays; i++) {
         DAILY_TEMPLATE.forEach(step => {
             fullItinerarySteps.push({
@@ -362,6 +362,7 @@ export default function Home() {
                  <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-lg relative">
                    <h3 className="font-bold text-xl text-gray-900 mb-6">Create Your Vibe</h3>
                    
+                   {/* DESTINATION */}
                    <div className="mb-4 relative">
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Destination</label>
                      <input className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold" placeholder="Search City..." value={selectedCity} onChange={(e) => handleCitySearch(e.target.value)} />
@@ -393,9 +394,8 @@ export default function Home() {
           </div>
         )}
 
-        {/* VIEW: DISCOVERY */}
         {activeView === 'DISCOVERY' && <DiscoveryView onAddToTrip={() => {}} onBack={() => setActiveView('PLAN')} initialCity={selectedCity} />}
-
+        
         {/* VIEW: PLAN (INTERACTIVE MAP) */}
         {activeView === 'PLAN' && isLoaded && (
            <div className="h-full w-full relative">
@@ -405,13 +405,10 @@ export default function Home() {
                zoom={12}
                options={{ disableDefaultUI: false, zoomControl: true }}
              >
-                {/* 1. ROUTE LINE */}
-                <Polyline 
-                  path={tripPlan.map(p => ({ lat: p.lat, lng: p.lng }))}
-                  options={pathOptions}
-                />
+                {/* ROUTE LINE */}
+                <Polyline path={tripPlan.map(p => ({ lat: p.lat, lng: p.lng }))} options={pathOptions} />
 
-                {/* 2. PLACE MARKERS */}
+                {/* MARKERS */}
                 {tripPlan.map((place, index) => (
                   <Marker 
                     key={place.id}
