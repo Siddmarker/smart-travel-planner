@@ -30,6 +30,7 @@ interface Place {
   trend_score?: number;       
   authenticity_score?: number;
   price_tier?: string;        
+  price_level?: number;       // 0-4 scale
   vibes?: string[];           
   best_time_tags?: string[];  
   capacity_tier?: string;     
@@ -51,6 +52,9 @@ const DAILY_TEMPLATE = [
 // MAP STYLES
 const mapContainerStyle = { width: '100%', height: '100%' };
 const pathOptions = { strokeColor: '#2563EB', strokeOpacity: 0.8, strokeWeight: 4 };
+
+// DIET KEYWORDS FOR STRICT FILTERING
+const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'non-veg', 'seafood', 'fish', 'kebab', 'biryani']; // "Biryani" is tricky, but often implies meat unless specified "Veg Biryani"
 
 // FAKE DATA
 interface ChatMessage { id: string; user: string; text: string; time: string; isMe: boolean; }
@@ -87,7 +91,7 @@ export default function Home() {
   const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [dates, setDates] = useState({ start: '', end: '' });
-  const [budget, setBudget] = useState('MEDIUM'); 
+  const [budget, setBudget] = useState('MEDIUM'); // LOW, MEDIUM, HIGH
   const [groupType, setGroupType] = useState('FRIENDS'); 
   const [diet, setDiet] = useState('ANY'); 
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
@@ -99,13 +103,13 @@ export default function Home() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [votingOptions, setVotingOptions] = useState<Place[]>([]);
 
-  // MAP CENTER CALCULATION
+  // MAP CENTER
   const mapCenter = useMemo(() => {
     if (tripPlan.length > 0) return { lat: tripPlan[0].lat, lng: tripPlan[0].lng };
-    return { lat: 12.9716, lng: 77.5946 }; // Default Bangalore
+    return { lat: 12.9716, lng: 77.5946 };
   }, [tripPlan]);
 
-  // --- 1. SEARCH ---
+  // --- 1. SEARCH & LOCATION ---
   const handleCitySearch = async (query: string) => {
     setSelectedCity(query);
     if (query.length < 2) { setCitySuggestions([]); setShowSuggestions(false); return; }
@@ -121,9 +125,42 @@ export default function Home() {
   };
   const selectSuggestion = (name: string) => { setSelectedCity(name); setShowSuggestions(false); };
 
+  // **NEW: LIVE LOCATION HANDLER**
+  const handleUseLiveLocation = () => {
+    if (!navigator.geolocation) { alert("Geolocation is not supported by your browser."); return; }
+    
+    // Show temporary loading text
+    setSelectedCity("Locating you...");
+
+    navigator.geolocation.getCurrentPosition((position) => {
+        const { latitude, longitude } = position.coords;
+        const geocoder = new google.maps.Geocoder();
+        
+        geocoder.geocode({ location: { lat: latitude, lng: longitude } }, (results, status) => {
+            if (status === "OK" && results && results[0]) {
+                // Find the city/locality component
+                const cityComponent = results[0].address_components.find(c => c.types.includes('locality'));
+                if (cityComponent) {
+                    setSelectedCity(cityComponent.long_name);
+                    // Trigger DB search immediately
+                    handleCitySearch(cityComponent.long_name);
+                } else {
+                    alert("Could not detect city name.");
+                    setSelectedCity("");
+                }
+            } else {
+                alert("Geocoder failed.");
+                setSelectedCity("");
+            }
+        });
+    }, () => {
+        alert("Unable to retrieve your location.");
+        setSelectedCity("");
+    });
+  };
+
   // --- 2. MULTI-DAY WIZARD GENERATOR ---
   const startWizard = async () => {
-    // A. Calculate Days
     let totalDays = 1;
     if (dates.start && dates.end) {
         const start = new Date(dates.start);
@@ -132,20 +169,14 @@ export default function Home() {
         totalDays = Math.max(1, Math.ceil(diff / (1000 * 3600 * 24)) + 1);
     }
 
-    // B. Build Steps (FIXED LINE BELOW)
     const fullItinerarySteps: any[] = []; 
     for (let i = 1; i <= totalDays; i++) {
         DAILY_TEMPLATE.forEach(step => {
-            fullItinerarySteps.push({
-                ...step,
-                day: i,
-                label: `Day ${i}: ${step.label}`
-            });
+            fullItinerarySteps.push({ ...step, day: i, label: `Day ${i}: ${step.label}` });
         });
     }
     setDynamicSteps(fullItinerarySteps);
 
-    // C. Init
     setIsWizardActive(true);
     setShowCreateModal(false);
     setIsLoadingOptions(true);
@@ -153,31 +184,18 @@ export default function Home() {
     setCurrentStepIndex(0);
 
     try {
-      console.log("Fetching all places for:", selectedCity);
-      const { data: rawPlaces } = await supabase
-        .from('places')
-        .select('*')
-        .or(`city.ilike.%${selectedCity}%,zone_id.ilike.%${selectedCity}%`);
-
-      if (!rawPlaces || rawPlaces.length === 0) {
-        alert("No data found. Try 'Bangalore'.");
-        setIsWizardActive(false);
-        return;
-      }
-
+      const { data: rawPlaces } = await supabase.from('places').select('*').or(`city.ilike.%${selectedCity}%,zone_id.ilike.%${selectedCity}%`);
+      if (!rawPlaces || rawPlaces.length === 0) { alert("No data found. Try 'Bangalore'."); setIsWizardActive(false); return; }
       setAllCityPlaces(rawPlaces); 
       generateOptionsForStep(0, rawPlaces, [], fullItinerarySteps); 
-    } catch (err) {
-      console.error(err);
-      setIsWizardActive(false);
-    }
+    } catch (err) { console.error(err); setIsWizardActive(false); }
   };
 
   const generateOptionsForStep = (stepIdx: number, allPlaces: Place[], currentTrip: Place[], stepsList = dynamicSteps) => {
     setIsLoadingOptions(true);
     const stepConfig = stepsList[stepIdx];
     
-    // A. Filter (RELAXED)
+    // A. FILTER CANDIDATES
     let candidates = allPlaces.filter(p => {
         const typeMatch = stepConfig.types.some((t: string) => (p.type || '').toLowerCase().includes(t));
         const descMatch = stepConfig.types.some((t: string) => (p.description || '').toLowerCase().includes(t));
@@ -185,19 +203,39 @@ export default function Home() {
         return (typeMatch || descMatch) && !alreadyPicked;
     });
 
-    // --- FALLBACK (Ensures 4 options) ---
-    if (candidates.length < 4) {
-        const remainingNeeded = 4 - candidates.length;
-        const fallbackCandidates = allPlaces.filter(p => 
-            !currentTrip.some(picked => picked.id === p.id) && 
-            !candidates.some(c => c.id === p.id) 
-        );
-        // Sort by popularity/score to show good stuff like Cubbon Park
-        fallbackCandidates.sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
-        candidates = [...candidates, ...fallbackCandidates.slice(0, remainingNeeded)];
+    // **NEW: STRICT DIET FILTER**
+    if (diet === 'VEG' || diet === 'VEGAN' || diet === 'JAIN') {
+        candidates = candidates.filter(p => {
+            const text = (p.name + " " + p.description).toLowerCase();
+            // If it contains "non-veg" keyword, EXCLUDE IT.
+            // Exception: "Veg Biryani" is okay, but "Biryani" usually implies meat.
+            const hasMeatKeyword = NON_VEG_KEYWORDS.some(keyword => text.includes(keyword));
+            
+            // Allow if name explicitly says "Veg" (e.g. "Pure Veg")
+            const explicitlyVeg = text.includes('pure veg') || text.includes('vegetarian');
+            
+            return !hasMeatKeyword || explicitlyVeg;
+        });
     }
 
-    // B. Proximity (If mid-day)
+    // **NEW: BUDGET FILTER**
+    candidates = candidates.filter(p => {
+        const price = p.price_tier || (p.price_level === 0 ? 'Budget' : p.price_level === 4 ? 'Luxury' : 'Standard');
+        if (budget === 'LOW') return price === 'Budget' || (p.price_level !== undefined && p.price_level <= 1);
+        if (budget === 'HIGH') return price === 'Luxury' || price === 'Premium' || (p.price_level !== undefined && p.price_level >= 3);
+        return true; // Medium includes everything approx
+    });
+
+    // Fallback if filters killed everything
+    if (candidates.length < 4) {
+        // Relax filters slightly for fallback (e.g. ignore budget constraint if needed)
+        const fallbackCandidates = allPlaces.filter(p => 
+            !currentTrip.some(picked => picked.id === p.id) && !candidates.some(c => c.id === p.id)
+        );
+        candidates = [...candidates, ...fallbackCandidates.slice(0, 4 - candidates.length)];
+    }
+
+    // B. PROXIMITY
     if (currentTrip.length > 0 && !stepConfig.id.includes('MORNING')) {
         const lastPlace = currentTrip[currentTrip.length - 1];
         candidates = candidates.map(p => {
@@ -206,18 +244,15 @@ export default function Home() {
         }).sort((a: any, b: any) => a._dist - b._dist).slice(0, 15);
     }
 
-    // C. Score
-    candidates = candidates.map(p => ({ ...p, aiScore: calculateRelevanceScore(p, groupType) }))
-                           .sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
-    
-    setStepOptions(candidates.slice(0, 4)); // Increased to 4
+    // C. SCORE
+    candidates = candidates.map(p => ({ ...p, aiScore: calculateRelevanceScore(p, groupType) })).sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
+    setStepOptions(candidates.slice(0, 4)); 
     setIsLoadingOptions(false);
   };
 
   const handleOptionSelect = (place: Place) => {
     const newTrip = [...tripPlan, place];
     setTripPlan(newTrip);
-    
     const nextStep = currentStepIndex + 1;
     if (nextStep < dynamicSteps.length) {
         setCurrentStepIndex(nextStep);
@@ -232,24 +267,18 @@ export default function Home() {
     let score = 50;
     const safety = place.safety_score || 5;
     const trend = place.trend_score || 5;
-    const vibeTags = (place.vibes || []).map(v => v.toLowerCase());
     
-    if (group === 'FRIENDS') { score += trend * 5; if(vibeTags.includes('social')) score += 20; }
-    if (group === 'FAMILY') { score += safety * 5; if(vibeTags.includes('peaceful')) score += 20; }
+    if (group === 'FRIENDS') { score += trend * 5; }
+    if (group === 'FAMILY') { score += safety * 5; }
     if (diet !== 'ANY' && place.description?.toLowerCase().includes(diet.toLowerCase())) score += 30;
-
     return score;
   };
 
-  // HANDLERS
   const handleLogout = async () => { await supabase.auth.signOut(); window.location.reload(); };
   const removeFromTrip = (id: string) => setTripPlan(tripPlan.filter(p => p.id !== id));
   const calculateDays = () => {
     if(!dates.start || !dates.end) return 1;
-    const start = new Date(dates.start);
-    const end = new Date(dates.end);
-    const diff = end.getTime() - start.getTime();
-    return Math.max(1, Math.ceil(diff / (1000 * 3600 * 24)) + 1); 
+    return Math.max(1, Math.ceil((new Date(dates.end).getTime() - new Date(dates.start).getTime()) / (1000 * 3600 * 24)) + 1); 
   };
 
   if (!session) return <LandingPage />;
@@ -274,65 +303,32 @@ export default function Home() {
       />
 
       <main className="flex-1 relative h-full flex flex-col">
-        
-        {/* HEADER */}
         <header className="absolute top-0 right-0 p-6 z-20 flex items-center gap-4">
-           {tripPlan.length > 0 && (
-             <button onClick={() => setActiveView('COLLAB' as any)} className="bg-white text-blue-600 px-4 py-2 rounded-full shadow-sm border border-blue-100 font-bold text-xs flex items-center gap-2 hover:bg-blue-50 transition-colors">
-               👥 Invite & Vote
-             </button>
-           )}
-           <div className="flex items-center gap-3 bg-white/80 backdrop-blur-md p-2 rounded-full shadow-sm border border-gray-100">
-             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">
-               {session.user.email?.[0].toUpperCase()}
-             </div>
-           </div>
+           {tripPlan.length > 0 && <button onClick={() => setActiveView('COLLAB' as any)} className="bg-white text-blue-600 px-4 py-2 rounded-full shadow-sm border border-blue-100 font-bold text-xs flex items-center gap-2 hover:bg-blue-50 transition-colors">👥 Invite & Vote</button>}
+           <div className="flex items-center gap-3 bg-white/80 backdrop-blur-md p-2 rounded-full shadow-sm border border-gray-100"><div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">{session.user.email?.[0].toUpperCase()}</div></div>
            <button onClick={handleLogout} className="bg-white text-gray-500 hover:text-red-500 p-2 rounded-full shadow-sm border border-gray-100">Sign Out</button>
         </header>
 
-        {/* --- VIEW: COLLAB HUB --- */}
         {activeView === 'COLLAB' as any && (
           <div className="h-full bg-gray-50 p-8 flex flex-col items-center pt-24">
              <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col h-[75vh]">
                 <div className="bg-white border-b border-gray-100 p-6 flex justify-between items-center">
                    <div><h2 className="text-2xl font-black text-gray-900">Travel Party Hub</h2><p className="text-sm text-gray-500">Trip to <b>{selectedCity}</b></p></div>
-                   <div className="flex bg-gray-100 p-1 rounded-xl">
-                      {(['VOTE', 'CHAT', 'SPLIT'] as const).map(tab => (
-                        <button key={tab} onClick={() => setCollabTab(tab)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${collabTab === tab ? 'bg-white shadow-sm text-black' : 'text-gray-400'}`}>{tab}</button>
-                      ))}
-                   </div>
+                   <div className="flex bg-gray-100 p-1 rounded-xl">{(['VOTE', 'CHAT', 'SPLIT'] as const).map(tab => <button key={tab} onClick={() => setCollabTab(tab)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${collabTab === tab ? 'bg-white shadow-sm text-black' : 'text-gray-400'}`}>{tab}</button>)}</div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-                   {collabTab === 'VOTE' && (
-                     <div className="space-y-4">
-                        {tripPlan.map(opt => (
-                           <div key={opt.id} className="bg-white p-4 rounded-xl shadow-sm flex items-center gap-4">
-                              <div className="w-12 h-12 bg-gray-200 rounded-lg flex-shrink-0 overflow-hidden">{opt.image && <img src={opt.image} className="w-full h-full object-cover"/>}</div>
-                              <div className="flex-1"><h4 className="font-bold text-gray-900">{opt.name}</h4></div>
-                              <button className="w-8 h-8 rounded-full border hover:bg-green-50 hover:border-green-500 flex items-center justify-center">👍</button>
-                           </div>
-                        ))}
-                     </div>
-                   )}
+                   {collabTab === 'VOTE' && <div className="space-y-4">{tripPlan.map(opt => <div key={opt.id} className="bg-white p-4 rounded-xl shadow-sm flex items-center gap-4"><div className="w-12 h-12 bg-gray-200 rounded-lg flex-shrink-0 overflow-hidden">{opt.image && <img src={opt.image} className="w-full h-full object-cover"/>}</div><div className="flex-1"><h4 className="font-bold text-gray-900">{opt.name}</h4></div><button className="w-8 h-8 rounded-full border hover:bg-green-50 hover:border-green-500 flex items-center justify-center">👍</button></div>)}</div>}
                 </div>
              </div>
           </div>
         )}
 
-        {/* --- VIEW: SELECTION WIZARD --- */}
         {isWizardActive && (
             <div className="absolute inset-0 z-30 bg-gray-50 flex flex-col items-center justify-center p-6 animate-fade-in">
                 <div className="w-full max-w-6xl">
-                    <div className="mb-6">
-                        <div className="flex justify-between text-xs font-bold text-gray-400 uppercase tracking-widest mb-2"><span>Planning Day {dynamicSteps[currentStepIndex]?.day}</span><span>Step {currentStepIndex + 1}/{dynamicSteps.length}</span></div>
-                        <div className="h-2 bg-gray-200 rounded-full"><div className="h-full bg-blue-600 transition-all duration-500" style={{ width: `${((currentStepIndex+1)/dynamicSteps.length)*100}%` }}></div></div>
-                    </div>
-                    
+                    <div className="mb-6"><div className="flex justify-between text-xs font-bold text-gray-400 uppercase tracking-widest mb-2"><span>Planning Day {dynamicSteps[currentStepIndex]?.day}</span><span>Step {currentStepIndex + 1}/{dynamicSteps.length}</span></div><div className="h-2 bg-gray-200 rounded-full"><div className="h-full bg-blue-600 transition-all duration-500" style={{ width: `${((currentStepIndex+1)/dynamicSteps.length)*100}%` }}></div></div></div>
                     <h2 className="text-3xl font-black text-gray-900 mb-2">{dynamicSteps[currentStepIndex]?.label}</h2>
-                    
-                    {isLoadingOptions ? (
-                       <div className="h-64 flex items-center justify-center font-bold text-gray-400 animate-pulse">Finding spots...</div>
-                    ) : (
+                    {isLoadingOptions ? <div className="h-64 flex items-center justify-center font-bold text-gray-400 animate-pulse">Filtering best spots...</div> : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                             {stepOptions.map((place) => (
                                 <button key={place.id} onClick={() => handleOptionSelect(place)} className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:scale-105 transition-all text-left h-72 flex flex-col relative border border-transparent hover:border-blue-500">
@@ -352,7 +348,6 @@ export default function Home() {
             </div>
         )}
 
-        {/* VIEW: DASHBOARD */}
         {activeView === 'DASHBOARD' && !isWizardActive && (
           <div className="h-full flex flex-col items-center justify-center p-8 bg-white relative">
             <h2 className="text-3xl font-black mb-6">Where to next?</h2>
@@ -362,10 +357,13 @@ export default function Home() {
                  <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-lg relative">
                    <h3 className="font-bold text-xl text-gray-900 mb-6">Create Your Vibe</h3>
                    
-                   {/* DESTINATION */}
+                   {/* DESTINATION + LIVE LOCATION */}
                    <div className="mb-4 relative">
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Destination</label>
-                     <input className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold" placeholder="Search City..." value={selectedCity} onChange={(e) => handleCitySearch(e.target.value)} />
+                     <div className="flex gap-2">
+                        <input className="flex-1 p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold" placeholder="Search City..." value={selectedCity} onChange={(e) => handleCitySearch(e.target.value)} />
+                        <button onClick={handleUseLiveLocation} className="p-3 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 hover:bg-blue-100" title="Use My Location">📍</button>
+                     </div>
                      {showSuggestions && <div className="absolute top-full w-full bg-white border border-gray-100 rounded-xl shadow-xl z-50 mt-1 max-h-40 overflow-y-auto">{citySuggestions.map((s,i)=><div key={i} onClick={()=>selectSuggestion(s)} className="p-3 hover:bg-blue-50 cursor-pointer text-sm font-bold border-b border-gray-50">📍 {s}</div>)}</div>}
                    </div>
                    
@@ -374,15 +372,25 @@ export default function Home() {
                      <div className="flex-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">End</label><input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold" onChange={e => setDates({...dates, end: e.target.value})} /></div>
                    </div>
                    
-                   {/* DIET SELECTOR */}
-                   <div className="mb-4">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Food Preference</label>
-                      <select className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold text-sm" value={diet} onChange={e => setDiet(e.target.value)}>
-                         <option value="ANY">🍽️ Any</option>
-                         <option value="VEG">🥦 Vegetarian</option>
-                         <option value="VEGAN">🥗 Vegan</option>
-                         <option value="HALAL">🍖 Halal</option>
-                      </select>
+                   {/* DIET & BUDGET ROW */}
+                   <div className="flex gap-3 mb-4">
+                        <div className="flex-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Diet</label>
+                            <select className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold text-sm" value={diet} onChange={e => setDiet(e.target.value)}>
+                                <option value="ANY">🍽️ Any</option>
+                                <option value="VEG">🥦 Vegetarian</option>
+                                <option value="VEGAN">🥗 Vegan</option>
+                                <option value="HALAL">🍖 Halal</option>
+                            </select>
+                        </div>
+                        <div className="flex-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Budget</label>
+                            <select className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold text-sm" value={budget} onChange={e => setBudget(e.target.value)}>
+                                <option value="LOW">💸 Budget (Low)</option>
+                                <option value="MEDIUM">⚖️ Standard (Med)</option>
+                                <option value="HIGH">💎 Luxury (High)</option>
+                            </select>
+                        </div>
                    </div>
 
                    <div className="mb-6"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Who is traveling?</label><div className="grid grid-cols-2 gap-2">{[{ id: 'SOLO', label: '🧍 Solo', desc: 'Hidden Gems' }, { id: 'FRIENDS', label: '👯 Friends', desc: 'Vibes & Fun' }, { id: 'FAMILY', label: '👨‍👩‍👧‍👦 Family', desc: 'Safe & Easy' }, { id: 'CORPORATE', label: '💼 Corporate', desc: 'Premium' }].map((t) => <button key={t.id} onClick={() => setGroupType(t.id)} className={`p-3 rounded-xl border text-left transition-all ${groupType === t.id ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><div className="font-bold text-xs">{t.label}</div></button>)}</div></div>
@@ -395,33 +403,14 @@ export default function Home() {
         )}
 
         {activeView === 'DISCOVERY' && <DiscoveryView onAddToTrip={() => {}} onBack={() => setActiveView('PLAN')} initialCity={selectedCity} />}
-        
-        {/* VIEW: PLAN (INTERACTIVE MAP) */}
         {activeView === 'PLAN' && isLoaded && (
            <div className="h-full w-full relative">
-             <GoogleMap 
-               mapContainerStyle={mapContainerStyle} 
-               center={mapCenter} 
-               zoom={12}
-               options={{ disableDefaultUI: false, zoomControl: true }}
-             >
-                {/* ROUTE LINE */}
+             <GoogleMap mapContainerStyle={mapContainerStyle} center={mapCenter} zoom={12} options={{ disableDefaultUI: false, zoomControl: true }}>
                 <Polyline path={tripPlan.map(p => ({ lat: p.lat, lng: p.lng }))} options={pathOptions} />
-
-                {/* MARKERS */}
-                {tripPlan.map((place, index) => (
-                  <Marker 
-                    key={place.id}
-                    position={{ lat: place.lat, lng: place.lng }}
-                    label={{ text: `${index + 1}`, color: "white", fontWeight: "bold" }}
-                    title={place.name}
-                  />
-                ))}
+                {tripPlan.map((place, index) => (<Marker key={place.id} position={{ lat: place.lat, lng: place.lng }} label={{ text: `${index + 1}`, color: "white", fontWeight: "bold" }} title={place.name} />))}
              </GoogleMap>
            </div>
         )}
-
-        {(activeView === 'TRIPS' || activeView === 'SETTINGS') && <div className="h-full flex items-center justify-center font-bold text-gray-400">Coming Soon...</div>}
       </main>
     </div>
   );
