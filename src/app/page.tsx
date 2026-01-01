@@ -10,6 +10,13 @@ import DiscoveryView from '@/components/DiscoveryView';
 
 const LIBRARIES: ("places")[] = ["places"];
 
+// --- FIX 1: INITIALIZE SUPABASE OUTSIDE THE COMPONENT ---
+// This prevents the "Multiple GoTrueClient" warning and freezing
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
+
 // TYPES
 interface Place {
   id: string;
@@ -30,31 +37,21 @@ interface Place {
   amenities?: string[];       
   aiScore?: number;
   image?: string;
-  votes?: number; // New for voting
+  votes?: number; // For Voting Feature
 }
 
-interface ChatMessage {
-  id: string;
-  user: string;
-  text: string;
-  time: string;
-  isMe: boolean;
-}
-
-interface Expense {
-  id: string;
-  who: string;
-  what: string;
-  amount: number;
-}
-
+// WIZARD CONFIG
 const TRIP_STEPS = [
-  { id: 'MORNING', label: '🌞 Morning Activity', types: ['park', 'religious_place', 'tourist_attraction', 'point_of_interest'] },
+  { id: 'MORNING', label: '🌞 Morning Activity', types: ['park', 'religious_place', 'tourist_attraction', 'museum'] },
   { id: 'LUNCH', label: '🍛 Lunch Spot', types: ['restaurant', 'cafe', 'food'] },
   { id: 'AFTERNOON', label: '🎨 Afternoon Vibe', types: ['museum', 'art_gallery', 'shopping_mall', 'tourist_attraction'] },
   { id: 'EVENING', label: '🌆 Evening Chill', types: ['park', 'night_club', 'bar', 'point_of_interest'] },
   { id: 'DINNER', label: '🍽️ Dinner', types: ['restaurant', 'food', 'bar'] }
 ];
+
+// FAKE CHAT DATA
+interface ChatMessage { id: string; user: string; text: string; time: string; isMe: boolean; }
+interface Expense { id: string; who: string; what: string; amount: number; }
 
 export default function Home() {
   const [session, setSession] = useState<any>(null);
@@ -63,13 +60,6 @@ export default function Home() {
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '',
     libraries: LIBRARIES,
   });
-
-  const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-  );
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
@@ -86,6 +76,7 @@ export default function Home() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [stepOptions, setStepOptions] = useState<Place[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  const [allCityPlaces, setAllCityPlaces] = useState<Place[]>([]);
   
   // TRIP DATA
   const [selectedCity, setSelectedCity] = useState('');
@@ -96,26 +87,19 @@ export default function Home() {
   const [groupType, setGroupType] = useState('FRIENDS'); 
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
-  // --- NEW: COLLAB HUB STATE ---
+  // COLLAB STATE
   const [collabTab, setCollabTab] = useState<'VOTE' | 'CHAT' | 'SPLIT'>('VOTE');
-  
-  // Fake Chat Data
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: '1', user: 'Alice', text: 'Hey guys! So excited for Bangalore! 🇮🇳', time: '10:00 AM', isMe: false },
-    { id: '2', user: 'Bob', text: 'I really want to try the Idli places.', time: '10:05 AM', isMe: false },
+    { id: '1', user: 'Alice', text: 'Where are we going for lunch?', time: '10:00 AM', isMe: false }
   ]);
   const [newMessage, setNewMessage] = useState('');
-
-  // Fake Expenses
   const [expenses, setExpenses] = useState<Expense[]>([
-    { id: '1', who: 'Alice', what: 'Flight Booking', amount: 15000 },
-    { id: '2', who: 'Bob', what: 'Airbnb Advance', amount: 5000 },
+    { id: '1', who: 'Alice', what: 'Flights', amount: 12000 }
   ]);
-
-  // Fake Voting Data
   const [votingOptions, setVotingOptions] = useState<Place[]>([]);
 
-  // --- SEARCH ---
+
+  // --- 1. SEARCH ---
   const handleCitySearch = async (query: string) => {
     setSelectedCity(query);
     if (query.length < 2) {
@@ -135,28 +119,58 @@ export default function Home() {
   };
   const selectSuggestion = (name: string) => { setSelectedCity(name); setShowSuggestions(false); };
 
-  // --- WIZARD LOGIC ---
+  // --- 2. WIZARD LOGIC (Fixed) ---
   const startWizard = async () => {
     setIsWizardActive(true);
     setShowCreateModal(false);
     setIsLoadingOptions(true);
     setTripPlan([]); 
     setCurrentStepIndex(0);
+
     try {
-      const { data: rawPlaces } = await supabase.from('places').select('*').or(`city.ilike.%${selectedCity}%,zone_id.ilike.%${selectedCity}%`);
-      if (!rawPlaces || rawPlaces.length === 0) { alert("No data found."); setIsWizardActive(false); return; }
+      console.log("Fetching all places for:", selectedCity);
+      const { data: rawPlaces } = await supabase
+        .from('places')
+        .select('*')
+        .or(`city.ilike.%${selectedCity}%,zone_id.ilike.%${selectedCity}%`);
+
+      if (!rawPlaces || rawPlaces.length === 0) {
+        alert("No data found. Try 'Bangalore'.");
+        setIsWizardActive(false);
+        return;
+      }
+
+      setAllCityPlaces(rawPlaces); 
+      // Generate first step
       generateOptionsForStep(0, rawPlaces, []); 
-    } catch (err) { console.error(err); setIsWizardActive(false); }
+    } catch (err) {
+      console.error(err);
+      setIsWizardActive(false);
+    }
   };
 
   const generateOptionsForStep = (stepIdx: number, allPlaces: Place[], currentTrip: Place[]) => {
     setIsLoadingOptions(true);
     const stepConfig = TRIP_STEPS[stepIdx];
+    
+    // A. Filter candidates
     let candidates = allPlaces.filter(p => {
-        const hasRightType = stepConfig.types.some(t => (p.type || '').toLowerCase().includes(t));
-        return hasRightType && !currentTrip.some(picked => picked.id === p.id);
+        // Relaxed Filter: Check if Type matches OR if description matches tags
+        const typeMatch = stepConfig.types.some(t => (p.type || '').toLowerCase().includes(t));
+        const descMatch = stepConfig.types.some(t => (p.description || '').toLowerCase().includes(t));
+        const alreadyPicked = currentTrip.some(picked => picked.id === p.id);
+        
+        return (typeMatch || descMatch) && !alreadyPicked;
     });
 
+    // --- FIX 2: FALLBACK IF 0 RESULTS ---
+    // If strict filtering failed, just grab ANY top rated place not yet picked
+    if (candidates.length === 0) {
+        console.warn(`No strict matches for ${stepConfig.label}, using generic fallback.`);
+        candidates = allPlaces.filter(p => !currentTrip.some(picked => picked.id === p.id));
+    }
+
+    // B. Proximity Logic (If mid-trip)
     if (currentTrip.length > 0) {
         const lastPlace = currentTrip[currentTrip.length - 1];
         candidates = candidates.map(p => {
@@ -165,22 +179,29 @@ export default function Home() {
         }).sort((a: any, b: any) => a._dist - b._dist).slice(0, 15);
     }
 
-    candidates = candidates.map(p => ({ ...p, aiScore: calculateRelevanceScore(p, groupType) })).sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
-    setStepOptions(candidates.slice(0, 3));
+    // C. Score & Pick Top 3
+    candidates = candidates.map(p => ({ ...p, aiScore: calculateRelevanceScore(p, groupType) }))
+                           .sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
     
-    // --- NEW: For "Voting" demo, we just copy these options to the voting state ---
-    if(stepIdx === 0) setVotingOptions(candidates.slice(0, 3).map(p => ({...p, votes: Math.floor(Math.random() * 3)}))); 
+    const finalOptions = candidates.slice(0, 3);
+    setStepOptions(finalOptions);
     
+    // Auto-populate voting options for the demo
+    if (votingOptions.length === 0 && finalOptions.length > 0) {
+        setVotingOptions(finalOptions.map(p => ({...p, votes: Math.floor(Math.random() * 3)})));
+    }
+
     setIsLoadingOptions(false);
   };
 
   const handleOptionSelect = (place: Place) => {
     const newTrip = [...tripPlan, place];
     setTripPlan(newTrip);
+    
     const nextStep = currentStepIndex + 1;
     if (nextStep < TRIP_STEPS.length) {
         setCurrentStepIndex(nextStep);
-        // In real app, we would re-fetch options here
+        generateOptionsForStep(nextStep, allCityPlaces, newTrip);
     } else {
         setIsWizardActive(false);
         setActiveView('PLAN');
@@ -194,19 +215,18 @@ export default function Home() {
     const vibeTags = (place.vibes || []).map(v => v.toLowerCase());
     if (group === 'FRIENDS') { score += trend * 5; if(vibeTags.includes('social')) score += 20; }
     if (group === 'FAMILY') { score += safety * 5; if(vibeTags.includes('peaceful')) score += 20; }
-    if (place.description) score += 5;
     return score;
   };
 
-  // --- COLLAB HANDLERS ---
+  // --- COLLAB LOGIC ---
   const handleSendMessage = () => {
     if(!newMessage.trim()) return;
-    setMessages([...messages, { id: Date.now().toString(), user: 'You', text: newMessage, time: 'Just now', isMe: true }]);
+    setMessages([...messages, { id: Date.now().toString(), user: 'You', text: newMessage, time: 'Now', isMe: true }]);
     setNewMessage('');
   };
 
   const handleVote = (id: string) => {
-    setVotingOptions(votingOptions.map(p => p.id === id ? { ...p, votes: (p.votes || 0) + 1 } : p));
+    setVotingOptions(prev => prev.map(p => p.id === id ? { ...p, votes: (p.votes || 0) + 1 } : p));
   };
 
   // HANDLERS
@@ -234,11 +254,12 @@ export default function Home() {
         travelers={groupType === 'SOLO' ? 1 : (groupType === 'FRIENDS' ? 4 : 2)}
         diet="ANY" groupType={groupType}
         onRemoveItem={removeFromTrip}
-        onAddToTrip={() => {}}
+        onAddToTrip={() => {}} 
         onResetApp={() => { if(confirm("Reset?")) window.location.reload(); }}
       />
 
       <main className="flex-1 relative h-full flex flex-col">
+        
         {/* HEADER */}
         <header className="absolute top-0 right-0 p-6 z-20 flex items-center gap-4">
            {/* COLLAB BUTTON */}
@@ -257,155 +278,117 @@ export default function Home() {
            <button onClick={handleLogout} className="bg-white text-gray-500 hover:text-red-500 p-2 rounded-full shadow-sm border border-gray-100">Sign Out</button>
         </header>
 
-        {/* --- VIEW: COLLAB HUB (NEW) --- */}
+        {/* --- VIEW: COLLAB HUB (Vote/Chat/Split) --- */}
         {activeView === 'COLLAB' as any && (
-          <div className="h-full bg-gray-50 p-8 flex flex-col items-center">
-             <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col h-[80vh]">
+          <div className="h-full bg-gray-50 p-8 flex flex-col items-center pt-24">
+             <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col h-[75vh]">
                 
-                {/* Hub Header */}
                 <div className="bg-white border-b border-gray-100 p-6 flex justify-between items-center">
                    <div>
                      <h2 className="text-2xl font-black text-gray-900">Travel Party Hub</h2>
-                     <p className="text-sm text-gray-500">Planning: <b>{selectedCity || 'Your Trip'}</b></p>
+                     <p className="text-sm text-gray-500">Trip to <b>{selectedCity || 'Bangalore'}</b></p>
                    </div>
                    <div className="flex bg-gray-100 p-1 rounded-xl">
                       {(['VOTE', 'CHAT', 'SPLIT'] as const).map(tab => (
-                        <button 
-                          key={tab}
-                          onClick={() => setCollabTab(tab)}
-                          className={`px-6 py-2 rounded-lg text-xs font-bold transition-all ${collabTab === tab ? 'bg-white shadow-sm text-black' : 'text-gray-400 hover:text-gray-600'}`}
-                        >
+                        <button key={tab} onClick={() => setCollabTab(tab)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${collabTab === tab ? 'bg-white shadow-sm text-black' : 'text-gray-400'}`}>
                           {tab === 'VOTE' && '🗳️ Voting'}
-                          {tab === 'CHAT' && '💬 Group Chat'}
-                          {tab === 'SPLIT' && '💸 Splitwise'}
+                          {tab === 'CHAT' && '💬 Chat'}
+                          {tab === 'SPLIT' && '💸 Split'}
                         </button>
                       ))}
                    </div>
                 </div>
 
-                {/* TAB CONTENT */}
                 <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-                   
-                   {/* 1. VOTING TAB */}
+                   {/* VOTING */}
                    {collabTab === 'VOTE' && (
-                     <div className="space-y-6">
-                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
-                           <p className="text-sm text-blue-800 font-bold">Invite friends to vote!</p>
-                           <button className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold">🔗 Copy Link</button>
+                     <div className="space-y-4">
+                        <div className="bg-blue-50 p-4 rounded-xl text-blue-800 text-sm font-bold flex justify-between">
+                           <span>Vote on which places to visit!</span>
+                           <button className="bg-blue-600 text-white px-3 py-1 rounded text-xs">Invite Friends</button>
                         </div>
-
-                        <h3 className="font-bold text-gray-900">Voting: Morning Activity</h3>
-                        <div className="grid gap-4">
-                           {votingOptions.length === 0 ? (
-                             <div className="text-center text-gray-400 py-10">Start the wizard to generate options first!</div>
-                           ) : votingOptions.map(option => (
-                             <div key={option.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
-                                <div className="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
-                                   {option.image ? <img src={option.image} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-gray-300"/>}
-                                </div>
-                                <div className="flex-1">
-                                   <h4 className="font-bold text-gray-900">{option.name}</h4>
-                                   <p className="text-xs text-gray-500 line-clamp-1">{option.description}</p>
-                                   
-                                   {/* Vote Bar */}
-                                   <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
-                                      <div className="h-full bg-green-500" style={{ width: `${((option.votes || 0) / 5) * 100}%` }}></div>
-                                   </div>
-                                   <p className="text-[10px] text-gray-400 mt-1">{option.votes} votes</p>
-                                </div>
-                                <button onClick={() => handleVote(option.id)} className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center hover:bg-green-50 hover:border-green-500 transition-all">
-                                   👍
-                                </button>
-                             </div>
-                           ))}
-                        </div>
+                        {votingOptions.length === 0 ? <p className="text-center text-gray-400 mt-10">Start the Trip Wizard to generate options to vote on!</p> : votingOptions.map(opt => (
+                           <div key={opt.id} className="bg-white p-4 rounded-xl shadow-sm flex items-center gap-4">
+                              <div className="w-12 h-12 bg-gray-200 rounded-lg flex-shrink-0 overflow-hidden">
+                                {opt.image && <img src={opt.image} className="w-full h-full object-cover"/>}
+                              </div>
+                              <div className="flex-1">
+                                 <h4 className="font-bold text-gray-900">{opt.name}</h4>
+                                 <div className="w-full bg-gray-100 h-1.5 rounded-full mt-2"><div className="bg-green-500 h-1.5 rounded-full transition-all" style={{width: `${(opt.votes||0)*20}%`}}></div></div>
+                              </div>
+                              <button onClick={() => handleVote(opt.id)} className="w-8 h-8 rounded-full border hover:bg-green-50 hover:border-green-500 flex items-center justify-center">👍</button>
+                              <span className="text-xs font-bold w-4">{opt.votes}</span>
+                           </div>
+                        ))}
                      </div>
                    )}
 
-                   {/* 2. CHAT TAB */}
+                   {/* CHAT */}
                    {collabTab === 'CHAT' && (
                      <div className="flex flex-col h-full">
-                        <div className="flex-1 space-y-4 mb-4">
-                           {messages.map(msg => (
-                             <div key={msg.id} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[70%] p-3 rounded-2xl text-sm ${msg.isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-gray-800 rounded-bl-none shadow-sm'}`}>
-                                   {!msg.isMe && <p className="text-[10px] font-bold opacity-50 mb-1">{msg.user}</p>}
-                                   {msg.text}
-                                   <p className={`text-[9px] mt-1 ${msg.isMe ? 'text-blue-200' : 'text-gray-400'}`}>{msg.time}</p>
-                                </div>
-                             </div>
+                        <div className="flex-1 space-y-3 mb-4">
+                           {messages.map(m => (
+                              <div key={m.id} className={`flex ${m.isMe?'justify-end':'justify-start'}`}>
+                                 <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.isMe?'bg-blue-600 text-white rounded-br-none':'bg-white shadow-sm rounded-bl-none'}`}>
+                                    <p className="opacity-80 text-[10px] font-bold mb-1">{m.user}</p>
+                                    {m.text}
+                                 </div>
+                              </div>
                            ))}
                         </div>
-                        <div className="bg-white p-2 rounded-xl border border-gray-200 flex gap-2">
-                           <input 
-                             className="flex-1 bg-transparent p-2 text-sm focus:outline-none" 
-                             placeholder="Type a message..."
-                             value={newMessage}
-                             onChange={e => setNewMessage(e.target.value)}
-                             onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                           />
-                           <button onClick={handleSendMessage} className="bg-black text-white px-4 rounded-lg font-bold text-xs">Send</button>
-                        </div>
+                        <div className="flex gap-2"><input className="flex-1 p-2 rounded-lg border text-sm" placeholder="Message..." value={newMessage} onChange={e=>setNewMessage(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSendMessage()}/><button onClick={handleSendMessage} className="bg-black text-white px-4 rounded-lg text-xs font-bold">Send</button></div>
                      </div>
                    )}
 
-                   {/* 3. SPLITWISE TAB */}
+                   {/* SPLIT */}
                    {collabTab === 'SPLIT' && (
-                     <div>
-                        <div className="bg-green-50 p-6 rounded-2xl mb-6 text-center">
-                           <p className="text-xs text-green-600 font-bold uppercase tracking-wider mb-1">Total Trip Cost</p>
-                           <h3 className="text-4xl font-black text-gray-900">₹{expenses.reduce((sum, e) => sum + e.amount, 0).toLocaleString()}</h3>
-                           <p className="text-xs text-gray-500 mt-2">You owe <b>₹2,500</b> to Bob</p>
-                        </div>
-
-                        <h4 className="font-bold text-gray-900 mb-4">Recent Expenses</h4>
-                        <div className="space-y-3">
-                           {expenses.map(expense => (
-                             <div key={expense.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
-                                <div className="flex items-center gap-3">
-                                   <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-500 text-xs">
-                                      {expense.who[0]}
-                                   </div>
-                                   <div>
-                                      <p className="font-bold text-gray-900 text-sm">{expense.what}</p>
-                                      <p className="text-xs text-gray-500">paid by {expense.who}</p>
-                                   </div>
-                                </div>
-                                <span className="font-mono font-bold text-gray-900">₹{expense.amount.toLocaleString()}</span>
-                             </div>
-                           ))}
-                        </div>
-                        
-                        <button className="w-full mt-6 bg-green-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-green-200 hover:scale-[1.02] transition-transform">
-                           + Add Expense
-                        </button>
-                     </div>
+                      <div>
+                         <div className="bg-green-100 p-6 rounded-2xl mb-6 text-center">
+                            <h3 className="text-3xl font-black text-green-900">₹{expenses.reduce((a,b)=>a+b.amount,0).toLocaleString()}</h3>
+                            <p className="text-xs font-bold text-green-700 uppercase">Total Trip Cost</p>
+                         </div>
+                         <div className="space-y-2">
+                            {expenses.map(e => (
+                               <div key={e.id} className="bg-white p-3 rounded-xl shadow-sm flex justify-between">
+                                  <span className="text-sm font-bold">{e.what} <span className="text-gray-400 font-normal">by {e.who}</span></span>
+                                  <span className="font-mono font-bold">₹{e.amount}</span>
+                               </div>
+                            ))}
+                         </div>
+                      </div>
                    )}
-
                 </div>
              </div>
           </div>
         )}
 
-        {/* VIEW: SELECTION WIZARD */}
+        {/* --- VIEW: SELECTION WIZARD --- */}
         {isWizardActive && (
             <div className="absolute inset-0 z-30 bg-gray-50 flex flex-col items-center justify-center p-6 animate-fade-in">
-                <div className="w-full max-w-4xl">
-                    <div className="mb-8">
-                        <div className="flex justify-between text-xs font-bold text-gray-400 uppercase tracking-widest mb-2"><span>Building...</span><span>Step {currentStepIndex + 1}/{TRIP_STEPS.length}</span></div>
+                <div className="w-full max-w-5xl">
+                    <div className="mb-6">
+                        <div className="flex justify-between text-xs font-bold text-gray-400 uppercase tracking-widest mb-2"><span>Planning {selectedCity}</span><span>Step {currentStepIndex + 1}/{TRIP_STEPS.length}</span></div>
                         <div className="h-2 bg-gray-200 rounded-full"><div className="h-full bg-blue-600 transition-all duration-500" style={{ width: `${((currentStepIndex+1)/TRIP_STEPS.length)*100}%` }}></div></div>
                     </div>
-                    <h2 className="text-4xl font-black text-gray-900 mb-2">{TRIP_STEPS[currentStepIndex].label}</h2>
-                    {isLoadingOptions ? <div className="h-64 flex items-center justify-center font-bold text-gray-400 animate-pulse">Finding spots...</div> : (
+                    
+                    <h2 className="text-3xl font-black text-gray-900 mb-2">{TRIP_STEPS[currentStepIndex].label}</h2>
+                    
+                    {isLoadingOptions ? (
+                       <div className="h-64 flex items-center justify-center font-bold text-gray-400 animate-pulse">Finding best spots matching your vibe...</div>
+                    ) : (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             {stepOptions.map((place) => (
-                                <button key={place.id} onClick={() => handleOptionSelect(place)} className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:scale-105 transition-all text-left h-80 flex flex-col">
-                                    <div className="h-40 bg-gray-200 w-full relative">
-                                        {place.image ? <img src={place.image} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-4xl bg-blue-50">📍</div>}
+                                <button key={place.id} onClick={() => handleOptionSelect(place)} className="group bg-white rounded-3xl shadow-xl overflow-hidden hover:scale-105 transition-all text-left h-72 flex flex-col relative border border-transparent hover:border-blue-500">
+                                    <div className="h-32 bg-gray-200 w-full relative">
+                                        {place.image ? <img src={place.image} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-4xl bg-gradient-to-br from-blue-50 to-purple-50">📍</div>}
+                                        <div className="absolute top-2 right-2 bg-white/90 backdrop-blur px-2 py-1 rounded text-[10px] font-bold">⭐ {place.aiScore?.toFixed(0)}% Match</div>
                                     </div>
-                                    <div className="p-6 flex-1 flex flex-col">
-                                        <h3 className="font-bold text-xl text-gray-900 mb-1 group-hover:text-blue-600">{place.name}</h3>
-                                        <p className="text-sm text-gray-500 line-clamp-2">{place.description}</p>
+                                    <div className="p-5 flex-1 flex flex-col">
+                                        <h3 className="font-bold text-lg text-gray-900 mb-1 leading-tight">{place.name}</h3>
+                                        <p className="text-xs text-gray-500 line-clamp-2 mb-2">{place.description || place.type}</p>
+                                        <div className="mt-auto flex gap-1 flex-wrap">
+                                           {place.vibes?.slice(0,2).map((v,i) => <span key={i} className="text-[9px] bg-gray-100 px-1.5 py-0.5 rounded uppercase font-bold text-gray-600">{v}</span>)}
+                                        </div>
                                     </div>
                                 </button>
                             ))}
