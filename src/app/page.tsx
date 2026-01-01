@@ -10,27 +10,33 @@ import DiscoveryView from '@/components/DiscoveryView';
 
 const LIBRARIES: ("places")[] = ["places"];
 
-// TYPES
+// 1. INTERFACE (Matches your Supabase Structure)
 interface Place {
   id: string;
   name: string;
   lat: number;
   lng: number;
   type: string;
-  rating?: number;
-  user_ratings_total?: number;
-  price_level?: number; 
-  types?: string[];     
   description?: string; 
-  image?: string;
-  aiScore?: number;     
-  zone_id?: string; // Added for type safety
+  
+  // Custom Columns
+  zone_id?: string;
+  city?: string;
+  safety_score?: number;      
+  trend_score?: number;       
+  authenticity_score?: number;
+  price_tier?: string;        
+  vibes?: string[];           
+  best_time_tags?: string[];  
+  capacity_tier?: string;     
+  amenities?: string[];       
+  
+  aiScore?: number;
 }
 
 export default function Home() {
   const [session, setSession] = useState<any>(null);
   
-  // 1. Google Maps Hook
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '',
     libraries: LIBRARIES,
@@ -38,7 +44,6 @@ export default function Home() {
 
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
 
-  // 2. Supabase Client
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -47,16 +52,9 @@ export default function Home() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
-    
-    if (isLoaded && !placesServiceRef.current) {
-        const hiddenDiv = document.createElement('div');
-        placesServiceRef.current = new google.maps.places.PlacesService(hiddenDiv);
-    }
-
     return () => subscription.unsubscribe();
-  }, [isLoaded]);
+  }, []);
 
-  // APP STATE
   const [activeView, setActiveView] = useState<NavView>('DASHBOARD');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -71,49 +69,42 @@ export default function Home() {
   const [groupType, setGroupType] = useState('FRIENDS'); 
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
-  // --- 1. SMART SEARCH (Targeting zone_id) ---
+  // --- 1. STRICT "AREA & CITY" SEARCH (No Venues) ---
   const handleCitySearch = async (query: string) => {
     setSelectedCity(query);
     
-    if (query.length < 3) {
+    if (query.length < 2) { // Allow searching with 2 letters
       setCitySuggestions([]);
       setShowSuggestions(false);
       return;
     }
 
     try {
-      console.log("🔍 Searching DB for:", query);
-
-      // CHANGED: Query 'zone_id' column
+      // FIX: ONLY select city and zone_id. Do NOT select 'name'.
       const { data, error } = await supabase
         .from('places')
-        .select('zone_id') 
-        .ilike('zone_id', `%${query}%`)
+        .select('city, zone_id') // <--- This filters out venue names
+        .or(`city.ilike.%${query}%,zone_id.ilike.%${query}%`)
         .limit(20);
 
-      if (error) {
-        console.error("❌ DB Error:", error.message);
-        throw error;
-      }
-
-      console.log("✅ DB Result:", data);
+      if (error) throw error;
 
       if (data && data.length > 0) {
-        // Remove Duplicates (case-insensitive cleanup)
-        const uniqueCities = Array.from(new Set(
-          data
-            .map((p: any) => p.zone_id) 
-            .filter((c: any) => c) // Remove nulls
+        // Collect matches from City and Zone columns only
+        const raw = data.flatMap(p => [p.city, p.zone_id]);
+        
+        // Remove nulls, duplicates, and empty strings
+        const unique = Array.from(new Set(
+          raw.filter(s => s && typeof s === 'string' && s.length > 1)
         ));
-
-        setCitySuggestions(uniqueCities as string[]);
-        setShowSuggestions(uniqueCities.length > 0);
+        
+        setCitySuggestions(unique as string[]);
+        setShowSuggestions(unique.length > 0);
       } else {
         setShowSuggestions(false);
       }
     } catch (err) {
       console.warn("Search warning:", err);
-      setShowSuggestions(false);
     }
   };
 
@@ -122,127 +113,81 @@ export default function Home() {
     setShowSuggestions(false);
   };
 
-  // --- 2. GEN 3.0 ALGORITHM ---
+  // --- 2. ALGORITHM (Using Your DB Columns) ---
   const calculateRelevanceScore = (place: Place, group: string) => {
     try {
-      let score = 0;
-      const rating = place.rating || 3.0;
-      const reviews = place.user_ratings_total || 10;
-      const price = place.price_level || 2; 
-      const tags = (place.types || []).join(' ').toLowerCase();
-      const desc = (place.description || '').toLowerCase();
+      let score = 50; 
 
-      const confidence = Math.max(1, Math.log10(reviews));
-      let baseScore = (rating * confidence) / (price === 0 ? 1 : price);
-
-      if (price <= 1 && (desc.includes('authentic') || desc.includes('best') || desc.includes('queue'))) {
-         baseScore *= 1.5; 
-      }
-      score = baseScore;
-
+      // Data extraction with defaults
+      const safety = place.safety_score || 5;
+      const trend = place.trend_score || 5;
+      const authentic = place.authenticity_score || 5;
+      const vibeTags = (place.vibes || []).map(v => v.toLowerCase());
+      
       switch (group) {
         case 'SOLO': 
-          if (reviews < 500 && rating > 4.5) score *= 2.0;
-          if (tags.includes('hostel') || tags.includes('cafe') || tags.includes('bar')) score *= 1.3;
+          score += authentic * 3; // Prioritize Authenticity
+          if (vibeTags.includes('peaceful') || vibeTags.includes('cultural')) score += 20;
           break;
+
         case 'FRIENDS': 
-          if (tags.includes('night_club') || tags.includes('bar') || desc.includes('lively')) score *= 1.4;
-          if (reviews < 50) score *= 0.5;
+          score += trend * 3; // Prioritize Trend
+          if (vibeTags.includes('nightlife') || vibeTags.includes('party')) score += 20;
           break;
+
         case 'FAMILY': 
-          if (tags.includes('night_club') || tags.includes('bar')) score = 0;
-          if (desc.includes('parking') || desc.includes('kid') || desc.includes('family')) score *= 2.0;
+          score += safety * 4; // Prioritize Safety
+          if (safety < 7) score -= 50; 
           break;
+
         case 'CORPORATE': 
-          if (reviews < 200) score *= 0.2; 
-          if (price >= 3) score *= 1.5; 
+          if (place.capacity_tier === 'High') score += 20;
+          if (place.price_tier === 'Luxury') score += 15;
           break;
       }
-      return score;
-    } catch (e) { return 0; }
+
+      if (place.description && place.description.length > 10) score += 5;
+      return Math.max(1, score);
+    } catch (e) { return 10; } 
   };
 
-  // --- 3. HYBRID GENERATOR (Supabase -> Google) ---
+  // --- 3. ITINERARY GENERATOR ---
   const generateItinerary = async () => {
     setIsGenerating(true);
     setShowCreateModal(false);
     
-    let currentLoc = { lat: 0, lng: 0 };
-    const itinerary: Place[] = [];
+    let itinerary: Place[] = [];
     const usedIds: string[] = [];
 
     try {
-      console.log("Generating plan for:", selectedCity);
+      console.log("Fetching plan for:", selectedCity);
 
-      // CHANGED: Include zone_id in the search
+      // Search matches in City OR Zone_id (Broad search based on user selection)
       const { data: rawPlaces } = await supabase
         .from('places') 
         .select('*')
-        .or(`zone_id.ilike.%${selectedCity}%,description.ilike.%${selectedCity}%,name.ilike.%${selectedCity}%`);
+        .or(`city.ilike.%${selectedCity}%,zone_id.ilike.%${selectedCity}%`);
 
-      if (rawPlaces && rawPlaces.length > 0) {
-          console.log(`Found ${rawPlaces.length} curated places.`);
-          currentLoc = { lat: rawPlaces[0].lat, lng: rawPlaces[0].lng };
-          
-          const scoredPlaces = rawPlaces.map(p => ({ ...p, aiScore: calculateRelevanceScore(p, groupType) }));
-          scoredPlaces.sort((a, b) => b.aiScore - a.aiScore);
+      if (!rawPlaces || rawPlaces.length === 0) {
+          alert(`No places found for "${selectedCity}".`);
+          setIsGenerating(false);
+          return;
+      }
 
-          const slots = [
-            { name: 'Morning', types: ['tourist_attraction', 'religious_place', 'park'] },
-            { name: 'Lunch', types: ['restaurant', 'cafe', 'food'] },
-            { name: 'Afternoon', types: ['museum', 'art_gallery', 'tourist_attraction'] },
-            { name: 'Evening', types: ['shopping_mall', 'point_of_interest', 'park'] },
-            { name: 'Dinner', types: ['restaurant', 'bar', 'food'] }
-          ];
+      // Score
+      const scoredPlaces = rawPlaces.map(p => ({ 
+        ...p, 
+        aiScore: calculateRelevanceScore(p, groupType) 
+      }));
+      scoredPlaces.sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
 
-          for (const slot of slots) {
-            const candidates = scoredPlaces.filter(p => 
-              !usedIds.includes(p.id) && p.aiScore > 0 && slot.types.some(t => (p.type || '').includes(t))
-            );
-            if (candidates.length > 0) {
-              const winner = candidates[0]; 
-              itinerary.push(winner);
-              usedIds.push(winner.id);
-            }
-          }
-      } else {
-          // GOOGLE FALLBACK
-          console.log("No curated data. Switching to Live Google Search...");
-          
-          if (!placesServiceRef.current) throw new Error("Google Maps not loaded yet");
-
-          const request = {
-            query: `Top tourist attractions in ${selectedCity}`,
-            fields: ['place_id', 'name', 'formatted_address', 'geometry', 'photos', 'rating', 'user_ratings_total', 'types', 'price_level']
-          };
-
-          const googleResults = await new Promise<any[]>((resolve) => {
-             placesServiceRef.current?.textSearch(request, (results, status) => {
-                if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-                   resolve(results);
-                } else {
-                   resolve([]);
-                }
-             });
-          });
-
-          if (googleResults.length === 0) throw new Error("Google found nothing either.");
-
-          const formatted = googleResults.slice(0, 5).map(p => ({
-            id: p.place_id,
-            name: p.name,
-            lat: p.geometry.location.lat(),
-            lng: p.geometry.location.lng(),
-            type: p.types?.[0] || 'tourist_attraction',
-            rating: p.rating,
-            user_ratings_total: p.user_ratings_total,
-            price_level: p.price_level,
-            types: p.types,
-            description: p.formatted_address,
-            image: p.photos?.[0]?.getUrl()
-          }));
-
-          itinerary.push(...formatted);
+      // Select Top 5 Unique
+      for (const place of scoredPlaces) {
+         if (!usedIds.includes(place.id)) {
+            itinerary.push(place);
+            usedIds.push(place.id);
+         }
+         if (itinerary.length >= 5) break;
       }
 
       setTripPlan(itinerary);
@@ -250,10 +195,9 @@ export default function Home() {
       setActiveView('PLAN'); 
 
     } catch (err: any) {
-      console.error("AI FAIL:", err);
-      alert("Could not generate a plan. Please try manually.");
+      console.error("Generator Error:", err);
+      alert("Error generating plan.");
       setIsGenerating(false);
-      setActiveView('DISCOVERY');
     }
   };
 
@@ -339,13 +283,12 @@ export default function Home() {
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Destination</label>
                      <input 
                        className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                       placeholder="Search database (e.g. Bang...)" 
+                       placeholder="Search Area or City (e.g. Indiranagar)" 
                        value={selectedCity} 
                        onChange={(e) => handleCitySearch(e.target.value)}
                        autoComplete="off"
                      />
                      
-                     {/* Smart Dropdown */}
                      {showSuggestions && (
                        <div className="absolute top-full left-0 w-full bg-white border border-gray-100 rounded-xl shadow-xl z-50 mt-1 max-h-40 overflow-y-auto">
                          {citySuggestions.map((suggestion, index) => (
