@@ -22,6 +22,8 @@ interface DiscoveryViewProps {
 const CATEGORIES = [
   { id: 'tourist_attraction', label: '🎡 Attractions' },
   { id: 'trending', label: '🔥 Trending' },
+  { id: 'iconic', label: '💎 Legendary Spots' }, // NEW: For "Famous" spots
+  { id: 'late_night', label: '🌙 Late Night / 4AM' }, // NEW: For 4am Biryani
   { id: 'restaurant', label: '🍽️ Restaurants' },
   { id: 'cafe', label: '☕ Cafes' },
   { id: 'lodging', label: '🏨 Hotels & Stays' },
@@ -38,7 +40,7 @@ const STAY_TYPES = [
   { value: 'resort', label: '🌴 Resort' },
   { value: 'villa', label: '🏡 Villa' },
   { value: 'homestay', label: '🏠 Homestay' },
-  { value: 'hostel', label: '🎒 Hostel / Dorm' }, // Single person living
+  { value: 'hostel', label: '🎒 Hostel / Dorm' },
   { value: 'apartment', label: '🏢 Apartment' }
 ];
 
@@ -93,15 +95,22 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
 
     let query = '';
 
-    // 1. BASE QUERY
-    if (category === 'trending') query = `popular places in ${city}`;
-    else if (category === 'off_roading') query = `off road biking trails in ${city}`;
-    else if (category === 'turf') query = `sports turf cricket football in ${city}`;
-    else if (category === 'amusement_park') query = `amusement park in ${city}`;
-    else query = `${category.replace('_', ' ')} in ${city}`;
+    // 1. BASE QUERY MAPPING
+    switch (category) {
+      case 'trending': query = `popular places in ${city}`; break;
+      case 'off_roading': query = `off road biking trails in ${city}`; break;
+      case 'turf': query = `sports turf cricket football in ${city}`; break;
+      case 'amusement_park': query = `amusement park in ${city}`; break;
+
+      // --- NEW CATEGORIES ---
+      case 'iconic': query = `legendary famous old restaurants in ${city}`; break; // Finds "Cult Classics"
+      case 'late_night': query = `late night food early morning biryani in ${city}`; break; // Finds "4am Biryani"
+
+      default: query = `${category.replace('_', ' ')} in ${city}`; break;
+    }
 
     // 2. APPLY FOOD FILTERS (Only for Food Categories)
-    if (['restaurant', 'cafe', 'trending'].includes(category)) {
+    if (['restaurant', 'cafe', 'trending', 'iconic', 'late_night'].includes(category)) {
       if (diet === 'VEG') query += ' pure vegetarian';
       if (diet === 'JAIN') query += ' jain food';
       if (diet === 'HALAL') query += ' halal';
@@ -111,14 +120,8 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
 
     // 3. APPLY STAY FILTERS (Only for Lodging)
     if (category === 'lodging') {
-      // Override 'lodging' with specific type if selected
-      if (stayType !== 'ANY') {
-        query = `${stayType} in ${city}`;
-      }
-      // Add budget keywords
-      if (budget !== 'ANY') {
-        query += ` ${budget}`;
-      }
+      if (stayType !== 'ANY') query = `${stayType} in ${city}`;
+      if (budget !== 'ANY') query += ` ${budget}`;
     }
 
     const request = {
@@ -215,7 +218,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
           <div className="md:col-span-5 flex gap-2">
 
             {/* 1. RESTAURANT FILTERS */}
-            {(activeCategory === 'restaurant' || activeCategory === 'cafe') && (
+            {(['restaurant', 'cafe', 'iconic', 'late_night', 'trending'].includes(activeCategory)) && (
               <select className="w-full p-2.5 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none cursor-pointer" value={diet} onChange={(e) => { setDiet(e.target.value); performSearch(currentCity, activeCategory); }}>
                 <option value="ANY">🍽️ Any Diet</option>
                 <option value="VEG">🥦 Vegetarian</option>
@@ -239,8 +242,8 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
               </>
             )}
 
-            {/* 3. DEFAULT (Empty placeholder if no specific filters) */}
-            {!['restaurant', 'cafe', 'lodging'].includes(activeCategory) && (
+            {/* 3. DEFAULT */}
+            {!['restaurant', 'cafe', 'lodging', 'iconic', 'late_night', 'trending'].includes(activeCategory) && (
               <div className="w-full text-xs text-gray-400 flex items-center justify-center italic">No extra filters</div>
             )}
           </div>
