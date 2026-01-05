@@ -19,10 +19,15 @@ interface DiscoveryViewProps {
   initialCity: string;
 }
 
+// EXPANDED CATEGORIES LIST
 const CATEGORIES = [
   { id: 'tourist_attraction', label: '🎡 Attractions' },
+  { id: 'trending', label: '🔥 Trending' },
   { id: 'restaurant', label: '🍽️ Restaurants' },
   { id: 'cafe', label: '☕ Cafes' },
+  { id: 'amusement_park', label: '🎢 Theme Parks' },
+  { id: 'off_roading', label: '🏍️ Off-Roading' },
+  { id: 'turf', label: '⚽ Turfs' },
   { id: 'shopping_mall', label: '🛍️ Shopping' },
   { id: 'lodging', label: '🏨 Hotels' },
   { id: 'park', label: '🌳 Parks' }
@@ -32,8 +37,8 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   // SEARCH STATE
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('tourist_attraction');
-  const [radius, setRadius] = useState(5000); // Default 5km
-  const [diet, setDiet] = useState('ANY'); // ANY, VEG, NON_VEG
+  const [radius, setRadius] = useState(5000); // Default 5000m (5km)
+  const [diet, setDiet] = useState('ANY');
 
   // RESULTS STATE
   const [results, setResults] = useState<Place[]>([]);
@@ -41,12 +46,10 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   const serviceRef = useRef<google.maps.places.PlacesService | null>(null);
 
   useEffect(() => {
-    // Initialize Service
     if (typeof window !== 'undefined' && window.google && !serviceRef.current) {
       const mapDiv = document.createElement('div');
       serviceRef.current = new window.google.maps.places.PlacesService(mapDiv);
     }
-    // Auto-search on load
     if (initialCity) {
       performSearch(initialCity, activeCategory, radius);
     }
@@ -57,13 +60,27 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
     if (!serviceRef.current) return;
     setLoading(true);
 
-    // Build Query
-    let query = searchTerm
-      ? `${searchTerm} in ${city}`
-      : `${category.replace('_', ' ')} in ${city}`;
+    // 1. Build Query based on Category
+    let query = searchTerm ? `${searchTerm} in ${city}` : '';
 
-    // Add Diet Context to Query if needed
-    if (category === 'restaurant' && diet === 'VEG') query += ' vegetarian';
+    if (!searchTerm) {
+      switch (category) {
+        case 'trending': query = `popular places in ${city}`; break;
+        case 'off_roading': query = `off road biking trails in ${city}`; break;
+        case 'turf': query = `sports turf cricket football in ${city}`; break;
+        case 'amusement_park': query = `amusement park in ${city}`; break;
+        default: query = `${category.replace('_', ' ')} in ${city}`; break;
+      }
+    }
+
+    // 2. Append Diet Keywords
+    if (['restaurant', 'cafe', 'trending'].includes(category) || searchTerm) {
+      if (diet === 'VEG') query += ' pure vegetarian';
+      if (diet === 'JAIN') query += ' jain food';
+      if (diet === 'HALAL') query += ' halal';
+      if (diet === 'EGG') query += ' eggetarian';
+      if (diet === 'VEGAN') query += ' vegan';
+    }
 
     const request = {
       query: query,
@@ -83,7 +100,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   // --- HANDLERS ---
   const handleCategoryChange = (catId: string) => {
     setActiveCategory(catId);
-    setSearchTerm(''); // Clear manual search when switching categories
+    setSearchTerm('');
     performSearch(initialCity, catId, radius);
   };
 
@@ -128,25 +145,26 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
             <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
           </form>
 
-          {/* Radius Slider */}
-          <div className="flex flex-col justify-center">
-            <div className="flex justify-between text-[10px] font-bold text-gray-500 mb-1">
-              <span>Radius</span>
-              <span>{(radius / 1000).toFixed(1)} km</span>
-            </div>
+          {/* Radius Input (Number) */}
+          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5">
+            <span className="text-[10px] text-gray-500 font-bold uppercase whitespace-nowrap">Radius (km):</span>
             <input
-              type="range" min="1000" max="20000" step="1000"
-              value={radius}
+              type="number"
+              min="1"
+              max="100"
+              value={radius / 1000} // Display in KM
               onChange={(e) => {
-                setRadius(Number(e.target.value));
-                // Debounce search could be added here, but for now trigger on change
-                performSearch(initialCity, activeCategory, Number(e.target.value));
+                const km = Number(e.target.value);
+                if (km >= 0) {
+                  setRadius(km * 1000); // Store in Meters
+                  performSearch(initialCity, activeCategory, km * 1000);
+                }
               }}
-              className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black"
+              className="w-full bg-transparent text-sm font-bold focus:outline-none text-gray-900"
             />
           </div>
 
-          {/* Diet Filter */}
+          {/* Diet Filter (Expanded) */}
           <div>
             <select
               className="w-full p-2.5 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none cursor-pointer"
@@ -158,20 +176,24 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
             >
               <option value="ANY">🍽️ Any Diet</option>
               <option value="VEG">🥦 Vegetarian</option>
+              <option value="EGG">🍳 Eggetarian</option>
               <option value="NON_VEG">🍗 Non-Veg</option>
+              <option value="JAIN">🌿 Jain</option>
+              <option value="HALAL">🍖 Halal</option>
+              <option value="VEGAN">🥗 Vegan</option>
             </select>
           </div>
         </div>
 
-        {/* Bottom Row: Categories */}
+        {/* Bottom Row: Categories (Scrollable) */}
         <div className="px-6 pb-4 flex gap-2 overflow-x-auto no-scrollbar">
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
               onClick={() => handleCategoryChange(cat.id)}
               className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${activeCategory === cat.id
-                ? 'bg-black text-white border-black shadow-md'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400 hover:bg-gray-50'
+                  ? 'bg-black text-white border-black shadow-md'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400 hover:bg-gray-50'
                 }`}
             >
               {cat.label}
