@@ -37,25 +37,34 @@ interface Place {
   amenities?: string[];       
   aiScore?: number;
   image?: string;
-  votes?: number; 
+  votes?: number;
+  distanceFromLast?: string;
 }
+
+// VIBE TAGS
+const TRIP_VIBES = [
+  { id: 'leisure', label: '🌴 Relaxing', keywords: ['resort', 'park', 'spa', 'lake'] },
+  { id: 'foodie', label: '🍕 Food & Nightlife', keywords: ['restaurant', 'cafe', 'late_night', 'pub', 'bar'] },
+  { id: 'heritage', label: '🏰 Heritage & Culture', keywords: ['temple', 'museum', 'fort', 'iconic', 'landmark'] },
+  { id: 'adventure', label: '🏍️ Biking & Adventure', keywords: ['off_roading', 'amusement_park', 'turf', 'trek'] },
+  { id: 'shopping', label: '🛍️ Shopping', keywords: ['mall', 'market', 'shopping'] }
+];
 
 // DAILY TEMPLATE
 const DAILY_TEMPLATE = [
-  { id: 'MORNING', label: '🌞 Morning Exploration', types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'beach'] },
-  { id: 'LUNCH', label: '🍛 Lunch Break', types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery'] },
-  { id: 'AFTERNOON', label: '🎨 Afternoon Vibe', types: ['museum', 'gallery', 'mall', 'shopping', 'zoo', 'aquarium', 'hall', 'monument', 'market'] },
-  { id: 'EVENING', label: '🌆 Evening Chill', types: ['park', 'sunset', 'lake', 'club', 'pub', 'bar', 'theater', 'cinema', 'beach'] },
-  { id: 'DINNER', label: '🍽️ Dinner Feast', types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine'] }
+  { id: 'MORNING', label: '🌞 Morning Exploration', types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'off_roading'] },
+  { id: 'LUNCH', label: '🍛 Lunch Break', types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic'] },
+  { id: 'AFTERNOON', label: '🎨 Afternoon Vibe', types: ['museum', 'gallery', 'mall', 'shopping', 'zoo', 'aquarium', 'hall', 'monument', 'market', 'amusement_park'] },
+  { id: 'EVENING', label: '🌆 Evening Chill', types: ['park', 'sunset', 'lake', 'club', 'pub', 'bar', 'theater', 'cinema', 'beach', 'turf'] },
+  { id: 'DINNER', label: '🍽️ Dinner Feast', types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine', 'late_night'] }
 ];
 
 // MAP STYLES
 const mapContainerStyle = { width: '100%', height: '100%' };
 const pathOptions = { strokeColor: '#2563EB', strokeOpacity: 0.8, strokeWeight: 4 };
 
-// KEYWORDS FOR FILTERING
+// KEYWORDS
 const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani']; 
-// Expanded Hotel Keywords to catch everything
 const HOTEL_KEYWORDS = ['hotel', 'resort', 'inn', 'stay', 'suites', 'cottage', 'residency', 'lodge', 'grand', 'plaza', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb'];
 
 // FAKE DATA
@@ -87,15 +96,19 @@ export default function Home() {
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
   const [allCityPlaces, setAllCityPlaces] = useState<Place[]>([]);
   const [dynamicSteps, setDynamicSteps] = useState<any[]>([]);
+  const [startCoords, setStartCoords] = useState<{lat: number, lng: number} | null>(null);
   
   // TRIP DATA
   const [selectedCity, setSelectedCity] = useState('');
+  const [startLocation, setStartLocation] = useState(''); 
+  const [showStartHelp, setShowStartHelp] = useState(false); 
   const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [dates, setDates] = useState({ start: '', end: '' });
   const [budget, setBudget] = useState('MEDIUM'); 
   const [groupType, setGroupType] = useState('FRIENDS'); 
   const [diet, setDiet] = useState('ANY'); 
+  const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
   // COLLAB STATE
@@ -110,6 +123,16 @@ export default function Home() {
     if (tripPlan.length > 0) return { lat: tripPlan[0].lat, lng: tripPlan[0].lng };
     return { lat: 12.9716, lng: 77.5946 };
   }, [tripPlan]);
+
+  // --- NEW: NAVIGATION HANDLER (Fixes the Stuck Wizard Issue) ---
+  const handleViewChange = (view: NavView) => {
+    setActiveView(view);
+    // If going to Dashboard, Force Close Wizard
+    if (view === 'DASHBOARD') {
+        setIsWizardActive(false);
+        setShowCreateModal(false);
+    }
+  };
 
   // --- 1. SEARCH & LOCATION ---
   const handleCitySearch = async (query: string) => {
@@ -142,7 +165,28 @@ export default function Home() {
     }, () => { alert("Permission denied."); setSelectedCity(""); });
   };
 
-  // --- 2. MULTI-DAY WIZARD ---
+  const toggleVibe = (vibeId: string) => {
+    if (selectedVibes.includes(vibeId)) {
+        setSelectedVibes(selectedVibes.filter(id => id !== vibeId));
+    } else {
+        setSelectedVibes([...selectedVibes, vibeId]);
+    }
+  };
+
+  // --- 2. GEOCODE HELPER ---
+  const getGeocode = (address: string): Promise<{lat: number, lng: number} | null> => {
+    return new Promise((resolve) => {
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ address }, (results, status) => {
+        if (status === 'OK' && results?.[0]) {
+          const loc = results[0].geometry.location;
+          resolve({ lat: loc.lat(), lng: loc.lng() });
+        } else resolve(null);
+      });
+    });
+  };
+
+  // --- 3. MULTI-DAY WIZARD ---
   const startWizard = async () => {
     let totalDays = 1;
     if (dates.start && dates.end) {
@@ -159,6 +203,13 @@ export default function Home() {
     }
     setDynamicSteps(fullItinerarySteps);
 
+    // GEOCODE START LOCATION
+    let initialCoords = null;
+    if (startLocation) {
+        initialCoords = await getGeocode(startLocation);
+        setStartCoords(initialCoords);
+    }
+
     setIsWizardActive(true);
     setShowCreateModal(false);
     setIsLoadingOptions(true);
@@ -169,46 +220,59 @@ export default function Home() {
       const { data: rawPlaces } = await supabase.from('places').select('*').or(`city.ilike.%${selectedCity}%,zone_id.ilike.%${selectedCity}%`);
       if (!rawPlaces || rawPlaces.length === 0) { alert("No data found. Try 'Bangalore'."); setIsWizardActive(false); return; }
       setAllCityPlaces(rawPlaces); 
-      generateOptionsForStep(0, rawPlaces, [], fullItinerarySteps); 
+      // Pass initialCoords to generator
+      generateOptionsForStep(0, rawPlaces, [], fullItinerarySteps, initialCoords); 
     } catch (err) { console.error(err); setIsWizardActive(false); }
   };
 
-  const generateOptionsForStep = (stepIdx: number, allPlaces: Place[], currentTrip: Place[], stepsList = dynamicSteps) => {
+  const generateOptionsForStep = (
+      stepIdx: number, 
+      allPlaces: Place[], 
+      currentTrip: Place[], 
+      stepsList = dynamicSteps, 
+      initialCoords: {lat: number, lng: number} | null = startCoords
+  ) => {
     setIsLoadingOptions(true);
     const stepConfig = stepsList[stepIdx];
     
-    // 1. PRIMARY FILTER
+    // Determine Reference Point
+    let referencePoint = null;
+    if (currentTrip.length > 0) {
+        const last = currentTrip[currentTrip.length - 1];
+        referencePoint = { lat: last.lat, lng: last.lng };
+    } else if (initialCoords && stepIdx === 0) {
+        referencePoint = initialCoords;
+    }
+
+    // 1. FILTER CANDIDATES
     let candidates = allPlaces.filter(p => {
         const searchStr = `${p.type} ${p.description} ${p.name} ${p.vibes?.join(' ')}`.toLowerCase();
-        const matchesType = stepConfig.types.some((t: string) => searchStr.includes(t));
+        let matchesType = stepConfig.types.some((t: string) => searchStr.includes(t));
+        if (selectedVibes.length > 0) {
+            const vibeKeywords = selectedVibes.flatMap(vid => TRIP_VIBES.find(v => v.id === vid)?.keywords || []);
+            if (vibeKeywords.some(k => searchStr.includes(k))) matchesType = true;
+        }
         const alreadyPicked = currentTrip.some(picked => picked.id === p.id);
         return matchesType && !alreadyPicked;
     });
 
-    // 2. HELPER: Hotel Checker Function
-    const isLikelyHotel = (p: Place) => {
-        const text = (p.name + " " + (p.type || "")).toLowerCase();
-        return HOTEL_KEYWORDS.some(kw => text.includes(kw));
-    };
-
-    // 3. STRICT ANTI-HOTEL (For Activity Slots)
+    // 2. ANTI-HOTEL
     if (!stepConfig.id.includes('DINNER') && !stepConfig.id.includes('LUNCH')) {
-        // Filter out hotels from primary candidates
+        const isLikelyHotel = (p: Place) => HOTEL_KEYWORDS.some(kw => (p.name + " " + (p.type || "")).toLowerCase().includes(kw));
         const nonHotelCandidates = candidates.filter(p => !isLikelyHotel(p));
-        // Only use the strict list if we have enough options, otherwise we might be forced to show a resort (but try not to)
-        if (nonHotelCandidates.length > 0) {
-            candidates = nonHotelCandidates;
-        }
+        if (nonHotelCandidates.length > 0) candidates = nonHotelCandidates;
     }
 
-    // 4. DIET & BUDGET
+    // 3. DIET & BUDGET
     if (diet !== 'ANY') {
         candidates = candidates.filter(p => {
             const text = (p.name + " " + p.description).toLowerCase();
             const isNonVeg = NON_VEG_KEYWORDS.some(kw => text.includes(kw));
-            return !isNonVeg || text.includes('pure veg');
+            if (diet === 'VEG' || diet === 'VEGAN' || diet === 'JAIN') return !isNonVeg || text.includes('pure veg');
+            return true;
         });
     }
+    
     candidates = candidates.filter(p => {
         const price = p.price_tier || (p.price_level === 0 ? 'Budget' : p.price_level === 4 ? 'Luxury' : 'Standard');
         if (budget === 'LOW') return price === 'Budget' || (p.price_level !== undefined && p.price_level <= 1);
@@ -216,33 +280,50 @@ export default function Home() {
         return true; 
     });
 
-    // 5. SMART FALLBACK (The Fix for "Stay Suggestions Only")
+    // 4. FALLBACK
     if (candidates.length < 4) {
         const remainingNeeded = 4 - candidates.length;
-        
-        // Find fallbacks but STRICTLY EXCLUDE HOTELS for activity slots
         let fallbackCandidates = allPlaces.filter(p => 
             !currentTrip.some(picked => picked.id === p.id) && 
             !candidates.some(c => c.id === p.id)
         );
-
-        // Apply Anti-Hotel Logic to Fallbacks too!
         if (!stepConfig.id.includes('DINNER') && !stepConfig.id.includes('LUNCH')) {
-             fallbackCandidates = fallbackCandidates.filter(p => !isLikelyHotel(p));
+             fallbackCandidates = fallbackCandidates.filter(p => !HOTEL_KEYWORDS.some(kw => p.name.toLowerCase().includes(kw)));
         }
-
-        // Sort by Score
-        fallbackCandidates.sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
-        
-        // Rotate to vary results
-        const offset = stepIdx * 2; 
-        const rotatedFallbacks = fallbackCandidates.slice(offset, offset + remainingNeeded);
-        
-        candidates = [...candidates, ...rotatedFallbacks];
+        if (referencePoint) {
+             fallbackCandidates.sort((a, b) => {
+                 const distA = Math.sqrt(Math.pow(a.lat - referencePoint!.lat, 2) + Math.pow(a.lng - referencePoint!.lng, 2));
+                 const distB = Math.sqrt(Math.pow(b.lat - referencePoint!.lat, 2) + Math.pow(b.lng - referencePoint!.lng, 2));
+                 return distA - distB;
+             });
+        }
+        candidates = [...candidates, ...fallbackCandidates.slice(0, remainingNeeded)];
     }
 
-    // 6. FINAL SCORE
-    candidates = candidates.map(p => ({ ...p, aiScore: calculateRelevanceScore(p, groupType) })).sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
+    // 5. SCORE (PROXIMITY + VIBE)
+    candidates = candidates.map(p => {
+        let score = calculateRelevanceScore(p, groupType);
+        let distanceText = "";
+
+        if (referencePoint) {
+             const distDeg = Math.sqrt(Math.pow(p.lat - referencePoint.lat, 2) + Math.pow(p.lng - referencePoint.lng, 2));
+             const distKm = distDeg * 111;
+             distanceText = `${distKm.toFixed(1)} km away`;
+             if (distKm < 3) score += 30;
+             else if (distKm < 8) score += 15;
+             else if (distKm > 20) score -= 20; 
+        }
+
+        const text = (p.name + " " + p.description + " " + (p.vibes?.join(' ') || '')).toLowerCase();
+        selectedVibes.forEach(vid => {
+            const keywords = TRIP_VIBES.find(v => v.id === vid)?.keywords || [];
+            if (keywords.some(k => text.includes(k))) score += 25; 
+        });
+
+        return { ...p, aiScore: score, distanceFromLast: distanceText };
+    });
+
+    candidates.sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
     setStepOptions(candidates.slice(0, 4)); 
     setIsLoadingOptions(false);
   };
@@ -253,7 +334,7 @@ export default function Home() {
     const nextStep = currentStepIndex + 1;
     if (nextStep < dynamicSteps.length) {
         setCurrentStepIndex(nextStep);
-        generateOptionsForStep(nextStep, allCityPlaces, newTrip);
+        generateOptionsForStep(nextStep, allCityPlaces, newTrip, dynamicSteps, startCoords);
     } else {
         setIsWizardActive(false);
         setActiveView('PLAN');
@@ -282,10 +363,10 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
       
-      {/* SIDEBAR */}
+      {/* SIDEBAR: NOW USING handleViewChange TO FIX NAVIGATION */}
       <Sidebar 
         currentView={activeView}
-        onChangeView={setActiveView}
+        onChangeView={handleViewChange}
         selectedCity={selectedCity}
         tripPlan={tripPlan}
         isTripActive={!!selectedCity}
@@ -331,6 +412,7 @@ export default function Home() {
                                     <div className="h-32 bg-gray-200 w-full relative">
                                         {place.image ? <img src={place.image} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-4xl bg-gradient-to-br from-blue-50 to-purple-50">📍</div>}
                                         <div className="absolute top-2 right-2 bg-white/90 backdrop-blur px-2 py-1 rounded text-[10px] font-bold">⭐ {place.aiScore?.toFixed(0)}%</div>
+                                        {place.distanceFromLast && <div className="absolute bottom-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1">👣 {place.distanceFromLast}</div>}
                                     </div>
                                     <div className="p-5 flex-1 flex flex-col">
                                         <h3 className="font-bold text-md text-gray-900 mb-1 leading-tight">{place.name}</h3>
@@ -350,7 +432,7 @@ export default function Home() {
             <button onClick={() => setShowCreateModal(true)} className="bg-black text-white text-lg font-bold px-8 py-4 rounded-2xl shadow-xl hover:scale-105 transition-transform">+ Plan a New Trip</button>
             {showCreateModal && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-                 <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-lg relative">
+                 <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-lg relative overflow-y-auto max-h-[90vh]">
                    <h3 className="font-bold text-xl text-gray-900 mb-6">Create Your Vibe</h3>
                    
                    {/* DESTINATION + LIVE LOCATION */}
@@ -362,7 +444,27 @@ export default function Home() {
                      </div>
                      {showSuggestions && <div className="absolute top-full w-full bg-white border border-gray-100 rounded-xl shadow-xl z-50 mt-1 max-h-40 overflow-y-auto">{citySuggestions.map((s,i)=><div key={i} onClick={()=>selectSuggestion(s)} className="p-3 hover:bg-blue-50 cursor-pointer text-sm font-bold border-b border-gray-50">📍 {s}</div>)}</div>}
                    </div>
+
+                   {/* NEW: START LOCATION */}
+                   <div className="mb-4">
+                      <div className="flex justify-between items-center mb-1">
+                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Start Location</label>
+                         <button onClick={() => setShowStartHelp(!showStartHelp)} className="text-[10px] text-blue-500 font-bold hover:underline">Why ask? ❓</button>
+                      </div>
+                      <input 
+                        className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold text-xs" 
+                        placeholder="e.g. Airport, Hotel, Home..." 
+                        value={startLocation}
+                        onChange={(e) => setStartLocation(e.target.value)}
+                      />
+                      {showStartHelp && (
+                        <div className="mt-2 bg-blue-50 text-blue-800 text-[10px] p-2 rounded-lg border border-blue-100">
+                           💡 We use this to suggest the first activity closest to your arrival point, optimizing your travel route.
+                        </div>
+                      )}
+                   </div>
                    
+                   {/* DATES */}
                    <div className="flex gap-3 mb-4">
                      <div className="flex-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Start</label><input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold" onChange={e => setDates({...dates, start: e.target.value})} /></div>
                      <div className="flex-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">End</label><input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold" onChange={e => setDates({...dates, end: e.target.value})} /></div>
@@ -376,20 +478,43 @@ export default function Home() {
                                 <option value="ANY">🍽️ Any</option>
                                 <option value="VEG">🥦 Vegetarian</option>
                                 <option value="VEGAN">🥗 Vegan</option>
+                                <option value="JAIN">🌿 Jain</option>
                                 <option value="HALAL">🍖 Halal</option>
+                                <option value="EGG">🍳 Eggetarian</option>
                             </select>
                         </div>
                         <div className="flex-1">
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Budget</label>
                             <select className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold text-sm" value={budget} onChange={e => setBudget(e.target.value)}>
-                                <option value="LOW">💸 Budget (Low)</option>
-                                <option value="MEDIUM">⚖️ Standard (Med)</option>
-                                <option value="HIGH">💎 Luxury (High)</option>
+                                <option value="LOW">💸 Budget</option>
+                                <option value="MEDIUM">⚖️ Standard</option>
+                                <option value="HIGH">💎 Luxury</option>
                             </select>
                         </div>
                    </div>
 
+                   {/* TRIP VIBE (NEW) */}
+                   <div className="mb-4">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">Trip Vibe (Select all that apply)</label>
+                      <div className="flex flex-wrap gap-2">
+                         {TRIP_VIBES.map((v) => (
+                            <button 
+                               key={v.id} 
+                               onClick={() => toggleVibe(v.id)}
+                               className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all ${
+                                   selectedVibes.includes(v.id) 
+                                   ? 'bg-black text-white border-black shadow-md' 
+                                   : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                               }`}
+                            >
+                               {v.label}
+                            </button>
+                         ))}
+                      </div>
+                   </div>
+
                    <div className="mb-6"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Who is traveling?</label><div className="grid grid-cols-2 gap-2">{[{ id: 'SOLO', label: '🧍 Solo', desc: 'Hidden Gems' }, { id: 'FRIENDS', label: '👯 Friends', desc: 'Vibes & Fun' }, { id: 'FAMILY', label: '👨‍👩‍👧‍👦 Family', desc: 'Safe & Easy' }, { id: 'CORPORATE', label: '💼 Corporate', desc: 'Premium' }].map((t) => <button key={t.id} onClick={() => setGroupType(t.id)} className={`p-3 rounded-xl border text-left transition-all ${groupType === t.id ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><div className="font-bold text-xs">{t.label}</div></button>)}</div></div>
+                   
                    <button onClick={startWizard} disabled={!selectedCity} className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition-all disabled:opacity-50">Start Customizing ➔</button>
                    <button onClick={() => setShowCreateModal(false)} className="w-full mt-2 text-gray-400 text-xs font-bold py-2">Cancel</button>
                  </div>
