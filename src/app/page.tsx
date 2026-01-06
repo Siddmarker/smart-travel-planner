@@ -53,10 +53,10 @@ const TRIP_VIBES = [
 // DAILY TEMPLATE
 const DAILY_TEMPLATE = [
   { id: 'MORNING', label: '🌞 Morning Exploration', types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'off_roading', 'falls', 'view point'] },
-  { id: 'LUNCH', label: '🍛 Lunch Break', types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic', 'mess', 'bhavan'] },
+  { id: 'LUNCH', label: '🍛 Lunch Break', types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic', 'mess', 'bhavan', 'canteen', 'hotel'] },
   { id: 'AFTERNOON', label: '🎨 Afternoon Vibe', types: ['museum', 'gallery', 'mall', 'shopping', 'zoo', 'aquarium', 'hall', 'monument', 'market', 'amusement_park', 'plantation'] },
-  { id: 'EVENING', label: '🌆 Evening Chill', types: ['park', 'sunset', 'lake', 'club', 'pub', 'bar', 'theater', 'cinema', 'beach', 'turf', 'raja seat'] },
-  { id: 'DINNER', label: '🍽️ Dinner Feast', types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine', 'late_night', 'dhaba'] }
+  { id: 'EVENING', label: '🌆 Evening Chill', types: ['park', 'sunset', 'lake', 'club', 'pub', 'bar', 'theater', 'cinema', 'beach', 'turf', 'raja seat', 'bridge'] },
+  { id: 'DINNER', label: '🍽️ Dinner Feast', types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine', 'late_night', 'dhaba', 'hotel'] }
 ];
 
 // MAP STYLES
@@ -65,10 +65,12 @@ const pathOptions = { strokeColor: '#2563EB', strokeOpacity: 0.8, strokeWeight: 
 
 // KEYWORDS LISTS
 const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani'];
-// Expanded Exclusion List for Meals
+
+// UPDATED EXCLUSION LIST: Removed "Hotel" (common for restaurants), Added "Market", "Race", "Bridge"
 const NON_FOOD_KEYWORDS = [
-  'hotel', 'resort', 'inn', 'stay', 'suites', 'cottage', 'residency', 'lodge', 'grand', 'plaza', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb',
-  'temple', 'shrine', 'worship', 'church', 'mosque', 'fort', 'park', 'garden', 'museum', 'dam', 'falls', 'view point'
+  'resort', 'inn', 'stay', 'cottage', 'residency', 'lodge', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb', 'homestay',
+  'temple', 'shrine', 'worship', 'church', 'mosque', 'fort', 'park', 'garden', 'museum', 'dam', 'falls', 'view point',
+  'market', 'stand', 'store', 'shop', 'complex', 'race', 'bridge', 'river', 'lake'
 ];
 
 // FAKE DATA
@@ -218,7 +220,7 @@ export default function Home() {
     } catch (err) { console.error(err); setIsWizardActive(false); }
   };
 
-  // --- 4. IMPROVED GENERATOR (FIX FOR MIXED UP PLACES) ---
+  // --- 4. IMPROVED GENERATOR (With Strict Non-Food Blocking) ---
   const generateOptionsForStep = (
     stepIdx: number,
     allPlaces: Place[],
@@ -238,9 +240,11 @@ export default function Home() {
       referencePoint = initialCoords;
     }
 
-    // HELPER: Check if place is strictly non-food (Hotel/Temple/Park)
+    // HELPER: Check if place is strictly non-food (Markets/Races/Lodges)
     const isNonFoodPlace = (p: Place) => {
-      const t = (p.type + " " + p.name).toLowerCase();
+      const t = (p.type + " " + p.name + " " + p.description).toLowerCase();
+      // Allow "Hotel" only if it looks like a restaurant (e.g., Hotel Saravana Bhavan)
+      // But block resorts/stays.
       return NON_FOOD_KEYWORDS.some(kw => t.includes(kw));
     };
 
@@ -260,12 +264,11 @@ export default function Home() {
       return matchesType && !alreadyPicked;
     });
 
-    // 2. STRICT MEAL FILTER (The Fix!)
+    // 2. STRICT MEAL FILTER
     const isMeal = stepConfig.id.includes('DINNER') || stepConfig.id.includes('LUNCH');
     if (isMeal) {
-      // Remove ANY place that sounds like a hotel, temple, resort, or park
+      // Strict Block for "Market", "Race", "Resort" etc.
       const foodCandidates = candidates.filter(p => !isNonFoodPlace(p));
-      // Only apply if we have enough options, otherwise we rely on fallback
       if (foodCandidates.length > 0) candidates = foodCandidates;
     }
 
@@ -286,17 +289,32 @@ export default function Home() {
       return true;
     });
 
-    // 4. FALLBACK (With Strict Meal Safety)
+    // 4. FALLBACK LOGIC (Smarter)
     if (candidates.length < 4) {
       const remainingNeeded = 4 - candidates.length;
+
+      // Try searching for generic food keywords first if it's a meal
       let fallbackCandidates = allPlaces.filter(p =>
         !currentTrip.some(picked => picked.id === p.id) &&
         !candidates.some(c => c.id === p.id)
       );
 
-      // CRITICAL FIX: Even in fallback, ban temples/resorts for Dinner/Lunch
       if (isMeal) {
-        fallbackCandidates = fallbackCandidates.filter(p => !isNonFoodPlace(p));
+        // 1. Try finding anything with "Restaurant", "Mess", "Bhavan" first
+        const betterFoodFallback = fallbackCandidates.filter(p =>
+          (p.name + p.type).toLowerCase().match(/restaurant|mess|bhavan|kitchen|canteen|cafe|dining/) &&
+          !isNonFoodPlace(p)
+        );
+
+        if (betterFoodFallback.length > 0) {
+          fallbackCandidates = betterFoodFallback;
+        } else {
+          // 2. If nothing, just filter out the bad stuff (Markets/Races)
+          fallbackCandidates = fallbackCandidates.filter(p => !isNonFoodPlace(p));
+        }
+      } else {
+        // Not a meal? Just exclude hotels/lodges
+        fallbackCandidates = fallbackCandidates.filter(p => !p.type.includes('lodging') && !p.name.toLowerCase().includes('resort'));
       }
 
       if (referencePoint) {
@@ -454,7 +472,6 @@ export default function Home() {
                     {showSuggestions && <div className="absolute top-full w-full bg-white border border-gray-100 rounded-xl shadow-xl z-50 mt-1 max-h-40 overflow-y-auto">{citySuggestions.map((s, i) => <div key={i} onClick={() => selectSuggestion(s)} className="p-3 hover:bg-blue-50 cursor-pointer text-sm font-bold border-b border-gray-50">📍 {s}</div>)}</div>}
                   </div>
 
-                  {/* NEW: START LOCATION */}
                   <div className="mb-4">
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Start Location</label>
