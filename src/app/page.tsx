@@ -10,7 +10,6 @@ import DiscoveryView from '@/components/DiscoveryView';
 
 const LIBRARIES: ("places")[] = ["places"];
 
-// --- INITIALIZE SUPABASE ---
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -41,7 +40,6 @@ interface Place {
   distanceFromLast?: string;
 }
 
-// VIBE TAGS
 const TRIP_VIBES = [
   { id: 'leisure', label: '🌴 Relaxing', keywords: ['resort', 'park', 'spa', 'lake'] },
   { id: 'foodie', label: '🍕 Food & Nightlife', keywords: ['restaurant', 'cafe', 'late_night', 'pub', 'bar'] },
@@ -50,7 +48,6 @@ const TRIP_VIBES = [
   { id: 'shopping', label: '🛍️ Shopping', keywords: ['mall', 'market', 'shopping'] }
 ];
 
-// DAILY TEMPLATE
 const DAILY_TEMPLATE = [
   { id: 'MORNING', label: '🌞 Morning Exploration', types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'off_roading', 'falls', 'view point'] },
   { id: 'LUNCH', label: '🍛 Lunch Break', types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic', 'mess', 'bhavan', 'canteen', 'hotel'] },
@@ -59,31 +56,22 @@ const DAILY_TEMPLATE = [
   { id: 'DINNER', label: '🍽️ Dinner Feast', types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine', 'late_night', 'dhaba', 'hotel'] }
 ];
 
-// MAP STYLES
 const mapContainerStyle = { width: '100%', height: '100%' };
 const pathOptions = { strokeColor: '#2563EB', strokeOpacity: 0.8, strokeWeight: 4 };
 
-// KEYWORDS LISTS
 const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani'];
-
-// UPDATED EXCLUSION LIST: Removed "Hotel" (common for restaurants), Added "Market", "Race", "Bridge"
 const NON_FOOD_KEYWORDS = [
   'resort', 'inn', 'stay', 'cottage', 'residency', 'lodge', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb', 'homestay',
   'temple', 'shrine', 'worship', 'church', 'mosque', 'fort', 'park', 'garden', 'museum', 'dam', 'falls', 'view point',
   'market', 'stand', 'store', 'shop', 'complex', 'race', 'bridge', 'river', 'lake'
 ];
 
-// FAKE DATA
 interface ChatMessage { id: string; user: string; text: string; time: string; isMe: boolean; }
 interface Expense { id: string; who: string; what: string; amount: number; }
 
 export default function Home() {
   const [session, setSession] = useState<any>(null);
-
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '',
-    libraries: LIBRARIES,
-  });
+  const { isLoaded } = useLoadScript({ googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '', libraries: LIBRARIES });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
@@ -117,26 +105,79 @@ export default function Home() {
   const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
-  // COLLAB STATE
-  const [collabTab, setCollabTab] = useState<'VOTE' | 'CHAT' | 'SPLIT'>('VOTE');
-  const [messages, setMessages] = useState<ChatMessage[]>([{ id: '1', user: 'System', text: 'Welcome to the Trip Chat!', time: 'Now', isMe: false }]);
-  const [newMessage, setNewMessage] = useState('');
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [votingOptions, setVotingOptions] = useState<Place[]>([]);
+  // --- NEW: REAL COLLAB STATE ---
+  const [collabTab, setCollabTab] = useState<'MEMBERS' | 'CHAT' | 'SPLIT'>('MEMBERS');
 
+  // 1. Members (Real list, starts with You)
+  const [tripMembers, setTripMembers] = useState<string[]>(['You']);
+  const [newMemberName, setNewMemberName] = useState('');
+
+  // 2. Messages (Empty start)
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+
+  // 3. Expenses (Empty start)
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [newExpense, setNewExpense] = useState({ what: '', amount: '', who: 'You' });
+
+  // MAP CENTER
   const mapCenter = useMemo(() => {
     if (tripPlan.length > 0) return { lat: tripPlan[0].lat, lng: tripPlan[0].lng };
     return { lat: 12.9716, lng: 77.5946 };
   }, [tripPlan]);
 
+  // NAVIGATION
   const handleViewChange = (view: NavView) => {
     setActiveView(view);
-    if (view === 'DASHBOARD') {
-      setIsWizardActive(false);
-      setShowCreateModal(false);
+    if (view === 'DASHBOARD') { setIsWizardActive(false); setShowCreateModal(false); }
+  };
+
+  // --- FUNCTIONAL COLLAB LOGIC ---
+
+  // A. MEMBERS
+  const addMember = () => {
+    if (newMemberName.trim() && !tripMembers.includes(newMemberName.trim())) {
+      setTripMembers([...tripMembers, newMemberName.trim()]);
+      setNewMemberName('');
     }
   };
 
+  // B. CHAT
+  const handleSendMessage = () => {
+    if (!newMessage.trim()) return;
+    const msg: ChatMessage = {
+      id: Date.now().toString(),
+      user: 'You',
+      text: newMessage,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isMe: true
+    };
+    setMessages((prev) => [...prev, msg]);
+    setNewMessage('');
+  };
+
+  // C. EXPENSES (The Real Logic)
+  const handleAddExpense = () => {
+    if (!newExpense.what || !newExpense.amount) return;
+    const expense: Expense = {
+      id: Date.now().toString(),
+      who: newExpense.who,
+      what: newExpense.what,
+      amount: Number(newExpense.amount)
+    };
+    setExpenses([...expenses, expense]);
+    setShowExpenseForm(false);
+    setNewExpense({ what: '', amount: '', who: 'You' });
+  };
+
+  // D. CALCULATIONS
+  const totalCost = expenses.reduce((a, b) => a + b.amount, 0);
+  const costPerPerson = tripMembers.length > 0 ? totalCost / tripMembers.length : 0;
+  const myTotalPaid = expenses.filter(e => e.who === 'You').reduce((a, b) => a + b.amount, 0);
+  const myBalance = myTotalPaid - costPerPerson; // Positive = Owed to me, Negative = I owe
+
+  // --- SEARCH & WIZARD LOGIC (Existing) ---
   const handleCitySearch = async (query: string) => {
     setSelectedCity(query);
     if (query.length < 2) { setCitySuggestions([]); setShowSuggestions(false); return; }
@@ -220,7 +261,6 @@ export default function Home() {
     } catch (err) { console.error(err); setIsWizardActive(false); }
   };
 
-  // --- 4. IMPROVED GENERATOR (With Strict Non-Food Blocking) ---
   const generateOptionsForStep = (
     stepIdx: number,
     allPlaces: Place[],
@@ -231,7 +271,6 @@ export default function Home() {
     setIsLoadingOptions(true);
     const stepConfig = stepsList[stepIdx];
 
-    // Determine Reference Point
     let referencePoint = null;
     if (currentTrip.length > 0) {
       const last = currentTrip[currentTrip.length - 1];
@@ -240,39 +279,28 @@ export default function Home() {
       referencePoint = initialCoords;
     }
 
-    // HELPER: Check if place is strictly non-food (Markets/Races/Lodges)
     const isNonFoodPlace = (p: Place) => {
       const t = (p.type + " " + p.name + " " + p.description).toLowerCase();
-      // Allow "Hotel" only if it looks like a restaurant (e.g., Hotel Saravana Bhavan)
-      // But block resorts/stays.
       return NON_FOOD_KEYWORDS.some(kw => t.includes(kw));
     };
 
-    // 1. FILTER CANDIDATES
     let candidates = allPlaces.filter(p => {
       const searchStr = `${p.type} ${p.description} ${p.name} ${p.vibes?.join(' ')}`.toLowerCase();
-
       let matchesType = stepConfig.types.some((t: string) => searchStr.includes(t));
-
-      // Vibe Boost
       if (selectedVibes.length > 0) {
         const vibeKeywords = selectedVibes.flatMap(vid => TRIP_VIBES.find(v => v.id === vid)?.keywords || []);
         if (vibeKeywords.some(k => searchStr.includes(k))) matchesType = true;
       }
-
       const alreadyPicked = currentTrip.some(picked => picked.id === p.id);
       return matchesType && !alreadyPicked;
     });
 
-    // 2. STRICT MEAL FILTER
     const isMeal = stepConfig.id.includes('DINNER') || stepConfig.id.includes('LUNCH');
     if (isMeal) {
-      // Strict Block for "Market", "Race", "Resort" etc.
       const foodCandidates = candidates.filter(p => !isNonFoodPlace(p));
       if (foodCandidates.length > 0) candidates = foodCandidates;
     }
 
-    // 3. DIET & BUDGET
     if (diet !== 'ANY') {
       candidates = candidates.filter(p => {
         const text = (p.name + " " + p.description).toLowerCase();
@@ -289,31 +317,15 @@ export default function Home() {
       return true;
     });
 
-    // 4. FALLBACK LOGIC (Smarter)
     if (candidates.length < 4) {
       const remainingNeeded = 4 - candidates.length;
-
-      // Try searching for generic food keywords first if it's a meal
-      let fallbackCandidates = allPlaces.filter(p =>
-        !currentTrip.some(picked => picked.id === p.id) &&
-        !candidates.some(c => c.id === p.id)
-      );
+      let fallbackCandidates = allPlaces.filter(p => !currentTrip.some(picked => picked.id === p.id) && !candidates.some(c => c.id === p.id));
 
       if (isMeal) {
-        // 1. Try finding anything with "Restaurant", "Mess", "Bhavan" first
-        const betterFoodFallback = fallbackCandidates.filter(p =>
-          (p.name + p.type).toLowerCase().match(/restaurant|mess|bhavan|kitchen|canteen|cafe|dining/) &&
-          !isNonFoodPlace(p)
-        );
-
-        if (betterFoodFallback.length > 0) {
-          fallbackCandidates = betterFoodFallback;
-        } else {
-          // 2. If nothing, just filter out the bad stuff (Markets/Races)
-          fallbackCandidates = fallbackCandidates.filter(p => !isNonFoodPlace(p));
-        }
+        const betterFoodFallback = fallbackCandidates.filter(p => (p.name + p.type).toLowerCase().match(/restaurant|mess|bhavan|kitchen|canteen|cafe|dining/) && !isNonFoodPlace(p));
+        if (betterFoodFallback.length > 0) fallbackCandidates = betterFoodFallback;
+        else fallbackCandidates = fallbackCandidates.filter(p => !isNonFoodPlace(p));
       } else {
-        // Not a meal? Just exclude hotels/lodges
         fallbackCandidates = fallbackCandidates.filter(p => !p.type.includes('lodging') && !p.name.toLowerCase().includes('resort'));
       }
 
@@ -327,27 +339,20 @@ export default function Home() {
       candidates = [...candidates, ...fallbackCandidates.slice(0, remainingNeeded)];
     }
 
-    // 5. SCORE
     candidates = candidates.map(p => {
       let score = calculateRelevanceScore(p, groupType);
       let distanceText = "";
-
       if (referencePoint) {
         const distDeg = Math.sqrt(Math.pow(p.lat - referencePoint.lat, 2) + Math.pow(p.lng - referencePoint.lng, 2));
         const distKm = distDeg * 111;
         distanceText = `${distKm.toFixed(1)} km away`;
-
-        if (distKm < 3) score += 30;
-        else if (distKm < 8) score += 15;
-        else if (distKm > 20) score -= 20;
+        if (distKm < 3) score += 30; else if (distKm < 8) score += 15; else if (distKm > 20) score -= 20;
       }
-
       const text = (p.name + " " + p.description + " " + (p.vibes?.join(' ') || '')).toLowerCase();
       selectedVibes.forEach(vid => {
         const keywords = TRIP_VIBES.find(v => v.id === vid)?.keywords || [];
         if (keywords.some(k => text.includes(k))) score += 25;
       });
-
       return { ...p, aiScore: score, distanceFromLast: distanceText };
     });
 
@@ -400,7 +405,7 @@ export default function Home() {
         isTripActive={!!selectedCity}
         totalDays={calculateDays()}
         budget={budget}
-        travelers={groupType === 'SOLO' ? 1 : (groupType === 'FRIENDS' ? 4 : 2)}
+        travelers={tripMembers.length}
         diet={diet} groupType={groupType}
         onRemoveItem={removeFromTrip}
         onAddToTrip={() => { }}
@@ -409,20 +414,126 @@ export default function Home() {
 
       <main className="flex-1 relative h-full flex flex-col">
         <header className="absolute top-0 right-0 p-6 z-20 flex items-center gap-4">
-          {tripPlan.length > 0 && <button onClick={() => setActiveView('COLLAB' as any)} className="bg-white text-blue-600 px-4 py-2 rounded-full shadow-sm border border-blue-100 font-bold text-xs flex items-center gap-2 hover:bg-blue-50 transition-colors">👥 Invite & Vote</button>}
+          {tripPlan.length > 0 && <button onClick={() => setActiveView('COLLAB' as any)} className="bg-white text-blue-600 px-4 py-2 rounded-full shadow-sm border border-blue-100 font-bold text-xs flex items-center gap-2 hover:bg-blue-50 transition-colors">👥 Invite & Split</button>}
           <div className="flex items-center gap-3 bg-white/80 backdrop-blur-md p-2 rounded-full shadow-sm border border-gray-100"><div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">{session.user.email?.[0].toUpperCase()}</div></div>
           <button onClick={handleLogout} className="bg-white text-gray-500 hover:text-red-500 p-2 rounded-full shadow-sm border border-gray-100">Sign Out</button>
         </header>
 
+        {/* COLLAB HUB (UPDATED) */}
         {activeView === 'COLLAB' as any && (
           <div className="h-full bg-gray-50 p-8 flex flex-col items-center pt-24">
-            <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col h-[75vh]">
+            <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col h-[80vh]">
+
+              {/* HEADER */}
               <div className="bg-white border-b border-gray-100 p-6 flex justify-between items-center">
-                <div><h2 className="text-2xl font-black text-gray-900">Travel Party Hub</h2><p className="text-sm text-gray-500">Trip to <b>{selectedCity}</b></p></div>
-                <div className="flex bg-gray-100 p-1 rounded-xl">{(['VOTE', 'CHAT', 'SPLIT'] as const).map(tab => <button key={tab} onClick={() => setCollabTab(tab)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${collabTab === tab ? 'bg-white shadow-sm text-black' : 'text-gray-400'}`}>{tab}</button>)}</div>
+                <div><h2 className="text-2xl font-black text-gray-900">Trip Hub</h2><p className="text-sm text-gray-500">Managing trip for <b>{tripMembers.length} people</b></p></div>
+                <div className="flex bg-gray-100 p-1 rounded-xl">
+                  {(['MEMBERS', 'CHAT', 'SPLIT'] as const).map(tab => (
+                    <button key={tab} onClick={() => setCollabTab(tab)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${collabTab === tab ? 'bg-white shadow-sm text-black' : 'text-gray-400'}`}>
+                      {tab === 'MEMBERS' && '👥 People'}
+                      {tab === 'CHAT' && '💬 Chat'}
+                      {tab === 'SPLIT' && '💸 Expenses'}
+                    </button>
+                  ))}
+                </div>
               </div>
+
               <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-                {collabTab === 'VOTE' && <div className="space-y-4">{tripPlan.map(opt => <div key={opt.id} className="bg-white p-4 rounded-xl shadow-sm flex items-center gap-4"><div className="w-12 h-12 bg-gray-200 rounded-lg flex-shrink-0 overflow-hidden">{opt.image && <img src={opt.image} className="w-full h-full object-cover" />}</div><div className="flex-1"><h4 className="font-bold text-gray-900">{opt.name}</h4></div><button className="w-8 h-8 rounded-full border hover:bg-green-50 hover:border-green-500 flex items-center justify-center">👍</button></div>)}</div>}
+
+                {/* 1. MEMBERS TAB (NEW) */}
+                {collabTab === 'MEMBERS' && (
+                  <div className="space-y-4">
+                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4">
+                      <h4 className="font-bold text-blue-900 text-sm mb-2">Who is going?</h4>
+                      <div className="flex gap-2">
+                        <input className="flex-1 p-2 rounded-lg border border-blue-200 text-xs font-bold" placeholder="Enter Name (e.g. Rahul)" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addMember()} />
+                        <button onClick={addMember} className="bg-blue-600 text-white px-4 rounded-lg text-xs font-bold">Add</button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {tripMembers.map((member, idx) => (
+                        <div key={idx} className="bg-white p-3 rounded-xl border border-gray-200 flex items-center gap-3">
+                          <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center font-bold text-xs">{member[0]}</div>
+                          <span className="font-bold text-sm text-gray-700">{member}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. CHAT TAB (Cleaned) */}
+                {collabTab === 'CHAT' && (
+                  <div className="flex flex-col h-full">
+                    <div className="flex-1 space-y-3 mb-4 overflow-y-auto pr-2">
+                      {messages.length === 0 && <p className="text-center text-gray-400 text-xs mt-10">No messages yet. Start the conversation!</p>}
+                      {messages.map(m => (
+                        <div key={m.id} className={`flex ${m.isMe ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[75%] p-3 rounded-2xl text-xs ${m.isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none shadow-sm'}`}>
+                            {!m.isMe && <p className="text-[9px] font-bold opacity-60 mb-1">{m.user}</p>}
+                            {m.text}
+                            <p className={`text-[8px] mt-1 text-right ${m.isMe ? 'text-blue-200' : 'text-gray-400'}`}>{m.time}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="bg-white p-2 rounded-xl border border-gray-200 flex gap-2">
+                      <input className="flex-1 bg-transparent p-2 text-xs focus:outline-none" placeholder="Type message..." value={newMessage} onChange={e => setNewMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} />
+                      <button onClick={handleSendMessage} className="bg-black text-white px-4 rounded-lg font-bold text-xs">Send</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. SPLITWISE TAB (Fully Functional) */}
+                {collabTab === 'SPLIT' && (
+                  <div className="h-full flex flex-col">
+                    {/* Stats Header */}
+                    <div className="bg-green-50 border border-green-100 p-6 rounded-2xl mb-6 text-center shadow-sm">
+                      <p className="text-[10px] font-bold text-green-600 uppercase tracking-widest mb-1">Total Trip Cost</p>
+                      <h3 className="text-4xl font-black text-gray-900">₹{totalCost.toLocaleString()}</h3>
+                      <p className="text-xs text-green-800 mt-1 font-bold">₹{costPerPerson.toFixed(0)} / person</p>
+
+                      <div className="flex justify-center gap-4 mt-4">
+                        <div className="bg-white px-3 py-1 rounded-lg border border-green-100 text-xs font-bold text-green-700">You Paid: ₹{myTotalPaid}</div>
+                        <div className={`bg-white px-3 py-1 rounded-lg border text-xs font-bold ${myBalance >= 0 ? 'border-green-100 text-green-700' : 'border-red-100 text-red-700'}`}>
+                          {myBalance >= 0 ? `Get Back: ₹${myBalance.toFixed(0)}` : `You Owe: ₹${Math.abs(myBalance).toFixed(0)}`}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expense List */}
+                    <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-2">
+                      {expenses.length === 0 && <p className="text-center text-gray-400 text-xs">No expenses added yet.</p>}
+                      {expenses.map(e => (
+                        <div key={e.id} className="bg-white p-3 rounded-xl border border-gray-100 flex justify-between items-center shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${e.who === 'You' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>{e.who[0]}</div>
+                            <div><p className="font-bold text-xs text-gray-900">{e.what}</p><p className="text-[9px] text-gray-400">Paid by {e.who}</p></div>
+                          </div>
+                          <span className="font-mono font-bold text-xs text-gray-900">₹{e.amount}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add Expense Form */}
+                    {showExpenseForm ? (
+                      <div className="bg-gray-100 p-4 rounded-xl animate-fade-in">
+                        <input className="w-full p-2 rounded-lg border border-gray-200 text-xs font-bold mb-2" placeholder="What for? (e.g. Dinner)" value={newExpense.what} onChange={e => setNewExpense({ ...newExpense, what: e.target.value })} />
+                        <div className="flex gap-2 mb-2">
+                          <input className="flex-1 p-2 rounded-lg border border-gray-200 text-xs font-bold" type="number" placeholder="Amount (₹)" value={newExpense.amount} onChange={e => setNewExpense({ ...newExpense, amount: e.target.value })} />
+                          <select className="flex-1 p-2 rounded-lg border border-gray-200 text-xs font-bold" value={newExpense.who} onChange={e => setNewExpense({ ...newExpense, who: e.target.value })}>
+                            {tripMembers.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={handleAddExpense} className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold text-xs">Save</button>
+                          <button onClick={() => setShowExpenseForm(false)} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-bold text-xs">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button onClick={() => setShowExpenseForm(true)} className="w-full bg-black text-white py-3 rounded-xl font-bold text-xs shadow-lg hover:scale-[1.02] transition-transform">+ Add Expense</button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -462,7 +573,6 @@ export default function Home() {
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
                 <div className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-lg relative overflow-y-auto max-h-[90vh]">
                   <h3 className="font-bold text-xl text-gray-900 mb-6">Create Your Vibe</h3>
-
                   <div className="mb-4 relative">
                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Destination</label>
                     <div className="flex gap-2">
@@ -471,30 +581,11 @@ export default function Home() {
                     </div>
                     {showSuggestions && <div className="absolute top-full w-full bg-white border border-gray-100 rounded-xl shadow-xl z-50 mt-1 max-h-40 overflow-y-auto">{citySuggestions.map((s, i) => <div key={i} onClick={() => selectSuggestion(s)} className="p-3 hover:bg-blue-50 cursor-pointer text-sm font-bold border-b border-gray-50">📍 {s}</div>)}</div>}
                   </div>
-
-                  <div className="mb-4">
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Start Location</label>
-                      <button onClick={() => setShowStartHelp(!showStartHelp)} className="text-[10px] text-blue-500 font-bold hover:underline">Why ask? ❓</button>
-                    </div>
-                    <input className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold text-xs" placeholder="e.g. Airport, Hotel, Home..." value={startLocation} onChange={(e) => setStartLocation(e.target.value)} />
-                    {showStartHelp && (<div className="mt-2 bg-blue-50 text-blue-800 text-[10px] p-2 rounded-lg border border-blue-100">💡 Optimizes route from your arrival point.</div>)}
-                  </div>
-
-                  <div className="flex gap-3 mb-4">
-                    <div className="flex-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Start</label><input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold" onChange={e => setDates({ ...dates, start: e.target.value })} /></div>
-                    <div className="flex-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">End</label><input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold" onChange={e => setDates({ ...dates, end: e.target.value })} /></div>
-                  </div>
-
-                  <div className="flex gap-3 mb-4">
-                    <div className="flex-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Diet</label><select className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold text-sm" value={diet} onChange={e => setDiet(e.target.value)}><option value="ANY">🍽️ Any</option><option value="VEG">🥦 Vegetarian</option><option value="VEGAN">🥗 Vegan</option><option value="JAIN">🌿 Jain</option><option value="HALAL">🍖 Halal</option><option value="EGG">🍳 Eggetarian</option></select></div>
-                    <div className="flex-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Budget</label><select className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold text-sm" value={budget} onChange={e => setBudget(e.target.value)}><option value="LOW">💸 Budget</option><option value="MEDIUM">⚖️ Standard</option><option value="HIGH">💎 Luxury</option></select></div>
-                  </div>
-
+                  <div className="mb-4"><div className="flex justify-between items-center mb-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Start Location</label><button onClick={() => setShowStartHelp(!showStartHelp)} className="text-[10px] text-blue-500 font-bold hover:underline">Why ask? ❓</button></div><input className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold text-xs" placeholder="e.g. Airport, Hotel, Home..." value={startLocation} onChange={(e) => setStartLocation(e.target.value)} />{showStartHelp && (<div className="mt-2 bg-blue-50 text-blue-800 text-[10px] p-2 rounded-lg border border-blue-100">💡 Optimizes route from your arrival point.</div>)}</div>
+                  <div className="flex gap-3 mb-4"><div className="flex-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Start</label><input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold" onChange={e => setDates({ ...dates, start: e.target.value })} /></div><div className="flex-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">End</label><input type="date" className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold" onChange={e => setDates({ ...dates, end: e.target.value })} /></div></div>
+                  <div className="flex gap-3 mb-4"><div className="flex-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Diet</label><select className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold text-sm" value={diet} onChange={e => setDiet(e.target.value)}><option value="ANY">🍽️ Any</option><option value="VEG">🥦 Vegetarian</option><option value="VEGAN">🥗 Vegan</option><option value="JAIN">🌿 Jain</option><option value="HALAL">🍖 Halal</option><option value="EGG">🍳 Eggetarian</option></select></div><div className="flex-1"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Budget</label><select className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-bold text-sm" value={budget} onChange={e => setBudget(e.target.value)}><option value="LOW">💸 Budget</option><option value="MEDIUM">⚖️ Standard</option><option value="HIGH">💎 Luxury</option></select></div></div>
                   <div className="mb-4"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">Trip Vibe</label><div className="flex flex-wrap gap-2">{TRIP_VIBES.map((v) => (<button key={v.id} onClick={() => toggleVibe(v.id)} className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all ${selectedVibes.includes(v.id) ? 'bg-black text-white border-black shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}>{v.label}</button>))}</div></div>
-
                   <div className="mb-6"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Who is traveling?</label><div className="grid grid-cols-2 gap-2">{[{ id: 'SOLO', label: '🧍 Solo', desc: 'Hidden Gems' }, { id: 'FRIENDS', label: '👯 Friends', desc: 'Vibes & Fun' }, { id: 'FAMILY', label: '👨‍👩‍👧‍👦 Family', desc: 'Safe & Easy' }, { id: 'CORPORATE', label: '💼 Corporate', desc: 'Premium' }].map((t) => <button key={t.id} onClick={() => setGroupType(t.id)} className={`p-3 rounded-xl border text-left transition-all ${groupType === t.id ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><div className="font-bold text-xs">{t.label}</div></button>)}</div></div>
-
                   <button onClick={startWizard} disabled={!selectedCity} className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition-all disabled:opacity-50">Start Customizing ➔</button>
                   <button onClick={() => setShowCreateModal(false)} className="w-full mt-2 text-gray-400 text-xs font-bold py-2">Cancel</button>
                 </div>
