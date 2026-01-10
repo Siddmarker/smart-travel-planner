@@ -66,86 +66,86 @@ interface PackingItem {
 // --- CONSTANTS & CONFIG ---
 
 const TRIP_VIBES = [
-  {
-    id: 'leisure',
-    label: '🌴 Relaxing',
-    keywords: ['resort', 'park', 'spa', 'lake'],
-    img: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=400&q=80'
+  { 
+    id: 'leisure', 
+    label: '🌴 Relaxing', 
+    keywords: ['resort', 'park', 'spa', 'lake'], 
+    img: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=400&q=80' 
   },
-  {
-    id: 'foodie',
-    label: '🍕 Foodie',
-    keywords: ['restaurant', 'cafe', 'late_night', 'pub', 'bar'],
-    img: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80'
+  { 
+    id: 'foodie', 
+    label: '🍕 Foodie', 
+    keywords: ['restaurant', 'cafe', 'late_night', 'pub', 'bar'], 
+    img: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80' 
   },
-  {
-    id: 'heritage',
-    label: '🏰 Heritage',
-    keywords: ['temple', 'museum', 'fort', 'iconic', 'landmark'],
-    img: 'https://images.unsplash.com/photo-1524492412937-b28074a5d7da?auto=format&fit=crop&w=400&q=80'
+  { 
+    id: 'heritage', 
+    label: '🏰 Heritage', 
+    keywords: ['temple', 'museum', 'fort', 'iconic', 'landmark'], 
+    img: 'https://images.unsplash.com/photo-1524492412937-b28074a5d7da?auto=format&fit=crop&w=400&q=80' 
   },
-  {
-    id: 'adventure',
-    label: '🏍️ Adventure',
-    keywords: ['off_roading', 'amusement_park', 'turf', 'trek'],
-    img: 'https://images.unsplash.com/photo-1533587851505-d119e13fa0d7?auto=format&fit=crop&w=400&q=80'
+  { 
+    id: 'adventure', 
+    label: '🏍️ Adventure', 
+    keywords: ['off_roading', 'amusement_park', 'turf', 'trek'], 
+    img: 'https://images.unsplash.com/photo-1533587851505-d119e13fa0d7?auto=format&fit=crop&w=400&q=80' 
   },
-  {
-    id: 'shopping',
-    label: '🛍️ Shopping',
-    keywords: ['mall', 'market', 'shopping'],
-    img: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=400&q=80'
+  { 
+    id: 'shopping', 
+    label: '🛍️ Shopping', 
+    keywords: ['mall', 'market', 'shopping'], 
+    img: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=400&q=80' 
   }
 ];
 
 const POPULAR_DESTINATIONS = [
-  {
-    name: 'Paris',
-    img: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=600&q=80'
+  { 
+    name: 'Paris', 
+    img: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=600&q=80' 
   },
-  {
-    name: 'Tokyo',
-    img: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=600&q=80'
+  { 
+    name: 'Tokyo', 
+    img: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=600&q=80' 
   },
-  {
-    name: 'Bali',
-    img: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?auto=format&fit=crop&w=600&q=80'
+  { 
+    name: 'Bali', 
+    img: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?auto=format&fit=crop&w=600&q=80' 
   },
-  {
-    name: 'Dubai',
-    img: 'https://images.unsplash.com/photo-1512453979798-5ea90b791d5e?auto=format&fit=crop&w=600&q=80'
+  { 
+    name: 'Dubai', 
+    img: 'https://images.unsplash.com/photo-1512453979798-5ea90b791d5e?auto=format&fit=crop&w=600&q=80' 
   },
-  {
-    name: 'New York',
-    img: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&w=600&q=80'
+  { 
+    name: 'New York', 
+    img: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&w=600&q=80' 
   }
 ];
 
 const DAILY_TEMPLATE = [
-  {
-    id: 'MORNING',
-    label: '🌞 Morning Exploration',
-    types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'off_roading', 'falls', 'view point']
+  { 
+    id: 'MORNING', 
+    label: '🌞 Morning Exploration', 
+    types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'off_roading', 'falls', 'view point'] 
   },
-  {
-    id: 'LUNCH',
-    label: '🍛 Lunch Break',
-    types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic', 'mess', 'bhavan', 'canteen', 'hotel']
+  { 
+    id: 'LUNCH', 
+    label: '🍛 Lunch Break', 
+    types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic', 'mess', 'bhavan', 'canteen', 'hotel'] 
   },
-  {
-    id: 'AFTERNOON',
-    label: '🎨 Afternoon Vibe',
-    types: ['museum', 'gallery', 'mall', 'shopping', 'zoo', 'aquarium', 'hall', 'monument', 'market', 'amusement_park', 'plantation']
+  { 
+    id: 'AFTERNOON', 
+    label: '🎨 Afternoon Vibe', 
+    types: ['museum', 'gallery', 'mall', 'shopping', 'zoo', 'aquarium', 'hall', 'monument', 'market', 'amusement_park', 'plantation'] 
   },
-  {
-    id: 'EVENING',
-    label: '🌆 Evening Chill',
-    types: ['park', 'sunset', 'lake', 'club', 'pub', 'bar', 'theater', 'cinema', 'beach', 'turf', 'raja seat', 'bridge']
+  { 
+    id: 'EVENING', 
+    label: '🌆 Evening Chill', 
+    types: ['park', 'sunset', 'lake', 'club', 'pub', 'bar', 'theater', 'cinema', 'beach', 'turf', 'raja seat', 'bridge'] 
   },
-  {
-    id: 'DINNER',
-    label: '🍽️ Dinner Feast',
-    types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine', 'late_night', 'dhaba', 'hotel']
+  { 
+    id: 'DINNER', 
+    label: '🍽️ Dinner Feast', 
+    types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine', 'late_night', 'dhaba', 'hotel'] 
   }
 ];
 
@@ -153,10 +153,10 @@ const MAP_STYLES = { width: '100%', height: '100%' };
 const PATH_OPTIONS = { strokeColor: '#2563EB', strokeOpacity: 0.5, strokeWeight: 4 };
 
 // Keywords for filtering
-const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani'];
+const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani']; 
 const NON_FOOD_KEYWORDS = [
   'resort', 'inn', 'stay', 'cottage', 'residency', 'lodge', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb', 'homestay',
-  'temple', 'shrine', 'worship', 'church', 'mosque', 'fort', 'park', 'garden', 'museum', 'dam', 'falls', 'view point',
+  'temple', 'shrine', 'worship', 'church', 'mosque', 'fort', 'park', 'garden', 'museum', 'dam', 'falls', 'view point', 
   'market', 'stand', 'store', 'shop', 'complex', 'race', 'bridge', 'river', 'lake'
 ];
 const ACCOMMODATION_KEYWORDS = [
@@ -165,6 +165,7 @@ const ACCOMMODATION_KEYWORDS = [
 
 export default function Home() {
   const [session, setSession] = useState<any>(null);
+  
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '',
     libraries: LIBRARIES,
@@ -191,18 +192,18 @@ export default function Home() {
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
   const [allCityPlaces, setAllCityPlaces] = useState<Place[]>([]);
   const [dynamicSteps, setDynamicSteps] = useState<any[]>([]);
-  const [startCoords, setStartCoords] = useState<{ lat: number, lng: number } | null>(null);
-
+  const [startCoords, setStartCoords] = useState<{lat: number, lng: number} | null>(null);
+  
   // --- TRIP DATA ---
   const [selectedCity, setSelectedCity] = useState('');
-  const [startLocation, setStartLocation] = useState('');
-  const [showStartHelp, setShowStartHelp] = useState(false);
+  const [startLocation, setStartLocation] = useState(''); 
+  const [showStartHelp, setShowStartHelp] = useState(false); 
   const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [dates, setDates] = useState({ start: '', end: '' });
-  const [budget, setBudget] = useState('MEDIUM');
-  const [groupType, setGroupType] = useState('FRIENDS');
-  const [diet, setDiet] = useState('ANY');
+  const [budget, setBudget] = useState('MEDIUM'); 
+  const [groupType, setGroupType] = useState('FRIENDS'); 
+  const [diet, setDiet] = useState('ANY'); 
   const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
@@ -220,12 +221,15 @@ export default function Home() {
   const [collabTab, setCollabTab] = useState<'MEMBERS' | 'CHAT' | 'SPLIT' | 'PACKING'>('MEMBERS');
   const [tripMembers, setTripMembers] = useState<string[]>(['You']);
   const [inviteLink, setInviteLink] = useState('');
+  
   const [messages, setMessages] = useState<ChatMessage[]>([{ id: '1', user: 'System', text: 'Welcome to the Trip Chat!', time: '10:00 AM', isMe: false }]);
   const [newMessage, setNewMessage] = useState('');
+  
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [newExpense, setNewExpense] = useState({ what: '', amount: '', who: 'You' });
 
+  // NEW: PACKING LIST STATE
   const [packingList, setPackingList] = useState<PackingItem[]>([
     { id: '1', text: 'Passport / ID', checked: false },
     { id: '2', text: 'Chargers & Cables', checked: false },
@@ -247,7 +251,7 @@ export default function Home() {
 
   // Sync Email to Settings
   useEffect(() => {
-    if (session?.user?.email) {
+    if(session?.user?.email) {
       setUserSettings(prev => ({ ...prev, email: session.user.email }));
     }
   }, [session]);
@@ -255,8 +259,8 @@ export default function Home() {
   // Generate Invite Link on Mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const mockTripId = Math.random().toString(36).substring(2, 8).toUpperCase();
-      setInviteLink(`${window.location.origin}/join/${mockTripId}`);
+       const mockTripId = Math.random().toString(36).substring(2, 8).toUpperCase();
+       setInviteLink(`${window.location.origin}/join/${mockTripId}`);
     }
   }, []);
 
@@ -268,8 +272,8 @@ export default function Home() {
   const handleViewChange = (view: NavView) => {
     setActiveView(view);
     if (view === 'DASHBOARD') {
-      setIsWizardActive(false);
-      setShowCreateModal(false);
+        setIsWizardActive(false);
+        setShowCreateModal(false);
     }
   };
 
@@ -288,7 +292,7 @@ export default function Home() {
   };
 
   const handleAiAsk = (query: string = aiQuery) => {
-    if (!query.trim()) return;
+    if(!query.trim()) return;
     const userMsg: ChatMessage = { id: Date.now().toString(), user: 'You', text: query, time: 'Now', isMe: true };
     setAiChatHistory(prev => [...prev, userMsg]);
     setAiQuery('');
@@ -300,7 +304,7 @@ export default function Home() {
         `It's a fantastic spot for photography, especially during the golden hour!`
       ];
       const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-      setAiChatHistory(prev => [...prev, { id: (Date.now() + 1).toString(), user: 'Genius', text: randomResponse, time: 'Now', isMe: false }]);
+      setAiChatHistory(prev => [...prev, { id: (Date.now()+1).toString(), user: 'Genius', text: randomResponse, time: 'Now', isMe: false }]);
     }, 1500);
   };
 
@@ -336,13 +340,13 @@ export default function Home() {
   };
 
   const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
+    if(!newMessage.trim()) return;
     setMessages(prev => [...prev, { id: Date.now().toString(), user: 'You', text: newMessage, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isMe: true }]);
     setNewMessage('');
   };
 
   const handleAddExpense = () => {
-    if (!newExpense.what || !newExpense.amount) return;
+    if(!newExpense.what || !newExpense.amount) return;
     setExpenses([...expenses, { id: Date.now().toString(), who: newExpense.who, what: newExpense.what, amount: Number(newExpense.amount) }]);
     setShowExpenseForm(false);
     setNewExpense({ what: '', amount: '', who: 'You' });
@@ -357,7 +361,7 @@ export default function Home() {
 
   // PACKING HANDLERS
   const addPackingItem = () => {
-    if (!newPackingItem.trim()) return;
+    if(!newPackingItem.trim()) return;
     setPackingList([...packingList, { id: Date.now().toString(), text: newPackingItem, checked: false }]);
     setNewPackingItem('');
   };
@@ -367,9 +371,9 @@ export default function Home() {
   };
 
   // --- CALCULATIONS ---
-  const totalCost = expenses.reduce((a, b) => a + b.amount, 0);
+  const totalCost = expenses.reduce((a,b) => a + b.amount, 0);
   const costPerPerson = tripMembers.length > 0 ? totalCost / tripMembers.length : 0;
-  const myTotalPaid = expenses.filter(e => e.who === 'You').reduce((a, b) => a + b.amount, 0);
+  const myTotalPaid = expenses.filter(e => e.who === 'You').reduce((a,b) => a + b.amount, 0);
   const myBalance = myTotalPaid - costPerPerson;
 
   // --- HELPERS ---
@@ -428,7 +432,7 @@ export default function Home() {
     else setSelectedVibes([...selectedVibes, vibeId]);
   };
 
-  const getGeocode = (address: string): Promise<{ lat: number, lng: number } | null> => {
+  const getGeocode = (address: string): Promise<{lat: number, lng: number} | null> => {
     return new Promise((resolve) => {
       const geocoder = new google.maps.Geocoder();
       geocoder.geocode({ address }, (results, status) => {
@@ -485,7 +489,7 @@ export default function Home() {
     allPlaces: Place[],
     currentTrip: Place[],
     stepsList = dynamicSteps,
-    initialCoords: { lat: number, lng: number } | null = startCoords
+    initialCoords: {lat: number, lng: number} | null = startCoords
   ) => {
     setIsLoadingOptions(true);
     const stepConfig = stepsList[stepIdx];
@@ -666,6 +670,8 @@ export default function Home() {
               <button className="px-3 py-1.5 hover:bg-gray-100 rounded-full text-sm font-bold text-gray-700 transition-colors">₹</button>
               <div className="w-px h-4 bg-gray-300"></div>
               <button className="px-3 py-1.5 hover:bg-gray-100 rounded-full text-xs font-bold text-gray-700 transition-colors">US</button>
+              <div className="w-px h-4 bg-gray-300"></div>
+              <button className="px-3 py-1.5 hover:bg-gray-100 rounded-full text-sm font-bold text-gray-700 transition-colors">°C</button>
             </div>
 
             {/* Profile Dropdown */}
