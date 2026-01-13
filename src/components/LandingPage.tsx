@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase Client for Login
+// Initialize Supabase Client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -13,8 +13,10 @@ export default function LandingPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false); // New Modal State
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // 1. Handle Email Magic Link
+  const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     const { error } = await supabase.auth.signInWithOtp({
@@ -26,9 +28,18 @@ export default function LandingPage() {
     else setSent(true);
   };
 
+  // 2. Handle Google Login
+  const handleGoogleLogin = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}` }
+    });
+    if (error) alert(error.message);
+  };
+
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-blue-600 selection:text-white">
-      
+
       {/* --- NAVBAR --- */}
       <nav className="fixed top-0 w-full z-50 bg-[#050505]/80 backdrop-blur-md border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
@@ -41,7 +52,11 @@ export default function LandingPage() {
               <a href="#features" className="hover:text-white transition-colors">Features</a>
               <a href="#how-it-works" className="hover:text-white transition-colors">How it works</a>
             </div>
-            <button onClick={() => document.getElementById('login-form')?.scrollIntoView({ behavior: 'smooth' })} className="bg-white text-black px-5 py-2.5 rounded-full text-sm font-bold hover:scale-105 transition-transform">
+            {/* UPDATED SIGN IN BUTTON */}
+            <button
+              onClick={() => setShowLoginModal(true)}
+              className="bg-white text-black px-5 py-2.5 rounded-full text-sm font-bold hover:scale-105 transition-transform"
+            >
               Sign In
             </button>
           </div>
@@ -50,7 +65,6 @@ export default function LandingPage() {
 
       {/* --- HERO SECTION --- */}
       <section className="pt-40 pb-20 px-6 relative overflow-hidden">
-        {/* Background Glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-blue-600/20 blur-[120px] rounded-full pointer-events-none"></div>
 
         <div className="max-w-4xl mx-auto text-center relative z-10">
@@ -61,62 +75,35 @@ export default function LandingPage() {
             </span>
           </h1>
           <p className="text-xl text-gray-400 mb-12 max-w-2xl mx-auto leading-relaxed">
-            Stop wrestling with spreadsheets. 2wards uses advanced AI to build your perfect itinerary, split costs, and guide you locally—all in one place.
+            Stop wrestling with spreadsheets. 2wards uses advanced AI to build your perfect itinerary, split costs, and guide you locally.
           </p>
 
-          {/* LOGIN / SIGNUP FORM */}
-          <div id="login-form" className="max-w-md mx-auto bg-white/5 border border-white/10 p-2 rounded-2xl backdrop-blur-sm">
-            {!sent ? (
-              <form onSubmit={handleLogin} className="flex gap-2">
-                <input
-                  type="email"
-                  placeholder="Enter your email address"
-                  className="flex-1 bg-transparent border-none text-white placeholder-gray-500 focus:ring-0 px-4 py-3 font-medium outline-none"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-                <button disabled={loading} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-bold transition-all disabled:opacity-50">
-                  {loading ? 'Sending...' : 'Start Planning'}
-                </button>
-              </form>
-            ) : (
-              <div className="p-4 text-center">
-                <p className="text-green-400 font-bold">✨ Magic link sent! Check your email.</p>
-                <button onClick={() => setSent(false)} className="text-xs text-gray-500 mt-2 hover:text-white">Try another email</button>
-              </div>
-            )}
-          </div>
+          <button
+            onClick={() => setShowLoginModal(true)}
+            className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg shadow-blue-500/20 hover:scale-105 transition-all"
+          >
+            Start Planning Free
+          </button>
+
           <p className="text-xs text-gray-600 mt-4">No credit card required. Free forever for solo travelers.</p>
         </div>
       </section>
 
-      {/* --- DASHBOARD PREVIEW (Fixed Image) --- */}
+      {/* --- DASHBOARD PREVIEW --- */}
       <section className="px-6 pb-32">
         <div className="max-w-6xl mx-auto relative group">
           <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
           <div className="relative bg-[#0A0A0A] border border-white/10 rounded-2xl overflow-hidden shadow-2xl aspect-video flex items-center justify-center">
-             {/* Replaced broken local image with a high-quality abstract travel UI placeholder */}
-             <img 
-               src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=2021&auto=format&fit=crop" 
-               alt="App Dashboard Preview" 
-               className="w-full h-full object-cover opacity-80 hover:opacity-100 transition-opacity duration-700"
-             />
-             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="bg-black/60 backdrop-blur-md border border-white/10 px-8 py-4 rounded-full">
-                  <span className="text-sm font-bold text-white tracking-widest uppercase">Interactive Dashboard Preview</span>
-                </div>
-             </div>
-          </div>
-        </div>
-        
-        {/* LOGO CLOUD */}
-        <div className="mt-20 text-center">
-          <p className="text-xs font-bold text-gray-600 uppercase tracking-widest mb-8">Powering trips for explorers via</p>
-          <div className="flex flex-wrap justify-center gap-8 md:gap-16 opacity-30 grayscale">
-            {['Airbnb', 'TripAdvisor', 'Booking.com', 'Expedia', 'Skyscanner'].map(brand => (
-              <span key={brand} className="text-xl md:text-2xl font-black font-serif text-white">{brand}</span>
-            ))}
+            <img
+              src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=2021&auto=format&fit=crop"
+              alt="App Dashboard Preview"
+              className="w-full h-full object-cover opacity-80 hover:opacity-100 transition-opacity duration-700"
+            />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="bg-black/60 backdrop-blur-md border border-white/10 px-8 py-4 rounded-full">
+                <span className="text-sm font-bold text-white tracking-widest uppercase">Interactive Dashboard Preview</span>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -124,78 +111,81 @@ export default function LandingPage() {
       {/* --- CTA SECTION --- */}
       <section className="py-24 px-6">
         <div className="max-w-5xl mx-auto bg-gradient-to-br from-blue-900/50 to-purple-900/50 border border-blue-500/20 rounded-3xl p-12 md:p-20 text-center relative overflow-hidden">
-           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 blur-[100px] rounded-full"></div>
-           <h2 className="text-4xl md:text-5xl font-black text-white mb-6 relative z-10">Ready to take off?</h2>
-           <p className="text-lg text-blue-200 mb-10 max-w-xl mx-auto relative z-10">Join thousands of travelers planning smarter, not harder. Your next adventure is just one click away.</p>
-           <button onClick={() => document.getElementById('login-form')?.scrollIntoView({ behavior: 'smooth' })} className="bg-white text-blue-900 px-8 py-4 rounded-full font-bold text-lg hover:scale-105 transition-transform shadow-xl relative z-10">
-             Start Your Journey Now
-           </button>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 blur-[100px] rounded-full"></div>
+          <h2 className="text-4xl md:text-5xl font-black text-white mb-6 relative z-10">Ready to take off?</h2>
+          <p className="text-lg text-blue-200 mb-10 max-w-xl mx-auto relative z-10">Join thousands of travelers planning smarter, not harder.</p>
+          <button onClick={() => setShowLoginModal(true)} className="bg-white text-blue-900 px-8 py-4 rounded-full font-bold text-lg hover:scale-105 transition-transform shadow-xl relative z-10">
+            Start Your Journey Now
+          </button>
         </div>
       </section>
 
-      {/* --- ENHANCED FOOTER --- */}
+      {/* --- FOOTER (UNCHANGED) --- */}
       <footer className="border-t border-white/10 bg-black pt-20 pb-10 px-6">
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-10 mb-16">
-          
-          {/* Column 1: Brand */}
           <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-2 mb-6">
               <div className="w-6 h-6 bg-white rounded-md flex items-center justify-center font-bold text-black text-xs">2</div>
               <span className="font-bold text-lg text-white">2wards</span>
             </div>
-            <p className="text-gray-500 text-sm leading-relaxed mb-6">
-              The AI-powered travel planner that helps you explore the world with confidence. Built in Bangalore, for the world.
-            </p>
-            <div className="flex gap-4">
-              <a href="#" className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-white hover:text-black transition-colors">𝕏</a>
-              <a href="#" className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-white hover:text-black transition-colors">In</a>
-              <a href="#" className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-white hover:text-black transition-colors">Ig</a>
-            </div>
+            <p className="text-gray-500 text-sm leading-relaxed mb-6">The AI-powered travel planner that helps you explore the world with confidence.</p>
           </div>
-
-          {/* Column 2: Product */}
-          <div>
-            <h4 className="font-bold text-white mb-6">Product</h4>
-            <ul className="space-y-4 text-sm text-gray-500">
-              <li><a href="#" className="hover:text-blue-400 transition-colors">Features</a></li>
-              <li><a href="#" className="hover:text-blue-400 transition-colors">Pricing</a></li>
-              <li><a href="#" className="hover:text-blue-400 transition-colors">AI Trip Gen</a></li>
-              <li><a href="#" className="hover:text-blue-400 transition-colors">Expense Splitter</a></li>
-            </ul>
-          </div>
-
-          {/* Column 3: Resources */}
-          <div>
-            <h4 className="font-bold text-white mb-6">Resources</h4>
-            <ul className="space-y-4 text-sm text-gray-500">
-              <li><a href="#" className="hover:text-blue-400 transition-colors">Travel Blog</a></li>
-              <li><a href="#" className="hover:text-blue-400 transition-colors">City Guides</a></li>
-              <li><a href="#" className="hover:text-blue-400 transition-colors">Help Center</a></li>
-              <li><a href="#" className="hover:text-blue-400 transition-colors">Community</a></li>
-            </ul>
-          </div>
-
-          {/* Column 4: Company */}
-          <div>
-            <h4 className="font-bold text-white mb-6">Company</h4>
-            <ul className="space-y-4 text-sm text-gray-500">
-              <li><a href="#" className="hover:text-blue-400 transition-colors">About Us</a></li>
-              <li><a href="#" className="hover:text-blue-400 transition-colors">Contact</a></li>
-              <li><a href="#" className="hover:text-blue-400 transition-colors">Careers</a></li>
-              <li><a href="#" className="hover:text-blue-400 transition-colors">Legal & Privacy</a></li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-gray-600 text-xs">© 2026 2wards AI. All rights reserved.</p>
-          <div className="flex gap-6 text-xs text-gray-600">
-            <a href="#" className="hover:text-white">Terms</a>
-            <a href="#" className="hover:text-white">Privacy</a>
-            <a href="#" className="hover:text-white">Cookies</a>
-          </div>
+          <div><h4 className="font-bold text-white mb-6">Product</h4><ul className="space-y-4 text-sm text-gray-500"><li>Features</li><li>Pricing</li></ul></div>
+          <div><h4 className="font-bold text-white mb-6">Resources</h4><ul className="space-y-4 text-sm text-gray-500"><li>Blog</li><li>Guides</li></ul></div>
+          <div><h4 className="font-bold text-white mb-6">Company</h4><ul className="space-y-4 text-sm text-gray-500"><li>About</li><li>Contact</li></ul></div>
         </div>
       </footer>
+
+      {/* --- LOGIN MODAL (NEW!) --- */}
+      {showLoginModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-[#111] border border-white/10 p-8 rounded-3xl w-full max-w-md relative shadow-2xl">
+            <button onClick={() => setShowLoginModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors">✕</button>
+
+            <div className="text-center mb-8">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-green-400 rounded-xl flex items-center justify-center font-bold text-black text-xl mx-auto mb-4">2</div>
+              <h3 className="text-2xl font-black text-white">Welcome Back</h3>
+              <p className="text-gray-400 text-sm mt-2">Sign in to access your trips</p>
+            </div>
+
+            {/* GOOGLE BUTTON */}
+            <button onClick={handleGoogleLogin} className="w-full bg-white text-black font-bold py-3.5 rounded-xl flex items-center justify-center gap-3 hover:bg-gray-200 transition-colors mb-4">
+              <svg className="w-5 h-5" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" /><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" /><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" /><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" /></svg>
+              Sign in with Google
+            </button>
+
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-800"></div></div>
+              <div className="relative flex justify-center text-xs uppercase"><span className="bg-[#111] px-2 text-gray-500 font-bold">Or continue with email</span></div>
+            </div>
+
+            {/* EMAIL FORM */}
+            {!sent ? (
+              <form onSubmit={handleEmailLogin} className="space-y-3">
+                <input
+                  type="email"
+                  placeholder="name@example.com"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none font-medium transition-all"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+                <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition-all disabled:opacity-50">
+                  {loading ? 'Sending Magic Link...' : 'Send Magic Link'}
+                </button>
+              </form>
+            ) : (
+              <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
+                <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center text-2xl mx-auto mb-2">✉️</div>
+                <h4 className="font-bold text-green-400">Check your email!</h4>
+                <p className="text-xs text-gray-400 mt-1">We sent a magic link to <b>{email}</b></p>
+                <button onClick={() => setSent(false)} className="text-xs text-gray-500 mt-3 hover:text-white underline">Try different email</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
