@@ -21,9 +21,10 @@ interface DiscoveryViewProps {
 
 const CATEGORIES = [
   { id: 'tourist_attraction', label: '🎡 Attractions' },
+  { id: 'local_market', label: '🌸 Santhe / Markets' }, // <--- NEW CATEGORY ADDED HERE
   { id: 'trending', label: '🔥 Trending' },
-  { id: 'iconic', label: '💎 Legendary Spots' }, // NEW: For "Famous" spots
-  { id: 'late_night', label: '🌙 Late Night / 4AM' }, // NEW: For 4am Biryani
+  { id: 'iconic', label: '💎 Legendary Spots' },
+  { id: 'late_night', label: '🌙 Late Night / 4AM' },
   { id: 'restaurant', label: '🍽️ Restaurants' },
   { id: 'cafe', label: '☕ Cafes' },
   { id: 'lodging', label: '🏨 Hotels & Stays' },
@@ -103,8 +104,11 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       case 'amusement_park': query = `amusement park in ${city}`; break;
 
       // --- NEW CATEGORIES ---
-      case 'iconic': query = `legendary famous old restaurants in ${city}`; break; // Finds "Cult Classics"
-      case 'late_night': query = `late night food early morning biryani in ${city}`; break; // Finds "4am Biryani"
+      case 'iconic': query = `legendary famous old restaurants in ${city}`; break;
+      case 'late_night': query = `late night food early morning biryani in ${city}`; break;
+      
+      // 🌸 NEW SANKRANTHI LOGIC 🌸
+      case 'local_market': query = `flower market vegetable mandi santhe traditional bazaar in ${city}`; break;
 
       default: query = `${category.replace('_', ' ')} in ${city}`; break;
     }
@@ -174,7 +178,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   };
 
   const handleGetDirection = (place: Place) => {
-    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name)}&query_place_id=${place.place_id}`, '_blank');
+    window.open(`https://www.google.com/maps/search/?api=1&query=$?q=${encodeURIComponent(place.name)}&query_place_id=${place.place_id}`, '_blank');
   };
 
   return (
@@ -268,6 +272,14 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
                 <div className="h-40 bg-gray-200 relative overflow-hidden">
                   {place.photos?.[0] ? <img src={place.photos[0].getUrl({ maxWidth: 400 })} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={place.name} /> : <div className="w-full h-full flex items-center justify-center text-gray-300 bg-gray-100 text-3xl">📷</div>}
                   {place.rating && <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur px-2 py-1 rounded-lg text-[10px] font-bold text-white flex items-center gap-1">⭐ {place.rating} <span className="opacity-70">({place.user_ratings_total})</span></div>}
+                  
+                  {/* ✨ BADGE FOR SANTHE MARKETS ✨ */}
+                  {activeCategory === 'local_market' && (
+                    <div className="absolute top-2 left-2 bg-pink-600 text-white px-2 py-1 rounded-md text-[10px] font-bold shadow-md">
+                      🌸 Festival Special
+                    </div>
+                  )}
+
                 </div>
                 <div className="p-4 flex flex-col flex-1">
                   <h4 className="font-bold text-md text-gray-900 leading-tight mb-1 line-clamp-1" title={place.name}>{place.name}</h4>
