@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-// Supabase import removed (not needed here anymore)
+// Supabase import removed (kept clean for discovery only)
 
 interface Place {
   place_id: string;
@@ -45,7 +45,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   const [cityCoords, setCityCoords] = useState<google.maps.LatLng | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('tourist_attraction');
-  const [radius, setRadius] = useState(20000); // Default 20km
+  const [radius, setRadius] = useState(20000); // Default 20km in meters
 
   // RESULTS
   const [results, setResults] = useState<Place[]>([]);
@@ -146,10 +146,16 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
 
   // Handle Input Changes
   const handleCityInput = (e: any) => setSearchTerm(e.target.value);
+
+  // NEW: Handle Numeric Radius Input
   const handleRadiusChange = (e: any) => {
-    const val = Number(e.target.value) * 1000;
-    setRadius(val);
-    if (cityCoords) performSearch(currentCity, activeCategory, cityCoords);
+    const km = Number(e.target.value);
+    if (km >= 0) {
+      const meters = km * 1000;
+      setRadius(meters);
+      // Optional: Auto-search on change if you prefer, or wait for Search button
+      // if (cityCoords) performSearch(currentCity, activeCategory, cityCoords);
+    }
   };
 
   const handleKeyDown = (e: any) => {
@@ -188,17 +194,17 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
             <span className="absolute left-3 top-2.5 text-gray-400">🌍</span>
           </div>
 
-          {/* Radius Slider */}
+          {/* RADIUS INPUT (Replaces Slider) */}
           <div className="md:col-span-4 flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2">
-            <span className="text-xs font-bold text-gray-500 whitespace-nowrap">Radius: {radius / 1000} km</span>
+            <span className="text-xs font-bold text-gray-500 whitespace-nowrap">Radius (km):</span>
             <input
-              type="range"
-              min="5"
-              max="200"
-              step="5"
-              value={radius / 1000}
+              type="number"
+              min="1"
+              max="500"
+              value={radius / 1000} // Convert meters back to km for display
               onChange={handleRadiusChange}
-              className="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              className="w-full bg-transparent text-sm font-bold focus:outline-none"
+              placeholder="20"
             />
           </div>
 
@@ -234,7 +240,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
         ) : results.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
             <p className="text-gray-500 font-bold">No results found.</p>
-            <p className="text-sm text-gray-400">Try increasing the radius slider or changing the city.</p>
+            <p className="text-sm text-gray-400">Try increasing the radius or changing the city.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
