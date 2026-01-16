@@ -2,20 +2,25 @@
 
 import React, { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import Link from 'next/link';
+import FeedbackModal from './FeedbackModal';
 
-// Initialize Supabase Client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
 export default function LandingPage() {
+  // State for Login System
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(false); // New Modal State
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // 1. Handle Email Magic Link
+  // 2. STATE FOR FEEDBACK MODAL
+  const [showFeedback, setShowFeedback] = useState(false);
+
+  // --- LOGIN LOGIC ---
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -28,7 +33,6 @@ export default function LandingPage() {
     else setSent(true);
   };
 
-  // 2. Handle Google Login
   const handleGoogleLogin = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -52,7 +56,6 @@ export default function LandingPage() {
               <a href="#features" className="hover:text-white transition-colors">Features</a>
               <a href="#how-it-works" className="hover:text-white transition-colors">How it works</a>
             </div>
-            {/* UPDATED SIGN IN BUTTON */}
             <button
               onClick={() => setShowLoginModal(true)}
               className="bg-white text-black px-5 py-2.5 rounded-full text-sm font-bold hover:scale-105 transition-transform"
@@ -120,7 +123,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* --- FOOTER (UNCHANGED) --- */}
+      {/* --- FOOTER (WITH CONTACT FIX) --- */}
       <footer className="border-t border-white/10 bg-black pt-20 pb-10 px-6">
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-10 mb-16">
           <div className="col-span-2 md:col-span-1">
@@ -130,13 +133,43 @@ export default function LandingPage() {
             </div>
             <p className="text-gray-500 text-sm leading-relaxed mb-6">The AI-powered travel planner that helps you explore the world with confidence.</p>
           </div>
-          <div><h4 className="font-bold text-white mb-6">Product</h4><ul className="space-y-4 text-sm text-gray-500"><li>Features</li><li>Pricing</li></ul></div>
-          <div><h4 className="font-bold text-white mb-6">Resources</h4><ul className="space-y-4 text-sm text-gray-500"><li>Blog</li><li>Guides</li></ul></div>
-          <div><h4 className="font-bold text-white mb-6">Company</h4><ul className="space-y-4 text-sm text-gray-500"><li>About</li><li>Contact</li></ul></div>
+
+          <div>
+            <h4 className="font-bold text-white mb-6">Product</h4>
+            <ul className="space-y-4 text-sm text-gray-500">
+              <li><Link href="#" className="hover:text-blue-400">Features</Link></li>
+              <li><Link href="#" className="hover:text-blue-400">Pricing</Link></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-bold text-white mb-6">Resources</h4>
+            <ul className="space-y-4 text-sm text-gray-500">
+              <li><Link href="/blog" className="hover:text-blue-400">Travel Blog</Link></li>
+              <li><Link href="#" className="hover:text-blue-400">City Guides</Link></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-bold text-white mb-6">Company</h4>
+            <ul className="space-y-4 text-sm text-gray-500">
+              <li><Link href="#" className="hover:text-blue-400">About Us</Link></li>
+              {/* 3. CONTACT BUTTON (TRIGGERS MODAL) */}
+              <li>
+                <button
+                  onClick={() => setShowFeedback(true)}
+                  className="hover:text-blue-400 transition-colors text-left"
+                >
+                  Contact / Feedback
+                </button>
+              </li>
+              <li><Link href="#" className="hover:text-blue-400">Careers</Link></li>
+            </ul>
+          </div>
         </div>
       </footer>
 
-      {/* --- LOGIN MODAL (NEW!) --- */}
+      {/* --- LOGIN MODAL --- */}
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-[#111] border border-white/10 p-8 rounded-3xl w-full max-w-md relative shadow-2xl">
@@ -184,6 +217,14 @@ export default function LandingPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* 4. RENDER FEEDBACK MODAL */}
+      {showFeedback && (
+        <FeedbackModal
+          isOpen={showFeedback}
+          onClose={() => setShowFeedback(false)}
+        />
       )}
 
     </div>
