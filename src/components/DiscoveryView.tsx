@@ -1,14 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import Link from 'next/link';
-
-// --- 1. SETUP SUPABASE FOR BLOGS ---
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
+// Supabase import removed (not needed here anymore)
 
 interface Place {
   place_id: string;
@@ -20,15 +13,6 @@ interface Place {
   photos?: any[];
   types?: string[];
   price_level?: number;
-}
-
-interface Blog {
-  id: string;
-  title: string;
-  slug: string;
-  image_url: string;
-  excerpt: string;
-  created_at: string;
 }
 
 interface DiscoveryViewProps {
@@ -67,15 +51,11 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   const [results, setResults] = useState<Place[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // BLOGS STATE
-  const [blogs, setBlogs] = useState<Blog[]>([]);
-  const [blogsLoading, setBlogsLoading] = useState(true);
-
   // REFS
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
   const geocoderRef = useRef<google.maps.Geocoder | null>(null);
 
-  // 1. INITIALIZE GOOGLE MAPS & FETCH BLOGS
+  // 1. INITIALIZE GOOGLE MAPS
   useEffect(() => {
     if (typeof window !== 'undefined' && window.google) {
       const mapDiv = document.createElement('div');
@@ -83,27 +63,13 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       geocoderRef.current = new window.google.maps.Geocoder();
     }
 
-    fetchBlogs();
-
     if (initialCity) {
       setSearchTerm(initialCity);
       geocodeAndSearch(initialCity);
     }
   }, [initialCity]);
 
-  // --- 2. FETCH BLOGS FUNCTION ---
-  async function fetchBlogs() {
-    const { data, error } = await supabase
-      .from('blogs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(6);
-
-    if (!error && data) setBlogs(data);
-    setBlogsLoading(false);
-  }
-
-  // --- 3. GEOCODING HELPER ---
+  // --- GEOCODING HELPER ---
   const geocodeAndSearch = (cityName: string) => {
     if (!geocoderRef.current) return;
 
@@ -118,7 +84,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
     });
   };
 
-  // --- 4. SEARCH LOGIC ---
+  // --- SEARCH LOGIC ---
   const performSearch = (city: string, category: string, location: google.maps.LatLng | null) => {
     if (!placesServiceRef.current) return;
     setLoading(true);
@@ -155,11 +121,8 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       setLoading(false);
       if (status === google.maps.places.PlacesServiceStatus.OK && places) {
 
-        // --- FILTERING LOGIC (FIXED TYPESCRIPT ERROR) ---
         const filtered = places.filter(place => {
           const types = place.types || [];
-
-          // FIX: Handle undefined name safely
           const name = (place.name || '').toLowerCase();
 
           // 1. Remove Agencies & Booking Offices
@@ -265,90 +228,44 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       </div>
 
       {/* --- SCROLLABLE CONTENT AREA --- */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-12">
-
-        {/* 1. SEARCH RESULTS SECTION */}
-        <section>
-          {loading ? (
-            <div className="text-center py-20 text-gray-400"><div className="animate-spin text-3xl mb-2">⏳</div>Searching...</div>
-          ) : results.length === 0 ? (
-            <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
-              <p className="text-gray-500 font-bold">No results found.</p>
-              <p className="text-sm text-gray-400">Try increasing the radius slider or changing the city.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {results.map((place) => (
-                <div key={place.place_id} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-gray-100 group flex flex-col h-full">
-                  <div className="h-40 bg-gray-200 relative">
-                    {place.photos?.[0] ? (
-                      <img src={place.photos[0].getUrl({ maxWidth: 400 })} className="w-full h-full object-cover" alt={place.name} />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400 text-3xl">📷</div>
-                    )}
-                    {place.rating && (
-                      <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur px-2 py-1 rounded-md text-[10px] font-bold text-white">
-                        ⭐ {place.rating} ({place.user_ratings_total})
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-4 flex flex-col flex-1">
-                    <h4 className="font-bold text-sm text-gray-900 line-clamp-1">{place.name}</h4>
-                    <p className="text-[10px] text-gray-500 line-clamp-2 mb-3">{place.formatted_address}</p>
-                    <button
-                      onClick={() => window.open(`http://googleusercontent.com/maps.google.com/search?q=${encodeURIComponent(place.name)}&query_place_id=${place.place_id}`, '_blank')}
-                      className="mt-auto w-full bg-gray-50 text-black py-2 rounded-lg text-[10px] font-bold uppercase hover:bg-black hover:text-white transition-colors border border-gray-200"
-                    >
-                      Get Directions 📍
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 2. BLOGS SECTION */}
-        <section className="border-t border-gray-200 pt-10">
-          <div className="flex items-center gap-3 mb-6">
-            <h3 className="font-black text-2xl text-gray-900">Travel Guides & Stories ✍️</h3>
-            <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">New</span>
+      <div className="flex-1 overflow-y-auto p-6">
+        {loading ? (
+          <div className="text-center py-20 text-gray-400"><div className="animate-spin text-3xl mb-2">⏳</div>Searching...</div>
+        ) : results.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
+            <p className="text-gray-500 font-bold">No results found.</p>
+            <p className="text-sm text-gray-400">Try increasing the radius slider or changing the city.</p>
           </div>
-
-          {blogsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[1, 2, 3].map(i => <div key={i} className="h-64 bg-gray-200 rounded-3xl animate-pulse"></div>)}
-            </div>
-          ) : blogs.length === 0 ? (
-            <div className="text-center py-10 text-gray-400 bg-white rounded-3xl border border-dashed">No blogs posted yet.</div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {blogs.map((blog) => (
-                <Link
-                  key={blog.id}
-                  href={`/blog/${blog.slug}`}
-                  className="group block bg-white border border-gray-100 rounded-3xl overflow-hidden hover:shadow-2xl transition-all hover:-translate-y-1"
-                >
-                  <div className="h-48 overflow-hidden relative">
-                    <img
-                      src={blog.image_url || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80'}
-                      alt={blog.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                    />
-                    <div className="absolute top-3 right-3 bg-white/90 backdrop-blur px-2 py-1 rounded-full text-[10px] font-bold text-black uppercase tracking-wider">
-                      Read
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {results.map((place) => (
+              <div key={place.place_id} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-gray-100 group flex flex-col h-full">
+                <div className="h-40 bg-gray-200 relative">
+                  {place.photos?.[0] ? (
+                    <img src={place.photos[0].getUrl({ maxWidth: 400 })} className="w-full h-full object-cover" alt={place.name} />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-3xl">📷</div>
+                  )}
+                  {place.rating && (
+                    <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur px-2 py-1 rounded-md text-[10px] font-bold text-white">
+                      ⭐ {place.rating} ({place.user_ratings_total})
                     </div>
-                  </div>
-                  <div className="p-5">
-                    <h4 className="font-bold text-lg text-gray-900 mb-2 line-clamp-1 group-hover:text-blue-600 transition-colors">{blog.title}</h4>
-                    <p className="text-xs text-gray-500 line-clamp-2">{blog.excerpt}</p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-
+                  )}
+                </div>
+                <div className="p-4 flex flex-col flex-1">
+                  <h4 className="font-bold text-sm text-gray-900 line-clamp-1">{place.name}</h4>
+                  <p className="text-[10px] text-gray-500 line-clamp-2 mb-3">{place.formatted_address}</p>
+                  <button
+                    onClick={() => window.open(`http://googleusercontent.com/maps.google.com/search?q=${encodeURIComponent(place.name)}&query_place_id=${place.place_id}`, '_blank')}
+                    className="mt-auto w-full bg-gray-50 text-black py-2 rounded-lg text-[10px] font-bold uppercase hover:bg-black hover:text-white transition-colors border border-gray-200"
+                  >
+                    Get Directions 📍
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

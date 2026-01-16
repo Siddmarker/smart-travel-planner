@@ -18,7 +18,7 @@ interface DashboardProps {
 
 interface Trip {
   id: string;
-  destination: string; // or 'city' depending on your table column name
+  destination: string;
   start_date: string;
   end_date: string;
 }
@@ -44,22 +44,22 @@ export default function DashboardView({ onPlanTrip, onDiscovery }: DashboardProp
     async function loadDashboardData() {
       // 1. Get User
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return; // Should handle redirect elsewhere if needed
 
-      // Set Name (from metadata or email)
-      const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Traveler';
-      setUserName(name);
+      if (user) {
+        // Set Name
+        const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Traveler';
+        setUserName(name);
 
-      // 2. Fetch User's Trips
-      // Note: Ensure your table is named 'trips' and has 'user_id' column
-      const { data: tripsData } = await supabase
-        .from('trips')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(3);
+        // 2. Fetch User's Trips
+        const { data: tripsData } = await supabase
+          .from('trips')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(3);
 
-      if (tripsData) setTrips(tripsData);
+        if (tripsData) setTrips(tripsData);
+      }
 
       // 3. Fetch Blogs (Public)
       const { data: blogsData } = await supabase
@@ -93,8 +93,8 @@ export default function DashboardView({ onPlanTrip, onDiscovery }: DashboardProp
         </div>
 
         <div className="flex items-center gap-4 bg-white p-2 pr-6 rounded-full shadow-sm border border-gray-100">
-          <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden">
-            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${userName}`} alt="User" />
+          <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center text-xl">
+            👤
           </div>
           <button onClick={handleLogout} className="text-sm font-bold text-red-500 hover:text-red-700 transition-colors">
             Logout
@@ -160,7 +160,7 @@ export default function DashboardView({ onPlanTrip, onDiscovery }: DashboardProp
         )}
       </div>
 
-      {/* --- SECTION: LATEST BLOGS --- */}
+      {/* --- SECTION: LATEST BLOGS (This is the NEW part) --- */}
       <div>
         <div className="flex justify-between items-end mb-6">
           <h3 className="text-xl font-black text-gray-900">Travel Guides & Stories ✍️</h3>
@@ -171,7 +171,9 @@ export default function DashboardView({ onPlanTrip, onDiscovery }: DashboardProp
             {[1, 2, 3].map(i => <div key={i} className="h-60 bg-gray-200 rounded-2xl animate-pulse"></div>)}
           </div>
         ) : blogs.length === 0 ? (
-          <div className="text-gray-400 text-sm italic">No blogs posted yet.</div>
+          <div className="text-gray-400 text-sm italic border border-dashed border-gray-200 p-8 rounded-2xl text-center">
+            No blogs posted yet. Go to Supabase and add a row to the 'blogs' table!
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {blogs.map((blog) => (
@@ -180,12 +182,15 @@ export default function DashboardView({ onPlanTrip, onDiscovery }: DashboardProp
                 href={`/blog/${blog.slug}`}
                 className="group block bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all"
               >
-                <div className="h-40 overflow-hidden">
+                <div className="h-40 overflow-hidden relative">
                   <img
                     src={blog.image_url || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80'}
                     alt={blog.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                   />
+                  <div className="absolute top-3 right-3 bg-white/90 backdrop-blur px-2 py-1 rounded-full text-[10px] font-bold text-black uppercase tracking-wider">
+                    Read
+                  </div>
                 </div>
                 <div className="p-5">
                   <h4 className="font-bold text-gray-900 mb-2 line-clamp-1 group-hover:text-blue-600 transition-colors">
