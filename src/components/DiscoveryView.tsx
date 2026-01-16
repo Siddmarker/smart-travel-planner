@@ -58,7 +58,7 @@ const CATEGORIES = [
 export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: DiscoveryViewProps) {
   // STATE
   const [currentCity, setCurrentCity] = useState(initialCity || 'Bangalore');
-  const [cityCoords, setCityCoords] = useState<google.maps.LatLng | null>(null); // NEW: Exact coordinates
+  const [cityCoords, setCityCoords] = useState<google.maps.LatLng | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('tourist_attraction');
   const [radius, setRadius] = useState(20000); // Default 20km
@@ -83,12 +83,10 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       geocoderRef.current = new window.google.maps.Geocoder();
     }
 
-    // Fetch Blogs immediately
     fetchBlogs();
 
     if (initialCity) {
       setSearchTerm(initialCity);
-      // First get coords, then search
       geocodeAndSearch(initialCity);
     }
   }, [initialCity]);
@@ -106,7 +104,6 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   }
 
   // --- 3. GEOCODING HELPER ---
-  // We need exact Lat/Lng to make the "Radius" filter actually work
   const geocodeAndSearch = (cityName: string) => {
     if (!geocoderRef.current) return;
 
@@ -116,22 +113,17 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
         setCityCoords(location);
         performSearch(cityName, activeCategory, location);
       } else {
-        // Fallback if geocoding fails
         performSearch(cityName, activeCategory, null);
       }
     });
   };
 
-  // --- 4. SEARCH LOGIC (FIXED FOR ALL CATEGORIES) ---
+  // --- 4. SEARCH LOGIC ---
   const performSearch = (city: string, category: string, location: google.maps.LatLng | null) => {
     if (!placesServiceRef.current) return;
     setLoading(true);
 
     let query = '';
-
-    // LOGIC: If we have exact coordinates (location), we search GENERIC terms.
-    // If we DON'T have coordinates, we append "in [City]" to the query.
-    // This forces Google to respect the 'radius' parameter when location is present.
 
     if (location) {
       // --- SMART RADIUS MODE ---
@@ -142,10 +134,10 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
         case 'iconic': query = `legendary oldest famous restaurants`; break;
         case 'late_night': query = `late night food open 24 hours`; break;
         case 'trending': query = `popular tourist attractions`; break;
-        default: query = category.replace('_', ' '); break; // e.g., "restaurant", "cafe"
+        default: query = category.replace('_', ' '); break;
       }
     } else {
-      // --- FALLBACK TEXT MODE (Old way) ---
+      // --- FALLBACK TEXT MODE ---
       switch (category) {
         case 'trekking': query = `hiking trails hills peaks near ${city}`; break;
         case 'local_market': query = `market santhe bazaar in ${city}`; break;
@@ -156,7 +148,6 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
 
     const request: google.maps.places.TextSearchRequest = {
       query: query,
-      // STRICT LOCATION BIASING APPLIES TO EVERYTHING NOW
       ...(location && { location: location, radius: radius }),
     };
 
@@ -164,12 +155,14 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       setLoading(false);
       if (status === google.maps.places.PlacesServiceStatus.OK && places) {
 
-        // --- FILTERING LOGIC ---
+        // --- FILTERING LOGIC (FIXED TYPESCRIPT ERROR) ---
         const filtered = places.filter(place => {
           const types = place.types || [];
-          const name = place.name.toLowerCase();
 
-          // 1. Remove Agencies & Booking Offices (Global Filter)
+          // FIX: Handle undefined name safely
+          const name = (place.name || '').toLowerCase();
+
+          // 1. Remove Agencies & Booking Offices
           if (types.includes('travel_agency')) return false;
           if (name.includes('travels') || name.includes('holidays') || name.includes('tours &')) return false;
 
@@ -181,7 +174,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
           return true;
         });
 
-        setResults(filtered);
+        setResults(filtered as Place[]);
       } else {
         setResults([]);
       }
@@ -191,13 +184,11 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   // Handle Input Changes
   const handleCityInput = (e: any) => setSearchTerm(e.target.value);
   const handleRadiusChange = (e: any) => {
-    const val = Number(e.target.value) * 1000; // convert km to meters
+    const val = Number(e.target.value) * 1000;
     setRadius(val);
-    // Re-run search immediately with new radius
     if (cityCoords) performSearch(currentCity, activeCategory, cityCoords);
   };
 
-  // Trigger search on "Enter"
   const handleKeyDown = (e: any) => {
     if (e.key === 'Enter') {
       setCurrentCity(searchTerm);
@@ -317,7 +308,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
           )}
         </section>
 
-        {/* 2. BLOGS SECTION (Replaces Static Cities) */}
+        {/* 2. BLOGS SECTION */}
         <section className="border-t border-gray-200 pt-10">
           <div className="flex items-center gap-3 mb-6">
             <h3 className="font-black text-2xl text-gray-900">Travel Guides & Stories ✍️</h3>
