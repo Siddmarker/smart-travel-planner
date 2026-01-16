@@ -19,9 +19,11 @@ interface DiscoveryViewProps {
   initialCity: string;
 }
 
+// --- UPDATED CATEGORIES LIST WITH TREKKING ---
 const CATEGORIES = [
   { id: 'tourist_attraction', label: '🎡 Attractions' },
-  { id: 'local_market', label: '🌸 Santhe / Markets' }, // <--- NEW CATEGORY ADDED HERE
+  { id: 'trekking', label: '🥾 Trekking' }, // <--- NEW!
+  { id: 'local_market', label: '🌸 Santhe / Markets' },
   { id: 'trending', label: '🔥 Trending' },
   { id: 'iconic', label: '💎 Legendary Spots' },
   { id: 'late_night', label: '🌙 Late Night / 4AM' },
@@ -75,6 +77,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   // REFS
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
   const autocompleteServiceRef = useRef<google.maps.places.AutocompleteService | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null); // Ref for scrolling
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.google) {
@@ -106,14 +109,13 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       // --- NEW CATEGORIES ---
       case 'iconic': query = `legendary famous old restaurants in ${city}`; break;
       case 'late_night': query = `late night food early morning biryani in ${city}`; break;
-      
-      // 🌸 NEW SANKRANTHI LOGIC 🌸
       case 'local_market': query = `flower market vegetable mandi santhe traditional bazaar in ${city}`; break;
+      case 'trekking': query = `trekking hiking trails hills viewpoints near ${city}`; break; // <--- NEW LOGIC
 
       default: query = `${category.replace('_', ' ')} in ${city}`; break;
     }
 
-    // 2. APPLY FOOD FILTERS (Only for Food Categories)
+    // 2. APPLY FOOD FILTERS
     if (['restaurant', 'cafe', 'trending', 'iconic', 'late_night'].includes(category)) {
       if (diet === 'VEG') query += ' pure vegetarian';
       if (diet === 'JAIN') query += ' jain food';
@@ -122,7 +124,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       if (diet === 'VEGAN') query += ' vegan';
     }
 
-    // 3. APPLY STAY FILTERS (Only for Lodging)
+    // 3. APPLY STAY FILTERS
     if (category === 'lodging') {
       if (stayType !== 'ANY') query = `${stayType} in ${city}`;
       if (budget !== 'ANY') query += ` ${budget}`;
@@ -178,7 +180,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   };
 
   const handleGetDirection = (place: Place) => {
-    window.open(`https://www.google.com/maps/search/?api=1&query=$?q=${encodeURIComponent(place.name)}&query_place_id=${place.place_id}`, '_blank');
+    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name)}&query_place_id=${place.place_id}`, '_blank');
   };
 
   return (
@@ -196,7 +198,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
         {/* INPUTS ROW */}
         <div className="px-6 py-4 grid gap-3 md:grid-cols-12 items-center relative">
 
-          {/* A. CITY SEARCH (Width: 4/12) */}
+          {/* A. CITY SEARCH */}
           <div className="md:col-span-4 relative flex gap-2">
             <div className="relative flex-1">
               <input className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold focus:outline-none" placeholder="Change City..." value={searchTerm} onChange={handleCityInput} />
@@ -212,16 +214,14 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
             <button onClick={handleLiveLocation} className="px-3 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 hover:bg-blue-100">📍</button>
           </div>
 
-          {/* B. RADIUS (Width: 3/12) */}
+          {/* B. RADIUS */}
           <div className="md:col-span-3 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5">
             <span className="text-[10px] text-gray-500 font-bold uppercase whitespace-nowrap">Dist (km)</span>
             <input type="number" min="1" max="100" value={radius / 1000} onChange={(e) => { const km = Number(e.target.value); if (km >= 0) { setRadius(km * 1000); performSearch(currentCity, activeCategory); } }} className="w-full bg-transparent text-sm font-bold focus:outline-none text-gray-900" />
           </div>
 
-          {/* C. CONDITIONAL FILTERS (Width: 5/12) */}
+          {/* C. CONDITIONAL FILTERS */}
           <div className="md:col-span-5 flex gap-2">
-
-            {/* 1. RESTAURANT FILTERS */}
             {(['restaurant', 'cafe', 'iconic', 'late_night', 'trending'].includes(activeCategory)) && (
               <select className="w-full p-2.5 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none cursor-pointer" value={diet} onChange={(e) => { setDiet(e.target.value); performSearch(currentCity, activeCategory); }}>
                 <option value="ANY">🍽️ Any Diet</option>
@@ -234,7 +234,6 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
               </select>
             )}
 
-            {/* 2. HOTEL FILTERS */}
             {activeCategory === 'lodging' && (
               <>
                 <select className="w-1/2 p-2.5 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none cursor-pointer" value={stayType} onChange={(e) => { setStayType(e.target.value); performSearch(currentCity, activeCategory); }}>
@@ -246,17 +245,29 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
               </>
             )}
 
-            {/* 3. DEFAULT */}
             {!['restaurant', 'cafe', 'lodging', 'iconic', 'late_night', 'trending'].includes(activeCategory) && (
               <div className="w-full text-xs text-gray-400 flex items-center justify-center italic">No extra filters</div>
             )}
           </div>
         </div>
 
-        {/* Categories */}
-        <div className="px-6 pb-4 flex gap-2 overflow-x-auto no-scrollbar">
+        {/* --- SCROLLABLE CATEGORIES --- */}
+        <div
+          ref={scrollContainerRef}
+          className="px-6 pb-4 flex gap-2 overflow-x-auto snap-x hide-scrollbar"
+          style={{ scrollBehavior: 'smooth' }}
+        >
           {CATEGORIES.map((cat) => (
-            <button key={cat.id} onClick={() => { setActiveCategory(cat.id); performSearch(currentCity, cat.id); }} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${activeCategory === cat.id ? 'bg-black text-white border-black shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400 hover:bg-gray-50'}`}>
+            <button
+              key={cat.id}
+              onClick={() => { setActiveCategory(cat.id); performSearch(currentCity, cat.id); }}
+              className={`
+                px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border snap-start flex-shrink-0
+                ${activeCategory === cat.id
+                  ? 'bg-black text-white border-black shadow-md scale-105'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400 hover:bg-gray-50'}
+              `}
+            >
               {cat.label}
             </button>
           ))}
@@ -272,12 +283,13 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
                 <div className="h-40 bg-gray-200 relative overflow-hidden">
                   {place.photos?.[0] ? <img src={place.photos[0].getUrl({ maxWidth: 400 })} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={place.name} /> : <div className="w-full h-full flex items-center justify-center text-gray-300 bg-gray-100 text-3xl">📷</div>}
                   {place.rating && <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur px-2 py-1 rounded-lg text-[10px] font-bold text-white flex items-center gap-1">⭐ {place.rating} <span className="opacity-70">({place.user_ratings_total})</span></div>}
-                  
-                  {/* ✨ BADGE FOR SANTHE MARKETS ✨ */}
+
                   {activeCategory === 'local_market' && (
-                    <div className="absolute top-2 left-2 bg-pink-600 text-white px-2 py-1 rounded-md text-[10px] font-bold shadow-md">
-                      🌸 Festival Special
-                    </div>
+                    <div className="absolute top-2 left-2 bg-pink-600 text-white px-2 py-1 rounded-md text-[10px] font-bold shadow-md">🌸 Festival Special</div>
+                  )}
+                  {/* TREKKING BADGE */}
+                  {activeCategory === 'trekking' && (
+                    <div className="absolute top-2 left-2 bg-green-600 text-white px-2 py-1 rounded-md text-[10px] font-bold shadow-md">🥾 Adventure</div>
                   )}
 
                 </div>

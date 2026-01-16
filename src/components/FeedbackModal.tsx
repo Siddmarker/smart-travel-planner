@@ -1,12 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase
+// 1. Safe Initialization
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Only create client if keys exist to prevent runtime crash
+const supabase = (supabaseUrl && supabaseKey)
+    ? createClient(supabaseUrl, supabaseKey)
+    : null;
 
 interface FeedbackModalProps {
     isOpen: boolean;
@@ -19,53 +23,50 @@ export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
     const [sending, setSending] = useState(false);
     const [sent, setSent] = useState(false);
 
-    // Debug: Check if modal is actually mounting
-    useEffect(() => {
-        if (isOpen) console.log("🟢 Feedback Modal is OPEN and Ready.");
-    }, [isOpen]);
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
 
-    const handleSubmit = async (e?: React.FormEvent) => {
-        if (e) e.preventDefault(); // Stop page refresh
-
-        // VALIDATION CHECK (Manually checking so we can log errors)
         if (!message.trim()) {
-            console.warn("⚠️ Message is empty. Blocking submission.");
             alert("Please enter a message!");
             return;
         }
 
+        if (!supabase) {
+            console.error("❌ Supabase Client missing. Check .env.local keys.");
+            alert("System Error: Feedback service unavailable. Please try again later.");
+            return;
+        }
+
         setSending(true);
-        console.log("🚀 STARTING SUBMISSION...");
-        console.log("Payload:", { message, user_email: email });
 
         try {
-            const { data, error } = await supabase
+            const { error } = await supabase
                 .from('feedback')
                 .insert([
                     {
                         message: message,
-                        user_email: email,
+                        user_email: email || null, // Handle empty email
                         page_url: window.location.pathname,
                         status: 'NEW'
                     }
-                ])
-                .select();
+                ]);
 
             if (error) {
-                console.error("❌ SUPABASE FAILED:", error);
-                alert(`Error: ${error.message}`);
+                console.error("❌ Supabase Error:", error);
+                alert(`Failed to send: ${error.message}`);
             } else {
-                console.log("✅ SUCCESS! Data saved:", data);
                 setSent(true);
                 setTimeout(() => {
                     setSent(false);
                     setMessage('');
+                    setEmail('');
                     onClose();
                 }, 2000);
             }
+
         } catch (err) {
-            console.error("❌ CRITICAL ERROR:", err);
-            alert("Something went wrong. Check console.");
+            console.error("❌ Unexpected Error:", err);
+            alert("An unexpected error occurred.");
         } finally {
             setSending(false);
         }
@@ -84,18 +85,17 @@ export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                     ✕
                 </button>
 
-                <h3 className="text-xl font-bold text-white mb-1">💬 Share Feedback</h3>
+                <h3 className="text-xl font-bold text-white mb-1">� Share Feedback</h3>
                 <p className="text-xs text-gray-400 mb-6">Found a bug? Have an idea? Let us know.</p>
 
                 {!sent ? (
-                    <div className="space-y-4"> {/* Changed <form> to <div> to prevent validation blocking */}
-
+                    <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
                             <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Email (Optional)</label>
                             <input
-                                type="text"
+                                type="email"
                                 placeholder="name@example.com"
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-blue-500 outline-none transition-all"
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                             />
@@ -104,29 +104,34 @@ export default function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                         <div>
                             <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Message</label>
                             <textarea
+                                required
                                 rows={4}
                                 placeholder="Tell us what you think..."
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-blue-500 outline-none transition-all resize-none"
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all resize-none"
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
                             />
                         </div>
 
-                        {/* Changed Type to BUTTON and added explicit onClick */}
                         <button
-                            type="button"
-                            onClick={() => handleSubmit()}
                             disabled={sending}
-                            className="w-full bg-white text-black font-bold py-3.5 rounded-xl hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="w-full bg-white text-black font-bold py-3.5 rounded-xl hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
-                            {sending ? 'Sending...' : 'Send Feedback'}
+                            {sending ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></div>
+                                    Sending...
+                                </>
+                            ) : (
+                                'Send Feedback'
+                            )}
                         </button>
-
-                    </div>
+                    </form>
                 ) : (
                     <div className="text-center py-10">
                         <div className="text-3xl mb-4">✅</div>
                         <h4 className="text-xl font-bold text-white mb-2">Thank You!</h4>
+                        <p className="text-gray-400 text-sm">Your feedback helps us improve.</p>
                     </div>
                 )}
             </div>
