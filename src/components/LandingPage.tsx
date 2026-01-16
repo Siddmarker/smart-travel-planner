@@ -3,6 +3,9 @@
 import React, { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+
+// 1. IMPORT THE FEEDBACK MODAL
+// Ensure FeedbackModal.tsx is in the same folder (src/components/FeedbackModal.tsx)
 import FeedbackModal from './FeedbackModal';
 
 const supabase = createClient(
@@ -11,13 +14,13 @@ const supabase = createClient(
 );
 
 export default function LandingPage() {
-  // State for Login System
+  // --- STATE MANAGEMENT ---
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // 2. STATE FOR FEEDBACK MODAL
+  // State for Feedback Modal
   const [showFeedback, setShowFeedback] = useState(false);
 
   // --- LOGIN LOGIC ---
@@ -68,6 +71,7 @@ export default function LandingPage() {
 
       {/* --- HERO SECTION --- */}
       <section className="pt-40 pb-20 px-6 relative overflow-hidden">
+        {/* Background Glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-blue-600/20 blur-[120px] rounded-full pointer-events-none"></div>
 
         <div className="max-w-4xl mx-auto text-center relative z-10">
@@ -123,13 +127,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* --- FOOTER (WITH CONTACT FIX) --- */}
+      {/* --- FOOTER --- */}
       <footer className="border-t border-white/10 bg-black pt-20 pb-10 px-6">
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-10 mb-16">
           <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-2 mb-6">
               <div className="w-6 h-6 bg-white rounded-md flex items-center justify-center font-bold text-black text-xs">2</div>
-              <span className="font-bold text-lg text-white">2wards</span>
+              {/* VERSION TAG FOR DEBUGGING */}
+              <span className="font-bold text-lg text-white">2wards <span className="text-xs text-green-500 ml-2">v2.0 (LIVE)</span></span>
             </div>
             <p className="text-gray-500 text-sm leading-relaxed mb-6">The AI-powered travel planner that helps you explore the world with confidence.</p>
           </div>
@@ -154,7 +159,8 @@ export default function LandingPage() {
             <h4 className="font-bold text-white mb-6">Company</h4>
             <ul className="space-y-4 text-sm text-gray-500">
               <li><Link href="#" className="hover:text-blue-400">About Us</Link></li>
-              {/* 3. CONTACT BUTTON (TRIGGERS MODAL) */}
+
+              {/* --- CONTACT / FEEDBACK BUTTON --- */}
               <li>
                 <button
                   onClick={() => setShowFeedback(true)}
@@ -163,13 +169,22 @@ export default function LandingPage() {
                   Contact / Feedback
                 </button>
               </li>
+
               <li><Link href="#" className="hover:text-blue-400">Careers</Link></li>
             </ul>
           </div>
         </div>
       </footer>
 
-      {/* --- LOGIN MODAL --- */}
+      {/* --- FEEDBACK MODAL COMPONENT --- */}
+      {showFeedback && (
+        <FeedbackModal
+          isOpen={showFeedback}
+          onClose={() => setShowFeedback(false)}
+        />
+      )}
+
+      {/* --- LOGIN MODAL COMPONENT --- */}
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-[#111] border border-white/10 p-8 rounded-3xl w-full max-w-md relative shadow-2xl">
@@ -217,14 +232,6 @@ export default function LandingPage() {
             )}
           </div>
         </div>
-      )}
-
-      {/* 4. RENDER FEEDBACK MODAL */}
-      {showFeedback && (
-        <FeedbackModal
-          isOpen={showFeedback}
-          onClose={() => setShowFeedback(false)}
-        />
       )}
 
     </div>
