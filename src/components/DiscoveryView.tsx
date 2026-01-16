@@ -1,5 +1,14 @@
 'use client';
+
 import { useState, useEffect, useRef } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import Link from 'next/link';
+
+// --- 1. SETUP SUPABASE FOR BLOGS ---
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
 
 interface Place {
   place_id: string;
@@ -13,16 +22,25 @@ interface Place {
   price_level?: number;
 }
 
+interface Blog {
+  id: string;
+  title: string;
+  slug: string;
+  image_url: string;
+  excerpt: string;
+  created_at: string;
+}
+
 interface DiscoveryViewProps {
   onAddToTrip: (place: any) => void;
   onBack: () => void;
   initialCity: string;
 }
 
-// --- UPDATED CATEGORIES LIST WITH TREKKING ---
+// --- CATEGORIES ---
 const CATEGORIES = [
   { id: 'tourist_attraction', label: '🎡 Attractions' },
-  { id: 'trekking', label: '🥾 Trekking' }, // <--- NEW!
+  { id: 'trekking', label: '🥾 Trekking & Trails' },
   { id: 'local_market', label: '🌸 Santhe / Markets' },
   { id: 'trending', label: '🔥 Trending' },
   { id: 'iconic', label: '💎 Legendary Spots' },
@@ -37,236 +55,217 @@ const CATEGORIES = [
   { id: 'park', label: '🌳 Parks' }
 ];
 
-// FILTER OPTIONS
-const STAY_TYPES = [
-  { value: 'ANY', label: '🏨 Any Stay' },
-  { value: 'resort', label: '🌴 Resort' },
-  { value: 'villa', label: '🏡 Villa' },
-  { value: 'homestay', label: '🏠 Homestay' },
-  { value: 'hostel', label: '🎒 Hostel / Dorm' },
-  { value: 'apartment', label: '🏢 Apartment' }
-];
-
-const BUDGET_LEVELS = [
-  { value: 'ANY', label: '💰 Any Price' },
-  { value: 'cheap', label: '💸 Budget' },
-  { value: 'luxury', label: '💎 Luxury' },
-  { value: 'premium', label: '✨ Premium' }
-];
-
 export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: DiscoveryViewProps) {
-  // CORE STATE
+  // STATE
   const [currentCity, setCurrentCity] = useState(initialCity || 'Bangalore');
+  const [cityCoords, setCityCoords] = useState<google.maps.LatLng | null>(null); // NEW: Exact coordinates
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('tourist_attraction');
-  const [radius, setRadius] = useState(5000);
+  const [radius, setRadius] = useState(20000); // Default 20km
 
-  // CONDITIONAL FILTERS STATE
-  const [diet, setDiet] = useState('ANY');
-  const [stayType, setStayType] = useState('ANY');
-  const [budget, setBudget] = useState('ANY');
-
-  // RESULTS STATE
+  // RESULTS
   const [results, setResults] = useState<Place[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // SUGGESTIONS STATE
-  const [citySuggestions, setCitySuggestions] = useState<any[]>([]);
-  const [showDropdown, setShowDropdown] = useState(false);
+  // BLOGS STATE
+  const [blogs, setBlogs] = useState<Blog[]>([]);
+  const [blogsLoading, setBlogsLoading] = useState(true);
 
   // REFS
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
-  const autocompleteServiceRef = useRef<google.maps.places.AutocompleteService | null>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null); // Ref for scrolling
+  const geocoderRef = useRef<google.maps.Geocoder | null>(null);
 
+  // 1. INITIALIZE GOOGLE MAPS & FETCH BLOGS
   useEffect(() => {
     if (typeof window !== 'undefined' && window.google) {
       const mapDiv = document.createElement('div');
       placesServiceRef.current = new window.google.maps.places.PlacesService(mapDiv);
-      autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService();
+      geocoderRef.current = new window.google.maps.Geocoder();
     }
+
+    // Fetch Blogs immediately
+    fetchBlogs();
 
     if (initialCity) {
       setSearchTerm(initialCity);
-      performSearch(initialCity, activeCategory);
+      // First get coords, then search
+      geocodeAndSearch(initialCity);
     }
   }, [initialCity]);
 
-  // --- SEARCH LOGIC ---
-  const performSearch = (city: string, category: string) => {
+  // --- 2. FETCH BLOGS FUNCTION ---
+  async function fetchBlogs() {
+    const { data, error } = await supabase
+      .from('blogs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(6);
+
+    if (!error && data) setBlogs(data);
+    setBlogsLoading(false);
+  }
+
+  // --- 3. GEOCODING HELPER ---
+  // We need exact Lat/Lng to make the "Radius" filter actually work
+  const geocodeAndSearch = (cityName: string) => {
+    if (!geocoderRef.current) return;
+
+    geocoderRef.current.geocode({ address: cityName }, (results, status) => {
+      if (status === 'OK' && results && results[0]) {
+        const location = results[0].geometry.location;
+        setCityCoords(location);
+        performSearch(cityName, activeCategory, location);
+      } else {
+        // Fallback if geocoding fails
+        performSearch(cityName, activeCategory, null);
+      }
+    });
+  };
+
+  // --- 4. SEARCH LOGIC (FIXED FOR ALL CATEGORIES) ---
+  const performSearch = (city: string, category: string, location: google.maps.LatLng | null) => {
     if (!placesServiceRef.current) return;
     setLoading(true);
 
     let query = '';
 
-    // 1. BASE QUERY MAPPING
-    switch (category) {
-      case 'trending': query = `popular places in ${city}`; break;
-      case 'off_roading': query = `off road biking trails in ${city}`; break;
-      case 'turf': query = `sports turf cricket football in ${city}`; break;
-      case 'amusement_park': query = `amusement park in ${city}`; break;
+    // LOGIC: If we have exact coordinates (location), we search GENERIC terms.
+    // If we DON'T have coordinates, we append "in [City]" to the query.
+    // This forces Google to respect the 'radius' parameter when location is present.
 
-      // --- NEW CATEGORIES ---
-      case 'iconic': query = `legendary famous old restaurants in ${city}`; break;
-      case 'late_night': query = `late night food early morning biryani in ${city}`; break;
-      case 'local_market': query = `flower market vegetable mandi santhe traditional bazaar in ${city}`; break;
-      case 'trekking': query = `trekking hiking trails hills viewpoints near ${city}`; break; // <--- NEW LOGIC
-
-      default: query = `${category.replace('_', ' ')} in ${city}`; break;
+    if (location) {
+      // --- SMART RADIUS MODE ---
+      switch (category) {
+        case 'trekking': query = `hiking trails hills viewpoints nature`; break;
+        case 'local_market': query = `flower market vegetable market bazaar santhe`; break;
+        case 'off_roading': query = `off road trails dirt tracks`; break;
+        case 'iconic': query = `legendary oldest famous restaurants`; break;
+        case 'late_night': query = `late night food open 24 hours`; break;
+        case 'trending': query = `popular tourist attractions`; break;
+        default: query = category.replace('_', ' '); break; // e.g., "restaurant", "cafe"
+      }
+    } else {
+      // --- FALLBACK TEXT MODE (Old way) ---
+      switch (category) {
+        case 'trekking': query = `hiking trails hills peaks near ${city}`; break;
+        case 'local_market': query = `market santhe bazaar in ${city}`; break;
+        case 'off_roading': query = `off road trails near ${city}`; break;
+        default: query = `${category.replace('_', ' ')} in ${city}`; break;
+      }
     }
 
-    // 2. APPLY FOOD FILTERS
-    if (['restaurant', 'cafe', 'trending', 'iconic', 'late_night'].includes(category)) {
-      if (diet === 'VEG') query += ' pure vegetarian';
-      if (diet === 'JAIN') query += ' jain food';
-      if (diet === 'HALAL') query += ' halal';
-      if (diet === 'EGG') query += ' eggetarian';
-      if (diet === 'VEGAN') query += ' vegan';
-    }
-
-    // 3. APPLY STAY FILTERS
-    if (category === 'lodging') {
-      if (stayType !== 'ANY') query = `${stayType} in ${city}`;
-      if (budget !== 'ANY') query += ` ${budget}`;
-    }
-
-    const request = {
+    const request: google.maps.places.TextSearchRequest = {
       query: query,
-      fields: ['name', 'geometry', 'formatted_address', 'photos', 'rating', 'user_ratings_total', 'place_id', 'types', 'price_level']
+      // STRICT LOCATION BIASING APPLIES TO EVERYTHING NOW
+      ...(location && { location: location, radius: radius }),
     };
 
     placesServiceRef.current.textSearch(request, (places, status) => {
       setLoading(false);
       if (status === google.maps.places.PlacesServiceStatus.OK && places) {
-        setResults(places as Place[]);
+
+        // --- FILTERING LOGIC ---
+        const filtered = places.filter(place => {
+          const types = place.types || [];
+          const name = place.name.toLowerCase();
+
+          // 1. Remove Agencies & Booking Offices (Global Filter)
+          if (types.includes('travel_agency')) return false;
+          if (name.includes('travels') || name.includes('holidays') || name.includes('tours &')) return false;
+
+          // 2. Trekking Specific Cleanups
+          if (category === 'trekking') {
+            if (types.includes('store') || types.includes('shopping_mall')) return false;
+          }
+
+          return true;
+        });
+
+        setResults(filtered);
       } else {
         setResults([]);
       }
     });
   };
 
-  // --- CITY AUTOCOMPLETE ---
-  const handleCityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setSearchTerm(val);
-    if (val.length < 3 || !autocompleteServiceRef.current) {
-      setCitySuggestions([]); setShowDropdown(false); return;
+  // Handle Input Changes
+  const handleCityInput = (e: any) => setSearchTerm(e.target.value);
+  const handleRadiusChange = (e: any) => {
+    const val = Number(e.target.value) * 1000; // convert km to meters
+    setRadius(val);
+    // Re-run search immediately with new radius
+    if (cityCoords) performSearch(currentCity, activeCategory, cityCoords);
+  };
+
+  // Trigger search on "Enter"
+  const handleKeyDown = (e: any) => {
+    if (e.key === 'Enter') {
+      setCurrentCity(searchTerm);
+      geocodeAndSearch(searchTerm);
     }
-    autocompleteServiceRef.current.getPlacePredictions({ input: val, types: ['(cities)'] }, (predictions, status) => {
-      if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
-        setCitySuggestions(predictions); setShowDropdown(true);
-      } else { setCitySuggestions([]); setShowDropdown(false); }
-    });
-  };
-
-  const selectCity = (cityName: string) => {
-    setSearchTerm(cityName); setCurrentCity(cityName); setCitySuggestions([]); setShowDropdown(false);
-    performSearch(cityName, activeCategory);
-  };
-
-  const handleLiveLocation = () => {
-    if (!navigator.geolocation) { alert("Geolocation not supported."); return; }
-    setSearchTerm("Locating...");
-    navigator.geolocation.getCurrentPosition((pos) => {
-      const { latitude, longitude } = pos.coords;
-      const geocoder = new google.maps.Geocoder();
-      geocoder.geocode({ location: { lat: latitude, lng: longitude } }, (res, status) => {
-        if (status === "OK" && res?.[0]) {
-          const city = res[0].address_components.find(c => c.types.includes('locality'))?.long_name;
-          if (city) { setSearchTerm(city); setCurrentCity(city); performSearch(city, activeCategory); }
-        } else { alert("Location failed."); setSearchTerm(""); }
-      });
-    });
-  };
-
-  const handleGetDirection = (place: Place) => {
-    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name)}&query_place_id=${place.place_id}`, '_blank');
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="h-full flex flex-col bg-gray-50 overflow-hidden">
 
-      {/* 1. HEADER & CONTROLS */}
-      <div className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-20">
-
-        {/* Title */}
+      {/* --- HEADER --- */}
+      <div className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-20 flex-shrink-0">
         <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
-          <div><h2 className="text-xl font-black text-gray-900">Discover {currentCity}</h2><p className="text-xs text-gray-500">Explore top rated spots nearby</p></div>
-          <button onClick={onBack} className="text-sm font-bold text-gray-500 hover:text-black transition-colors bg-gray-100 px-3 py-2 rounded-lg">← Back to Plan</button>
+          <div>
+            <h2 className="text-xl font-black text-gray-900">Discover {currentCity}</h2>
+            <p className="text-xs text-gray-500">Explore {activeCategory.replace('_', ' ')} spots</p>
+          </div>
+          <button onClick={onBack} className="text-sm font-bold text-gray-500 bg-gray-100 px-3 py-2 rounded-lg hover:bg-gray-200">
+            ← Back
+          </button>
         </div>
 
-        {/* INPUTS ROW */}
-        <div className="px-6 py-4 grid gap-3 md:grid-cols-12 items-center relative">
-
-          {/* A. CITY SEARCH */}
-          <div className="md:col-span-4 relative flex gap-2">
-            <div className="relative flex-1">
-              <input className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold focus:outline-none" placeholder="Change City..." value={searchTerm} onChange={handleCityInput} />
-              <span className="absolute left-3 top-2.5 text-gray-400">🌍</span>
-              {showDropdown && citySuggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto">
-                  {citySuggestions.map((s) => (
-                    <div key={s.place_id} onClick={() => selectCity(s.description)} className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 text-sm font-bold text-gray-700 flex gap-2"><span>📍</span> {s.description}</div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button onClick={handleLiveLocation} className="px-3 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 hover:bg-blue-100">📍</button>
+        {/* CONTROLS */}
+        <div className="px-6 py-4 grid gap-3 md:grid-cols-12 items-center">
+          {/* City Input */}
+          <div className="md:col-span-5 relative">
+            <input
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter City..."
+              value={searchTerm}
+              onChange={handleCityInput}
+              onKeyDown={handleKeyDown}
+            />
+            <span className="absolute left-3 top-2.5 text-gray-400">🌍</span>
           </div>
 
-          {/* B. RADIUS */}
-          <div className="md:col-span-3 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5">
-            <span className="text-[10px] text-gray-500 font-bold uppercase whitespace-nowrap">Dist (km)</span>
-            <input type="number" min="1" max="100" value={radius / 1000} onChange={(e) => { const km = Number(e.target.value); if (km >= 0) { setRadius(km * 1000); performSearch(currentCity, activeCategory); } }} className="w-full bg-transparent text-sm font-bold focus:outline-none text-gray-900" />
+          {/* Radius Slider */}
+          <div className="md:col-span-4 flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2">
+            <span className="text-xs font-bold text-gray-500 whitespace-nowrap">Radius: {radius / 1000} km</span>
+            <input
+              type="range"
+              min="5"
+              max="200"
+              step="5"
+              value={radius / 1000}
+              onChange={handleRadiusChange}
+              className="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            />
           </div>
 
-          {/* C. CONDITIONAL FILTERS */}
-          <div className="md:col-span-5 flex gap-2">
-            {(['restaurant', 'cafe', 'iconic', 'late_night', 'trending'].includes(activeCategory)) && (
-              <select className="w-full p-2.5 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none cursor-pointer" value={diet} onChange={(e) => { setDiet(e.target.value); performSearch(currentCity, activeCategory); }}>
-                <option value="ANY">🍽️ Any Diet</option>
-                <option value="VEG">🥦 Vegetarian</option>
-                <option value="EGG">🍳 Eggetarian</option>
-                <option value="NON_VEG">🍗 Non-Veg</option>
-                <option value="JAIN">🌿 Jain</option>
-                <option value="HALAL">🍖 Halal</option>
-                <option value="VEGAN">🥗 Vegan</option>
-              </select>
-            )}
-
-            {activeCategory === 'lodging' && (
-              <>
-                <select className="w-1/2 p-2.5 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none cursor-pointer" value={stayType} onChange={(e) => { setStayType(e.target.value); performSearch(currentCity, activeCategory); }}>
-                  {STAY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-                <select className="w-1/2 p-2.5 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none cursor-pointer" value={budget} onChange={(e) => { setBudget(e.target.value); performSearch(currentCity, activeCategory); }}>
-                  {BUDGET_LEVELS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
-                </select>
-              </>
-            )}
-
-            {!['restaurant', 'cafe', 'lodging', 'iconic', 'late_night', 'trending'].includes(activeCategory) && (
-              <div className="w-full text-xs text-gray-400 flex items-center justify-center italic">No extra filters</div>
-            )}
+          {/* Search Button */}
+          <div className="md:col-span-3">
+            <button
+              onClick={() => { setCurrentCity(searchTerm); geocodeAndSearch(searchTerm); }}
+              className="w-full bg-black text-white py-2.5 rounded-xl font-bold text-sm hover:bg-gray-800 transition-all"
+            >
+              Search
+            </button>
           </div>
         </div>
 
-        {/* --- SCROLLABLE CATEGORIES --- */}
-        <div
-          ref={scrollContainerRef}
-          className="px-6 pb-4 flex gap-2 overflow-x-auto snap-x hide-scrollbar"
-          style={{ scrollBehavior: 'smooth' }}
-        >
+        {/* CATEGORIES SCROLL */}
+        <div className="px-6 pb-4 flex gap-2 overflow-x-auto hide-scrollbar">
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => { setActiveCategory(cat.id); performSearch(currentCity, cat.id); }}
-              className={`
-                px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border snap-start flex-shrink-0
-                ${activeCategory === cat.id
-                  ? 'bg-black text-white border-black shadow-md scale-105'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400 hover:bg-gray-50'}
-              `}
+              onClick={() => { setActiveCategory(cat.id); if (cityCoords) performSearch(currentCity, cat.id, cityCoords); }}
+              className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border flex-shrink-0 ${activeCategory === cat.id ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
             >
               {cat.label}
             </button>
@@ -274,34 +273,91 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
         </div>
       </div>
 
-      {/* 2. RESULTS GRID */}
-      <div className="flex-1 overflow-y-auto p-6">
-        {loading ? <div className="h-full flex flex-col items-center justify-center text-gray-400"><div className="animate-spin text-3xl mb-2">⏳</div><p className="font-bold">Searching {currentCity}...</p></div> : results.length === 0 ? <div className="h-full flex flex-col items-center justify-center text-gray-400"><p className="font-bold">No results found.</p><p className="text-xs">Try increasing radius or changing filters.</p></div> : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-10">
-            {results.map((place) => (
-              <div key={place.place_id} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group flex flex-col h-full border border-gray-100">
-                <div className="h-40 bg-gray-200 relative overflow-hidden">
-                  {place.photos?.[0] ? <img src={place.photos[0].getUrl({ maxWidth: 400 })} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={place.name} /> : <div className="w-full h-full flex items-center justify-center text-gray-300 bg-gray-100 text-3xl">📷</div>}
-                  {place.rating && <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur px-2 py-1 rounded-lg text-[10px] font-bold text-white flex items-center gap-1">⭐ {place.rating} <span className="opacity-70">({place.user_ratings_total})</span></div>}
+      {/* --- SCROLLABLE CONTENT AREA --- */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-12">
 
-                  {activeCategory === 'local_market' && (
-                    <div className="absolute top-2 left-2 bg-pink-600 text-white px-2 py-1 rounded-md text-[10px] font-bold shadow-md">🌸 Festival Special</div>
-                  )}
-                  {/* TREKKING BADGE */}
-                  {activeCategory === 'trekking' && (
-                    <div className="absolute top-2 left-2 bg-green-600 text-white px-2 py-1 rounded-md text-[10px] font-bold shadow-md">🥾 Adventure</div>
-                  )}
+        {/* 1. SEARCH RESULTS SECTION */}
+        <section>
+          {loading ? (
+            <div className="text-center py-20 text-gray-400"><div className="animate-spin text-3xl mb-2">⏳</div>Searching...</div>
+          ) : results.length === 0 ? (
+            <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
+              <p className="text-gray-500 font-bold">No results found.</p>
+              <p className="text-sm text-gray-400">Try increasing the radius slider or changing the city.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {results.map((place) => (
+                <div key={place.place_id} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-gray-100 group flex flex-col h-full">
+                  <div className="h-40 bg-gray-200 relative">
+                    {place.photos?.[0] ? (
+                      <img src={place.photos[0].getUrl({ maxWidth: 400 })} className="w-full h-full object-cover" alt={place.name} />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-400 text-3xl">📷</div>
+                    )}
+                    {place.rating && (
+                      <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur px-2 py-1 rounded-md text-[10px] font-bold text-white">
+                        ⭐ {place.rating} ({place.user_ratings_total})
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-4 flex flex-col flex-1">
+                    <h4 className="font-bold text-sm text-gray-900 line-clamp-1">{place.name}</h4>
+                    <p className="text-[10px] text-gray-500 line-clamp-2 mb-3">{place.formatted_address}</p>
+                    <button
+                      onClick={() => window.open(`http://googleusercontent.com/maps.google.com/search?q=${encodeURIComponent(place.name)}&query_place_id=${place.place_id}`, '_blank')}
+                      className="mt-auto w-full bg-gray-50 text-black py-2 rounded-lg text-[10px] font-bold uppercase hover:bg-black hover:text-white transition-colors border border-gray-200"
+                    >
+                      Get Directions 📍
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
-                </div>
-                <div className="p-4 flex flex-col flex-1">
-                  <h4 className="font-bold text-md text-gray-900 leading-tight mb-1 line-clamp-1" title={place.name}>{place.name}</h4>
-                  <p className="text-[10px] text-gray-500 line-clamp-2 mb-3 flex-1">{place.formatted_address}</p>
-                  <div className="flex gap-2 mt-auto"><button onClick={() => handleGetDirection(place)} className="flex-1 bg-black text-white py-2.5 rounded-lg font-bold text-[10px] uppercase tracking-wide hover:bg-gray-800 transition-colors flex items-center justify-center gap-2 shadow-lg">📍 Get Direction</button></div>
-                </div>
-              </div>
-            ))}
+        {/* 2. BLOGS SECTION (Replaces Static Cities) */}
+        <section className="border-t border-gray-200 pt-10">
+          <div className="flex items-center gap-3 mb-6">
+            <h3 className="font-black text-2xl text-gray-900">Travel Guides & Stories ✍️</h3>
+            <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">New</span>
           </div>
-        )}
+
+          {blogsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[1, 2, 3].map(i => <div key={i} className="h-64 bg-gray-200 rounded-3xl animate-pulse"></div>)}
+            </div>
+          ) : blogs.length === 0 ? (
+            <div className="text-center py-10 text-gray-400 bg-white rounded-3xl border border-dashed">No blogs posted yet.</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {blogs.map((blog) => (
+                <Link
+                  key={blog.id}
+                  href={`/blog/${blog.slug}`}
+                  className="group block bg-white border border-gray-100 rounded-3xl overflow-hidden hover:shadow-2xl transition-all hover:-translate-y-1"
+                >
+                  <div className="h-48 overflow-hidden relative">
+                    <img
+                      src={blog.image_url || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80'}
+                      alt={blog.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                    />
+                    <div className="absolute top-3 right-3 bg-white/90 backdrop-blur px-2 py-1 rounded-full text-[10px] font-bold text-black uppercase tracking-wider">
+                      Read
+                    </div>
+                  </div>
+                  <div className="p-5">
+                    <h4 className="font-bold text-lg text-gray-900 mb-2 line-clamp-1 group-hover:text-blue-600 transition-colors">{blog.title}</h4>
+                    <p className="text-xs text-gray-500 line-clamp-2">{blog.excerpt}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+
       </div>
     </div>
   );
