@@ -51,9 +51,14 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   const [results, setResults] = useState<Place[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // AUTOCOMPLETE STATE
+  const [citySuggestions, setCitySuggestions] = useState<any[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+
   // REFS
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
   const geocoderRef = useRef<google.maps.Geocoder | null>(null);
+  const autocompleteServiceRef = useRef<google.maps.places.AutocompleteService | null>(null);
 
   // 1. INITIALIZE GOOGLE MAPS
   useEffect(() => {
@@ -61,6 +66,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       const mapDiv = document.createElement('div');
       placesServiceRef.current = new window.google.maps.places.PlacesService(mapDiv);
       geocoderRef.current = new window.google.maps.Geocoder();
+      autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService();
     }
 
     if (initialCity) {
@@ -144,17 +150,44 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
     });
   };
 
-  // Handle Input Changes
-  const handleCityInput = (e: any) => setSearchTerm(e.target.value);
+  // --- AUTOCOMPLETE HANDLER ---
+  const handleCityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSearchTerm(val);
 
-  // NEW: Handle Numeric Radius Input
+    // If empty or no service, hide dropdown
+    if (!val || val.length < 3 || !autocompleteServiceRef.current) {
+      setCitySuggestions([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    // Fetch predictions
+    autocompleteServiceRef.current.getPlacePredictions({ input: val, types: ['(cities)'] }, (predictions, status) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
+        setCitySuggestions(predictions);
+        setShowDropdown(true);
+      } else {
+        setCitySuggestions([]);
+        setShowDropdown(false);
+      }
+    });
+  };
+
+  const selectCity = (cityName: string) => {
+    setSearchTerm(cityName);
+    setCurrentCity(cityName);
+    setCitySuggestions([]);
+    setShowDropdown(false);
+    geocodeAndSearch(cityName);
+  };
+
+  // Handle Numeric Radius Input
   const handleRadiusChange = (e: any) => {
     const km = Number(e.target.value);
     if (km >= 0) {
       const meters = km * 1000;
       setRadius(meters);
-      // Optional: Auto-search on change if you prefer, or wait for Search button
-      // if (cityCoords) performSearch(currentCity, activeCategory, cityCoords);
     }
   };
 
@@ -162,6 +195,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
     if (e.key === 'Enter') {
       setCurrentCity(searchTerm);
       geocodeAndSearch(searchTerm);
+      setShowDropdown(false);
     }
   };
 
@@ -175,44 +209,62 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
             <h2 className="text-xl font-black text-gray-900">Discover {currentCity}</h2>
             <p className="text-xs text-gray-500">Explore {activeCategory.replace('_', ' ')} spots</p>
           </div>
-          <button onClick={onBack} className="text-sm font-bold text-gray-500 bg-gray-100 px-3 py-2 rounded-lg hover:bg-gray-200">
+          <button onClick={onBack} className="text-base font-bold text-gray-500 bg-gray-100 px-4 py-2 rounded-lg hover:bg-gray-200">
             ← Back
           </button>
         </div>
 
         {/* CONTROLS */}
-        <div className="px-6 py-4 grid gap-3 md:grid-cols-12 items-center">
-          {/* City Input */}
-          <div className="md:col-span-5 relative">
+        <div className="px-6 py-4 grid gap-3 md:grid-cols-12 items-center relative">
+
+          {/* A. City Input with Dropdown */}
+          <div className="md:col-span-5 relative z-50">
             <input
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-base font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Enter City..."
               value={searchTerm}
               onChange={handleCityInput}
               onKeyDown={handleKeyDown}
+              onFocus={() => { if (citySuggestions.length > 0) setShowDropdown(true); }}
             />
-            <span className="absolute left-3 top-2.5 text-gray-400">🌍</span>
+            <span className="absolute left-3 top-3 text-gray-400">🌍</span>
+
+            {/* THE DROPDOWN LIST */}
+            {showDropdown && citySuggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl z-[100] max-h-60 overflow-y-auto">
+                {citySuggestions.map((s) => (
+                  <div
+                    key={s.place_id}
+                    onClick={() => selectCity(s.description)}
+                    className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 text-base font-medium text-gray-700 flex gap-2 items-center"
+                  >
+                    <span className="opacity-50">📍</span>
+                    {s.description}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* RADIUS INPUT (Replaces Slider) */}
+          {/* B. RADIUS INPUT (Numeric) */}
           <div className="md:col-span-4 flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2">
-            <span className="text-xs font-bold text-gray-500 whitespace-nowrap">Radius (km):</span>
+            <span className="text-sm font-bold text-gray-500 whitespace-nowrap">Radius (km):</span>
             <input
               type="number"
               min="1"
               max="500"
-              value={radius / 1000} // Convert meters back to km for display
+              value={radius / 1000}
               onChange={handleRadiusChange}
-              className="w-full bg-transparent text-sm font-bold focus:outline-none"
+              className="w-full bg-transparent text-base font-bold focus:outline-none py-1"
               placeholder="20"
             />
           </div>
 
-          {/* Search Button */}
+          {/* C. Search Button */}
           <div className="md:col-span-3">
             <button
-              onClick={() => { setCurrentCity(searchTerm); geocodeAndSearch(searchTerm); }}
-              className="w-full bg-black text-white py-2.5 rounded-xl font-bold text-sm hover:bg-gray-800 transition-all"
+              onClick={() => { setCurrentCity(searchTerm); geocodeAndSearch(searchTerm); setShowDropdown(false); }}
+              className="w-full bg-black text-white py-3 rounded-xl font-bold text-base hover:bg-gray-800 transition-all shadow-md active:scale-95"
             >
               Search
             </button>
@@ -225,7 +277,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
             <button
               key={cat.id}
               onClick={() => { setActiveCategory(cat.id); if (cityCoords) performSearch(currentCity, cat.id, cityCoords); }}
-              className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border flex-shrink-0 ${activeCategory === cat.id ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+              className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all border flex-shrink-0 ${activeCategory === cat.id ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
             >
               {cat.label}
             </button>
@@ -234,7 +286,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       </div>
 
       {/* --- SCROLLABLE CONTENT AREA --- */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-6" onClick={() => setShowDropdown(false)}>
         {loading ? (
           <div className="text-center py-20 text-gray-400"><div className="animate-spin text-3xl mb-2">⏳</div>Searching...</div>
         ) : results.length === 0 ? (
@@ -259,11 +311,11 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
                   )}
                 </div>
                 <div className="p-4 flex flex-col flex-1">
-                  <h4 className="font-bold text-sm text-gray-900 line-clamp-1">{place.name}</h4>
-                  <p className="text-[10px] text-gray-500 line-clamp-2 mb-3">{place.formatted_address}</p>
+                  <h4 className="font-bold text-base text-gray-900 line-clamp-1">{place.name}</h4>
+                  <p className="text-xs text-gray-500 line-clamp-2 mb-3">{place.formatted_address}</p>
                   <button
                     onClick={() => window.open(`http://googleusercontent.com/maps.google.com/search?q=${encodeURIComponent(place.name)}&query_place_id=${place.place_id}`, '_blank')}
-                    className="mt-auto w-full bg-gray-50 text-black py-2 rounded-lg text-[10px] font-bold uppercase hover:bg-black hover:text-white transition-colors border border-gray-200"
+                    className="mt-auto w-full bg-gray-50 text-black py-3 rounded-xl text-xs font-bold uppercase hover:bg-black hover:text-white transition-colors border border-gray-200"
                   >
                     Get Directions 📍
                   </button>

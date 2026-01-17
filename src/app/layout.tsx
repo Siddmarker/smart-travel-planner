@@ -1,12 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import ServiceWorkerRegister from "@/components/ServiceWorkerRegister"; // <--- IMPORT THIS
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "2wards", 
+  title: "2wards",
   description: "AI-Powered Travel Planning",
   manifest: "/manifest.json",
   appleWebApp: {
@@ -21,7 +21,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  userScalable: false, 
+  userScalable: false,
 };
 
 export default function RootLayout({
@@ -31,8 +31,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <ServiceWorkerRegister /> {/* <--- ADD THIS LINE HERE */}
+      {/* CRITICAL FIX: 
+        'overflow-x-hidden' stops the page from scrolling sideways on mobile.
+        'w-full' ensures it takes up the full width but no more.
+      */}
+      <body className={`${inter.className} overflow-x-hidden w-full bg-gray-50`}>
+        <ServiceWorkerRegister />
         {children}
       </body>
     </html>
