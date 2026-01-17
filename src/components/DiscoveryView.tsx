@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-// Supabase import removed (kept clean for discovery only)
 
 interface Place {
   place_id: string;
@@ -45,7 +44,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   const [cityCoords, setCityCoords] = useState<google.maps.LatLng | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('tourist_attraction');
-  const [radius, setRadius] = useState(20000); // Default 20km in meters
+  const [radius, setRadius] = useState(20000); // Default 20km
 
   // RESULTS
   const [results, setResults] = useState<Place[]>([]);
@@ -200,25 +199,28 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 overflow-hidden">
+    <div className="h-full flex flex-col bg-gray-50 overflow-hidden w-full max-w-full">
 
       {/* --- HEADER --- */}
       <div className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-20 flex-shrink-0">
-        <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
+
+        {/* Title Row */}
+        <div className="px-4 py-3 md:px-6 md:py-4 flex justify-between items-center border-b border-gray-100">
           <div>
-            <h2 className="text-xl font-black text-gray-900">Discover {currentCity}</h2>
-            <p className="text-xs text-gray-500">Explore {activeCategory.replace('_', ' ')} spots</p>
+            <h2 className="text-lg md:text-xl font-black text-gray-900 truncate">Discover {currentCity}</h2>
+            <p className="text-[10px] md:text-xs text-gray-500">Explore {activeCategory.replace('_', ' ')} spots</p>
           </div>
-          <button onClick={onBack} className="text-base font-bold text-gray-500 bg-gray-100 px-4 py-2 rounded-lg hover:bg-gray-200">
+          <button onClick={onBack} className="text-sm md:text-base font-bold text-gray-500 bg-gray-100 px-3 py-2 rounded-lg hover:bg-gray-200">
             ← Back
           </button>
         </div>
 
-        {/* CONTROLS */}
-        <div className="px-6 py-4 grid gap-3 md:grid-cols-12 items-center relative">
+        {/* CONTROLS ROW - MOBILE FIXED */}
+        {/* 'flex-col' stacks them vertically on mobile. 'md:grid' puts them side-by-side on PC */}
+        <div className="px-4 py-4 md:px-6 flex flex-col gap-3 md:grid md:grid-cols-12 items-center relative">
 
           {/* A. City Input with Dropdown */}
-          <div className="md:col-span-5 relative z-50">
+          <div className="w-full md:col-span-5 relative z-50">
             <input
               className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-base font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Enter City..."
@@ -247,7 +249,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
           </div>
 
           {/* B. RADIUS INPUT (Numeric) */}
-          <div className="md:col-span-4 flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2">
+          <div className="w-full md:col-span-4 flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2">
             <span className="text-sm font-bold text-gray-500 whitespace-nowrap">Radius (km):</span>
             <input
               type="number"
@@ -261,7 +263,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
           </div>
 
           {/* C. Search Button */}
-          <div className="md:col-span-3">
+          <div className="w-full md:col-span-3">
             <button
               onClick={() => { setCurrentCity(searchTerm); geocodeAndSearch(searchTerm); setShowDropdown(false); }}
               className="w-full bg-black text-white py-3 rounded-xl font-bold text-base hover:bg-gray-800 transition-all shadow-md active:scale-95"
@@ -272,7 +274,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
         </div>
 
         {/* CATEGORIES SCROLL */}
-        <div className="px-6 pb-4 flex gap-2 overflow-x-auto hide-scrollbar">
+        <div className="px-4 md:px-6 pb-4 flex gap-2 overflow-x-auto hide-scrollbar">
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
@@ -286,7 +288,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       </div>
 
       {/* --- SCROLLABLE CONTENT AREA --- */}
-      <div className="flex-1 overflow-y-auto p-6" onClick={() => setShowDropdown(false)}>
+      <div className="flex-1 overflow-y-auto p-4 md:p-6" onClick={() => setShowDropdown(false)}>
         {loading ? (
           <div className="text-center py-20 text-gray-400"><div className="animate-spin text-3xl mb-2">⏳</div>Searching...</div>
         ) : results.length === 0 ? (
@@ -295,14 +297,14 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
             <p className="text-sm text-gray-400">Try increasing the radius or changing the city.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-20">
             {results.map((place) => (
               <div key={place.place_id} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-gray-100 group flex flex-col h-full">
                 <div className="h-40 bg-gray-200 relative">
                   {place.photos?.[0] ? (
                     <img src={place.photos[0].getUrl({ maxWidth: 400 })} className="w-full h-full object-cover" alt={place.name} />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-3xl">📷</div>
+                    <div className="w-full h-full flex items-center justify-center text-gray-300 text-3xl">📷</div>
                   )}
                   {place.rating && (
                     <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur px-2 py-1 rounded-md text-[10px] font-bold text-white">
