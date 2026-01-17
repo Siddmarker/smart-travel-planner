@@ -31,9 +31,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      {/* CRITICAL FIX: 
-        'overflow-x-hidden' stops the page from scrolling sideways on mobile.
-        'w-full' ensures it takes up the full width but no more.
+      {/* FIX: 'overflow-x-hidden' is the key. 
+         It stops the page from ever scrolling sideways on mobile. 
       */}
       <body className={`${inter.className} overflow-x-hidden w-full bg-gray-50`}>
         <ServiceWorkerRegister />

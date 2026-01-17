@@ -55,6 +55,9 @@ const BUDGET_LEVELS = [
   { value: 'premium', label: '✨ Premium' }
 ];
 
+// Helper to wait for Google's API limit (2 seconds)
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
 export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: DiscoveryViewProps) {
   // --- STATE ---
   const [currentCity, setCurrentCity] = useState(initialCity || 'Bangalore');
@@ -71,7 +74,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   // Results & Pagination
   const [results, setResults] = useState<Place[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false); // New state for pagination
+  const [statusMessage, setStatusMessage] = useState(''); // To show "Loading more..."
 
   // Autocomplete
   const [citySuggestions, setCitySuggestions] = useState<any[]>([]);
@@ -112,21 +115,24 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
     });
   };
 
-  // --- MAIN SEARCH LOGIC (WITH PAGINATION) ---
+  // --- MAIN SEARCH LOGIC (WITH ROBUST PAGINATION) ---
   const performSearch = (city: string, category: string, location: google.maps.LatLng | null) => {
     if (!placesServiceRef.current) return;
 
-    // Reset Results for a new search
+    // Reset Results
     setResults([]);
     setLoading(true);
-    setLoadingMore(false);
+    setStatusMessage(`Searching ${category.replace('_', ' ')}...`);
 
     let query = '';
 
+    // STRATEGY: If radius > 50km, we use broader terms to find distant places
+    const useBroadSearch = radius > 50000;
+
     if (location) {
-      // --- SMART RADIUS MODE (Exact Coords) ---
+      // --- SMART RADIUS MODE ---
       switch (category) {
-        case 'trekking': query = `hiking trails hills viewpoints nature`; break;
+        case 'trekking': query = useBroadSearch ? `best trekking hills peaks` : `hiking trails hills nature`; break;
         case 'local_market': query = `flower market vegetable market bazaar santhe`; break;
         case 'off_roading': query = `off road trails dirt tracks`; break;
         case 'iconic': query = `legendary oldest famous restaurants`; break;
@@ -142,8 +148,6 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
         case 'trekking': query = `hiking trails hills peaks near ${city}`; break;
         case 'local_market': query = `market santhe bazaar in ${city}`; break;
         case 'off_roading': query = `off road trails near ${city}`; break;
-        case 'iconic': query = `legendary famous old restaurants in ${city}`; break;
-        case 'late_night': query = `late night food early morning biryani in ${city}`; break;
         default: query = `${category.replace('_', ' ')} in ${city}`; break;
       }
     }
@@ -168,50 +172,49 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
     };
 
     // --- RECURSIVE PAGINATION HANDLER ---
-    // Google returns 20 results. If 'pagination.hasNextPage' is true, we call it again.
-    let pageCount = 0;
+    let allPlaces: Place[] = [];
 
-    placesServiceRef.current.textSearch(request, (places, status, pagination) => {
-      if (status === google.maps.places.PlacesServiceStatus.OK && places) {
+    const fetchPage = (nextPageToken?: any) => {
+      // NOTE: textSearch doesn't accept a pageToken directly in the initial request object in JS API.
+      // Instead, we rely on the pagination object callback.
 
-        // Filter logic
-        const filtered = places.filter(place => {
-          const types = place.types || [];
-          const name = (place.name || '').toLowerCase();
+      placesServiceRef.current?.textSearch(request, async (places, status, pagination) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && places) {
 
-          if (types.includes('travel_agency')) return false;
-          if (name.includes('travels') || name.includes('holidays') || name.includes('tours &')) return false;
-          if (category === 'trekking') {
-            if (types.includes('store') || types.includes('shopping_mall')) return false;
+          // 1. Filter
+          const filtered = places.filter(place => {
+            const types = place.types || [];
+            const name = (place.name || '').toLowerCase();
+            if (types.includes('travel_agency')) return false;
+            if (name.includes('travels') || name.includes('holidays') || name.includes('tours &')) return false;
+            if (category === 'trekking' && (types.includes('store') || types.includes('shopping_mall'))) return false;
+            return true;
+          });
+
+          // 2. Accumulate Results
+          allPlaces = [...allPlaces, ...(filtered as Place[])];
+
+          // Remove duplicates by ID
+          const uniquePlaces = Array.from(new Map(allPlaces.map(item => [item.place_id, item])).values());
+          setResults(uniquePlaces);
+
+          // 3. Handle Pagination (Max 60 results / 3 pages)
+          if (pagination && pagination.hasNextPage && allPlaces.length < 60) {
+            setStatusMessage(`Loading more results... (${uniquePlaces.length} found)`);
+            await sleep(2000); // MANDATORY WAIT for Google API
+            pagination.nextPage();
+          } else {
+            setLoading(false);
+            setStatusMessage('');
           }
-          return true;
-        });
-
-        // Append new results
-        setResults(prev => {
-          // Remove duplicates just in case
-          const combined = [...prev, ...(filtered as Place[])];
-          const unique = Array.from(new Map(combined.map(item => [item.place_id, item])).values());
-          return unique;
-        });
-
-        setLoading(false);
-
-        // --- FETCH MORE PAGES AUTOMATICALLY (Up to 60 results) ---
-        if (pagination && pagination.hasNextPage && pageCount < 2) {
-          pageCount++;
-          setLoadingMore(true);
-          // Google imposes a 2-second delay between pages.
-          pagination.nextPage();
         } else {
-          setLoadingMore(false);
+          setLoading(false);
         }
+      });
+    };
 
-      } else {
-        setLoading(false);
-        setLoadingMore(false);
-      }
-    });
+    // Start fetching
+    fetchPage();
   };
 
   // --- AUTOCOMPLETE HANDLERS ---
@@ -336,7 +339,7 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
           </div>
         </div>
 
-        {/* Categories Scroll (Mobile Fixed) */}
+        {/* Categories Scroll */}
         <div className="w-full overflow-x-auto no-scrollbar pb-2">
           <div className="flex gap-2 px-4 md:px-6 pb-2 w-max">
             {CATEGORIES.map((cat) => (
@@ -356,7 +359,10 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       <div className="flex-1 overflow-y-auto p-4 md:p-6" onClick={() => setShowDropdown(false)}>
         {/* Loading State */}
         {loading && (
-          <div className="text-center py-20 text-gray-400"><div className="animate-spin text-3xl mb-2">⏳</div>Searching {currentCity}...</div>
+          <div className="text-center py-20 text-gray-400">
+            <div className="animate-spin text-3xl mb-2">⏳</div>
+            <p>{statusMessage}</p>
+          </div>
         )}
 
         {/* Empty State */}
@@ -369,50 +375,41 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
 
         {/* Results */}
         {!loading && results.length > 0 && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-20">
-              {results.map((place) => (
-                <div key={place.place_id} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-gray-100 group flex flex-col h-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-20">
+            {results.map((place) => (
+              <div key={place.place_id} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-gray-100 group flex flex-col h-full">
 
-                  {/* Image (16:9) */}
-                  <div className="aspect-video bg-gray-200 relative w-full overflow-hidden">
-                    {place.photos?.[0] ? (
-                      <img src={place.photos[0].getUrl({ maxWidth: 400 })} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={place.name} />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-300 text-3xl">📷</div>
-                    )}
+                {/* Image (16:9) */}
+                <div className="aspect-video bg-gray-200 relative w-full overflow-hidden">
+                  {place.photos?.[0] ? (
+                    <img src={place.photos[0].getUrl({ maxWidth: 400 })} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={place.name} />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-300 text-3xl">📷</div>
+                  )}
 
-                    {place.rating && (
-                      <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur px-2 py-1 rounded-md text-[10px] font-bold text-white">⭐ {place.rating}</div>
-                    )}
+                  {place.rating && (
+                    <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur px-2 py-1 rounded-md text-[10px] font-bold text-white">⭐ {place.rating}</div>
+                  )}
 
-                    {activeCategory === 'local_market' && (
-                      <div className="absolute top-2 right-2 bg-pink-500 text-white px-2 py-1 rounded-md text-[10px] font-bold shadow-md">🌸 Local Market</div>
-                    )}
-                  </div>
-
-                  <div className="p-4 flex flex-col flex-1">
-                    <h4 className="font-bold text-base text-gray-900 line-clamp-1">{place.name}</h4>
-                    <p className="text-xs text-gray-500 line-clamp-2 mb-3">{place.formatted_address}</p>
-
-                    <button
-                      onClick={() => window.open(`http://googleusercontent.com/maps.google.com/search?q=${encodeURIComponent(place.name || '')}&query_place_id=${place.place_id}`, '_blank')}
-                      className="mt-auto w-full bg-gray-50 text-black py-3 rounded-xl text-xs font-bold uppercase hover:bg-black hover:text-white transition-colors border border-gray-200"
-                    >
-                      Get Directions 📍
-                    </button>
-                  </div>
+                  {activeCategory === 'local_market' && (
+                    <div className="absolute top-2 right-2 bg-pink-500 text-white px-2 py-1 rounded-md text-[10px] font-bold shadow-md">🌸 Local Market</div>
+                  )}
                 </div>
-              ))}
-            </div>
 
-            {/* Loading More Indicator */}
-            {loadingMore && (
-              <div className="py-4 text-center text-xs text-gray-400 font-bold animate-pulse">
-                ⚡ Loading more places...
+                <div className="p-4 flex flex-col flex-1">
+                  <h4 className="font-bold text-base text-gray-900 line-clamp-1">{place.name}</h4>
+                  <p className="text-xs text-gray-500 line-clamp-2 mb-3">{place.formatted_address}</p>
+
+                  <button
+                    onClick={() => window.open(`http://googleusercontent.com/maps.google.com/search?q=${encodeURIComponent(place.name || '')}&query_place_id=${place.place_id}`, '_blank')}
+                    className="mt-auto w-full bg-gray-50 text-black py-3 rounded-xl text-xs font-bold uppercase hover:bg-black hover:text-white transition-colors border border-gray-200"
+                  >
+                    Get Directions 📍
+                  </button>
+                </div>
               </div>
-            )}
-          </>
+            ))}
+          </div>
         )}
       </div>
     </div>
