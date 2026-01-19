@@ -1,312 +1,305 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
-// --- Types ---
-interface Place {
-    id: string;
-    name?: string;
-    description?: string;
-    // ... other fields from API
+interface WizardProps {
+    onClose: () => void;
+    onComplete: (data: any) => void;
 }
 
-interface PlaceOption {
-    id: string;
-    type: 'ANCHOR_PLUS_SAT' | 'SATELLITE' | 'FOOD';
-    anchor?: { name: string; description?: string };
-    satellite?: { name: string };
-    place_name?: string;
-    description?: string;
-    votes: number;
-}
+export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
+    const [step, setStep] = useState(1);
 
-interface DayData {
-    day_number: number;
-    slots: {
-        morning: PlaceOption[];
-        lunch: PlaceOption[];
-        afternoon: PlaceOption[];
-        evening_snacks: PlaceOption[];
-        sunset: PlaceOption[];
-        dinner: PlaceOption[];
-    };
-}
+    // --- DATA STATE ---
+    const [destination, setDestination] = useState('');
+    const [scope, setScope] = useState({
+        transport: false,
+        stay: false,
+        activities: true,
+    });
 
-interface TripWizardProps {
-    preferences: {
-        trip_duration: number;
-        // ... other prefs
-        vibe: string;
-        travel_mode: string;
-        group_type: string;
-        diet: string;
-    };
-    onComplete: (itinerary: any[]) => void;
-}
+    const [dates, setDates] = useState({ start: '', end: '' });
+    const [times, setTimes] = useState({ arrival: '10:00', departure: '18:00' });
 
-// Simple Spinner
-const Spinner = () => (
-    <div className="flex justify-center p-12">
-        <div className="w-8 h-8 border-4 border-neutral-200 border-t-black rounded-full animate-spin"></div>
-    </div>
-);
+    const [groupType, setGroupType] = useState('FRIENDS');
+    const [ageGroup, setAgeGroup] = useState<string[]>([]);
 
-// --- Sub-Component: Voting Card ---
-const OptionCard = ({ option, isSelected, onClick }: { option: PlaceOption, isSelected: boolean, onClick: () => void }) => {
+    // --- AUTOCOMPLETE STATE ---
+    const [suggestions, setSuggestions] = useState<any[]>([]);
+    const [showDropdown, setShowDropdown] = useState(false);
+    const autocompleteService = useRef<any>(null);
 
-    // Helper to get display name/desc based on type
-    let title = option.place_name || option.anchor?.name || "Unknown Place";
-    let sub = option.description || option.anchor?.description || "";
-    let badge = "";
-
-    if (option.type === 'ANCHOR_PLUS_SAT' && option.satellite) {
-        sub = `+ ${option.satellite.name}`;
-        badge = "Combo";
-    }
-
-    return (
-        <div
-            onClick={onClick}
-            className={`
-                relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200
-                ${isSelected
-                    ? 'border-green-500 bg-green-50 shadow-md transform scale-[1.02]'
-                    : 'border-neutral-100 bg-white hover:border-neutral-300 hover:shadow-sm'
-                }
-            `}
-        >
-            {/* Selection Circle */}
-            <div className={`
-                absolute top-3 right-3 w-5 h-5 rounded-full border flex items-center justify-center transition-colors
-                ${isSelected ? 'bg-green-500 border-green-500' : 'border-neutral-300'}
-            `}>
-                {isSelected && <span className="text-white text-xs">✓</span>}
-            </div>
-
-            {/* Badge */}
-            {badge && (
-                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase bg-blue-100 text-blue-700 mb-2">
-                    {badge}
-                </span>
-            )}
-
-            <h4 className="font-bold text-neutral-900 pr-6">{title}</h4>
-            <p className="text-sm text-neutral-500 mt-1 line-clamp-2">{sub}</p>
-        </div>
-    );
-};
-
-
-// --- Main Component ---
-export default function TripWizard({ preferences, onComplete }: TripWizardProps) {
-
-    // State
-    const [currentDay, setCurrentDay] = useState(1);
-    const [confirmedItinerary, setConfirmedItinerary] = useState<any[]>([]);
-    const [historyIDs, setHistoryIDs] = useState<string[]>([]);
-
-    const [dayData, setDayData] = useState<DayData | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-
-    // Selections for the current day: { slotName: optionId }
-    const [selections, setSelections] = useState<Record<string, string>>({});
-
-    const totalDays = preferences.trip_duration || 3; // Default 3 if missing
-
-    // Fetch Logic
+    // 1. Initial Attempt to Connect to Google
     useEffect(() => {
-        const fetchDay = async () => {
-            setIsLoading(true);
-            setSelections({}); // Reset selections for new day (or keep empty)
+        if (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {
+            autocompleteService.current = new window.google.maps.places.AutocompleteService();
+        }
+    }, []);
 
-            try {
-                const payload = {
-                    day_number: currentDay,
-                    previous_selections: historyIDs,
-                    vibe: preferences.vibe,
-                    group_type: preferences.group_type,
-                    travel_mode: preferences.travel_mode,
-                    diet: preferences.diet || 'Any'
-                };
+    // 2. Robust Input Handler (Retries Connection if needed)
+    const handleCityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        setDestination(val);
 
-                const res = await fetch('/api/generate-trip', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+        // FIX: Lazy initialization. If it failed on mount, try again now.
+        if (!autocompleteService.current && typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {
+            autocompleteService.current = new window.google.maps.places.AutocompleteService();
+        }
 
-                if (!res.ok) throw new Error('API Failed');
-
-                const data = await res.json();
-                setDayData(data.day);
-
-            } catch (err) {
-                console.error("Failed to load day", err);
-                // Handle error (retry button etc)
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchDay();
-    }, [currentDay, historyIDs, preferences]); // Re-run when these change (standard Progressive flow)
-
-
-    // Handle Option Click
-    const handleSelect = (slotKey: string, optionId: string) => {
-        setSelections(prev => ({
-            ...prev,
-            [slotKey]: optionId
-        }));
-    };
-
-    // Lock & Next Logic
-    const handleNext = () => {
-        if (!dayData) return;
-
-        // 1. Validate: Only ensure selection for slots THAT HAVE OPTIONS
-        const requiredSlots = ['morning', 'lunch', 'afternoon', 'sunset', 'dinner'];
-
-        // Check which slots actually have data displayed
-        const availableSlots = requiredSlots.filter(s => {
-            const opts = (dayData.slots as any)[s];
-            return opts && Array.isArray(opts) && opts.length > 0;
-        });
-
-        const missing = availableSlots.filter(s => !selections[s]);
-
-        console.log('[TripWizard] Validation State:', {
-            allSlots: requiredSlots,
-            availableSlots,
-            currentSelections: selections,
-            missing
-        });
-
-        if (missing.length > 0) {
-            alert(`Please select an option for: ${missing.map(m => m.replace('_', ' ')).join(', ')}`);
+        if (!val || val.length < 2 || !autocompleteService.current) {
+            setSuggestions([]);
+            setShowDropdown(false);
             return;
         }
 
-        // 2. Build Final Day Object
-        const finalizedSlots: any = {};
-        const newIds: string[] = [];
-
-        // Push selections for available slots
-        Object.entries(selections).forEach(([slot, id]) => {
-            // Find the place object in that slot's array
-            const list = (dayData.slots as any)[slot] as PlaceOption[];
-            if (!list) return;
-
-            const chosen = list.find(o => o.id === id);
-            if (chosen) {
-                finalizedSlots[slot] = chosen;
-                newIds.push(chosen.id);
-                if (chosen.satellite) {
-                    // Satellite logic if needed
+        // Fetch predictions
+        autocompleteService.current.getPlacePredictions(
+            { input: val, types: ['(cities)'] },
+            (predictions: any[], status: any) => {
+                if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+                    setSuggestions(predictions);
+                    setShowDropdown(true);
+                } else {
+                    console.warn("Google Places API Status:", status); // Check Console if this fails!
+                    setSuggestions([]);
+                    setShowDropdown(false);
                 }
             }
-        });
+        );
+    };
 
-        const finalizedDay = {
-            day_number: currentDay,
-            ...finalizedSlots
-        };
+    const selectCity = (cityName: string) => {
+        setDestination(cityName);
+        setSuggestions([]);
+        setShowDropdown(false);
+    };
 
-        // 3. Update State
-        const updatedHistory = [...historyIDs, ...newIds];
-        const updatedItinerary = [...confirmedItinerary, finalizedDay];
+    // --- HANDLERS ---
+    const toggleScope = (key: 'transport' | 'stay') => {
+        setScope(prev => ({ ...prev, [key]: !prev[key] }));
+    };
 
-        setHistoryIDs(updatedHistory);
-        setConfirmedItinerary(updatedItinerary);
-
-        // 4. Progress or Finish
-        if (currentDay < totalDays) {
-            setCurrentDay(prev => prev + 1);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+    const toggleAge = (age: string) => {
+        if (ageGroup.includes(age)) {
+            setAgeGroup(prev => prev.filter(a => a !== age));
         } else {
-            onComplete(updatedItinerary);
+            setAgeGroup(prev => [...prev, age]);
         }
     };
 
-
-    // Render
-    if (isLoading) return <Spinner />;
-    if (!dayData) return <div className="p-8 text-center text-red-500">Failed to load recommendations.</div>;
-
-    const SLOTS_CONFIG = [
-        { key: 'morning', label: 'Morning Adventure' },
-        { key: 'lunch', label: 'Lunch Break' },
-        { key: 'afternoon', label: 'Afternoon Exploration' },
-        { key: 'evening_snacks', label: 'Evening Snacks' },
-        { key: 'sunset', label: 'Sunset & Views' }, // Renamed label
-        { key: 'dinner', label: 'Dinner' }
-    ];
+    const handleNext = () => {
+        if (step < 3) setStep(step + 1);
+        else {
+            onComplete({ destination, scope, dates, times, groupType, ageGroup });
+        }
+    };
 
     return (
-        <div className="max-w-3xl mx-auto pb-32">
-            {/* Progress Bar */}
-            <div className="mb-8">
-                <div className="flex justify-between text-sm font-semibold text-neutral-500 mb-2">
-                    <span>Day {currentDay} of {totalDays}</span>
-                    <span>{Math.round(((currentDay - 1) / totalDays) * 100)}% Complete</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+            <div className="bg-white w-full max-w-4xl h-[600px] rounded-3xl shadow-2xl flex overflow-hidden">
+
+                {/* --- LEFT SIDEBAR (Progress) --- */}
+                <div className="w-1/3 bg-gray-50 border-r border-gray-100 p-8 flex flex-col justify-between hidden md:flex">
+                    <div>
+                        <h2 className="text-2xl font-black text-gray-900 mb-8">Plan Your Trip</h2>
+                        <div className="space-y-6">
+                            <StepIndicator num={1} title="Scope & Destination" active={step === 1} done={step > 1} />
+                            <StepIndicator num={2} title="Logistics & Timings" active={step === 2} done={step > 2} />
+                            <StepIndicator num={3} title="Travelers & Vibe" active={step === 3} done={step > 3} />
+                        </div>
+                    </div>
+
+                    <div className="text-xs text-gray-400">
+                        Step {step} of 3
+                    </div>
                 </div>
-                <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
-                    <div
-                        className="h-full bg-black transition-all duration-500 ease-out"
-                        style={{ width: `${((currentDay - 1) / totalDays) * 100}%` }}
-                    />
-                </div>
-            </div>
 
-            <h2 className="text-2xl font-bold mb-6">Curate Your Day {currentDay}</h2>
+                {/* --- RIGHT CONTENT (Dynamic) --- */}
+                <div className="flex-1 p-8 md:p-12 flex flex-col relative" onClick={() => setShowDropdown(false)}>
 
-            {/* Slots Grid */}
-            <div className="space-y-10">
-                {SLOTS_CONFIG.map(slot => {
-                    const options = (dayData.slots as any)[slot.key] as PlaceOption[];
-                    // Was: if (!options || options.length === 0) return null;
-                    // Now: Render place cards OR "Free Roam" message
+                    <button onClick={onClose} className="absolute top-6 right-6 text-gray-400 hover:text-black">✕</button>
 
-                    return (
-                        <section key={slot.key} className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="h-8 w-1 bg-black rounded-full"></div>
-                                <h3 className="text-lg font-bold">{slot.label}</h3>
+                    {/* STEP 1: SCOPE & DESTINATION */}
+                    {step === 1 && (
+                        <div className="flex-1 flex flex-col justify-center animate-in slide-in-from-right-8 duration-500">
+                            <h3 className="text-3xl font-black text-gray-900 mb-2">Where to?</h3>
+                            <p className="text-gray-500 mb-8">Enter your destination and tell us what you need help with.</p>
+
+                            {/* DESTINATION INPUT */}
+                            <div className="relative mb-10">
+                                <input
+                                    className="w-full text-2xl font-bold border-b-2 border-gray-200 focus:border-black outline-none py-2 placeholder-gray-300 bg-transparent"
+                                    placeholder="e.g. Bangalore, Goa, Ooty..."
+                                    value={destination}
+                                    onChange={handleCityInput}
+                                    autoFocus
+                                />
+
+                                {/* DROPDOWN (Z-Index increased to 100) */}
+                                {showDropdown && suggestions.length > 0 && (
+                                    <div className="absolute top-full left-0 right-0 bg-white border border-gray-100 rounded-xl shadow-2xl z-[100] mt-2 max-h-60 overflow-y-auto">
+                                        {suggestions.map((s) => (
+                                            <div
+                                                key={s.place_id}
+                                                onClick={() => selectCity(s.description)}
+                                                className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 text-sm font-medium text-gray-700 flex gap-2 items-center"
+                                            >
+                                                <span className="opacity-50">📍</span>
+                                                {s.description}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
-                            {(!options || options.length === 0) ? (
-                                <div className="p-6 bg-neutral-50 rounded-xl border border-dashed border-neutral-300 text-center">
-                                    <p className="text-neutral-500 italic">
-                                        No specific suggestions for this time - Free Roam!
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                                    {options.map(opt => (
-                                        <OptionCard
-                                            key={opt.id}
-                                            option={opt}
-                                            isSelected={selections[slot.key] === opt.id}
-                                            onClick={() => handleSelect(slot.key, opt.id)}
+                            <h4 className="font-bold text-sm text-gray-500 uppercase tracking-wider mb-4">I need help with...</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <ScopeCard icon="✈️" label="Transport" selected={scope.transport} onClick={() => toggleScope('transport')} />
+                                <ScopeCard icon="🏨" label="Accommodation" selected={scope.stay} onClick={() => toggleScope('stay')} />
+                                <ScopeCard icon="🎡" label="Itinerary" selected={true} onClick={() => { }} disabled />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* STEP 2: LOGISTICS */}
+                    {step === 2 && (
+                        <div className="flex-1 flex flex-col justify-center animate-in slide-in-from-right-8 duration-500">
+                            <h3 className="text-3xl font-black text-gray-900 mb-2">When are you going?</h3>
+                            <p className="text-gray-500 mb-8">Exact timings help us suggest realistic plans.</p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                                {/* ARRIVAL */}
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Arrival (Start)</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="date"
+                                            className="flex-1 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200 min-w-0"
+                                            value={dates.start}
+                                            onChange={e => setDates({ ...dates, start: e.target.value })}
                                         />
-                                    ))}
+                                        <input
+                                            type="time"
+                                            className="w-32 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200"
+                                            value={times.arrival}
+                                            onChange={e => setTimes({ ...times, arrival: e.target.value })}
+                                        />
+                                    </div>
                                 </div>
-                            )}
-                        </section>
-                    );
-                })}
-            </div>
 
-            {/* Floating Action Bar */}
-            <div className="fixed bottom-6 left-0 right-0 px-4 z-40 flex justify-center pointer-events-none">
-                <button
-                    onClick={handleNext}
-                    className="pointer-events-auto bg-black text-white px-8 py-4 rounded-full font-bold shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
-                >
-                    {currentDay === totalDays ? 'Finish & View Trip' : 'Lock Day & Next →'}
-                </button>
-            </div>
+                                {/* DEPARTURE */}
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Departure (End)</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="date"
+                                            className="flex-1 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200 min-w-0"
+                                            value={dates.end}
+                                            onChange={e => setDates({ ...dates, end: e.target.value })}
+                                        />
+                                        <input
+                                            type="time"
+                                            className="w-32 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200"
+                                            value={times.departure}
+                                            onChange={e => setTimes({ ...times, departure: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
 
+                            <div className="bg-blue-50 p-4 rounded-xl flex gap-3 items-start">
+                                <div className="text-blue-500 text-xl">💡</div>
+                                <p className="text-sm text-blue-800 leading-relaxed">
+                                    <strong>Tip:</strong> If you arrive at {times.arrival}, we will skip morning activities for Day 1 and start your itinerary directly from check-in or lunch.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* STEP 3: DEMOGRAPHICS */}
+                    {step === 3 && (
+                        <div className="flex-1 flex flex-col justify-center animate-in slide-in-from-right-8 duration-500">
+                            <h3 className="text-3xl font-black text-gray-900 mb-2">Who is traveling?</h3>
+                            <p className="text-gray-500 mb-8">We tailor the vibe based on your group.</p>
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                                <GroupCard icon="🧍" label="Solo" selected={groupType === 'SOLO'} onClick={() => setGroupType('SOLO')} />
+                                <GroupCard icon="👫" label="Couple" selected={groupType === 'COUPLE'} onClick={() => setGroupType('COUPLE')} />
+                                <GroupCard icon="👨‍👩‍👧‍👦" label="Family" selected={groupType === 'FAMILY'} onClick={() => setGroupType('FAMILY')} />
+                                <GroupCard icon="👯‍♂️" label="Friends" selected={groupType === 'FRIENDS'} onClick={() => setGroupType('FRIENDS')} />
+                            </div>
+
+                            <h4 className="font-bold text-sm text-gray-500 uppercase tracking-wider mb-4">Age Group (Select all that apply)</h4>
+                            <div className="flex gap-3">
+                                {['18-30', '31-50', '50+', 'Kids'].map(age => (
+                                    <button
+                                        key={age}
+                                        onClick={() => toggleAge(age)}
+                                        className={`px-6 py-3 rounded-full font-bold text-sm border transition-all ${ageGroup.includes(age) ? 'bg-black text-white border-black' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}
+                                    >
+                                        {age}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* NAVIGATION BUTTONS */}
+                    <div className="mt-auto flex justify-between pt-6 border-t border-gray-100">
+                        {step > 1 ? (
+                            <button onClick={() => setStep(step - 1)} className="px-6 py-3 font-bold text-gray-500 hover:text-black">Back</button>
+                        ) : <div></div>}
+
+                        <button
+                            onClick={handleNext}
+                            disabled={!destination && step === 1}
+                            className="bg-black text-white px-8 py-3 rounded-xl font-bold hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
+                        >
+                            {step === 3 ? 'Generate Itinerary ✨' : 'Next Step →'}
+                        </button>
+                    </div>
+
+                </div>
+            </div>
         </div>
+    );
+}
+
+// --- SUB-COMPONENTS ---
+
+function StepIndicator({ num, title, active, done }: any) {
+    return (
+        <div className={`flex items-center gap-4 ${active ? 'opacity-100' : 'opacity-40'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 ${active || done ? 'bg-black border-black text-white' : 'border-gray-300 text-gray-400'}`}>
+                {done ? '✓' : num}
+            </div>
+            <span className="font-bold text-gray-900">{title}</span>
+        </div>
+    );
+}
+
+function ScopeCard({ icon, label, selected, onClick, disabled }: any) {
+    return (
+        <button
+            onClick={onClick}
+            disabled={disabled}
+            className={`p-4 rounded-xl border-2 text-left transition-all flex flex-col gap-2 ${selected ? 'border-blue-500 bg-blue-50' : 'border-gray-100 hover:border-gray-300'} ${disabled ? 'opacity-70 cursor-not-allowed' : ''}`}
+        >
+            <span className="text-2xl">{icon}</span>
+            <span className={`font-bold text-sm ${selected ? 'text-blue-700' : 'text-gray-600'}`}>{label}</span>
+            {selected && <span className="text-[10px] font-bold uppercase text-blue-500">Selected</span>}
+        </button>
+    );
+}
+
+function GroupCard({ icon, label, selected, onClick }: any) {
+    return (
+        <button
+            onClick={onClick}
+            className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 ${selected ? 'border-black bg-gray-900 text-white shadow-xl scale-105' : 'border-gray-100 hover:border-gray-300 text-gray-500 hover:bg-gray-50'}`}
+        >
+            <span className="text-4xl">{icon}</span>
+            <span className="font-bold text-sm">{label}</span>
+        </button>
     );
 }
