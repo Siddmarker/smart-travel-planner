@@ -4,8 +4,10 @@ import React, { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 
-// 1. IMPORT THE FEEDBACK MODAL
-// Ensure FeedbackModal.tsx is in the same folder (src/components/FeedbackModal.tsx)
+// 1. IMPORT THE NEW HOW-TO SECTION
+import HowItWorks from '@/components/HowItWorks';
+
+// 2. IMPORT THE FEEDBACK MODAL
 import FeedbackModal from './FeedbackModal';
 
 const supabase = createClient(
@@ -96,23 +98,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* --- DASHBOARD PREVIEW --- */}
-      <section className="px-6 pb-32">
-        <div className="max-w-6xl mx-auto relative group">
-          <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
-          <div className="relative bg-[#0A0A0A] border border-white/10 rounded-2xl overflow-hidden shadow-2xl aspect-video flex items-center justify-center">
-            <img
-              src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=2021&auto=format&fit=crop"
-              alt="App Dashboard Preview"
-              className="w-full h-full object-cover opacity-80 hover:opacity-100 transition-opacity duration-700"
-            />
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="bg-black/60 backdrop-blur-md border border-white/10 px-8 py-4 rounded-full">
-                <span className="text-sm font-bold text-white tracking-widest uppercase">Interactive Dashboard Preview</span>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* --- NEW: HOW IT WORKS SECTION (Replaces old screenshot) --- */}
+      <section id="how-it-works" className="px-6 pb-20">
+        <HowItWorks />
       </section>
 
       {/* --- CTA SECTION --- */}
@@ -133,7 +121,6 @@ export default function LandingPage() {
           <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-2 mb-6">
               <div className="w-6 h-6 bg-white rounded-md flex items-center justify-center font-bold text-black text-xs">2</div>
-              {/* VERSION TAG FOR DEBUGGING */}
               <span className="font-bold text-lg text-white">2wards <span className="text-xs text-green-500 ml-2">v2.0 (LIVE)</span></span>
             </div>
             <p className="text-gray-500 text-sm leading-relaxed mb-6">The AI-powered travel planner that helps you explore the world with confidence.</p>
@@ -159,8 +146,6 @@ export default function LandingPage() {
             <h4 className="font-bold text-white mb-6">Company</h4>
             <ul className="space-y-4 text-sm text-gray-500">
               <li><Link href="#" className="hover:text-blue-400">About Us</Link></li>
-
-              {/* --- CONTACT / FEEDBACK BUTTON --- */}
               <li>
                 <button
                   onClick={() => setShowFeedback(true)}
@@ -169,7 +154,6 @@ export default function LandingPage() {
                   Contact / Feedback
                 </button>
               </li>
-
               <li><Link href="#" className="hover:text-blue-400">Careers</Link></li>
             </ul>
           </div>
