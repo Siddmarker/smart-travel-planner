@@ -3,15 +3,50 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useLoadScript, GoogleMap, Marker, Polyline, DirectionsRenderer } from '@react-google-maps/api';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 // COMPONENTS
 import LandingPage from '@/components/LandingPage';
 import Sidebar, { NavView } from '@/components/Sidebar';
 import DiscoveryView from '@/components/DiscoveryView';
 import DashboardView from '@/components/DashboardView';
-import CreateTripWizard from '@/components/CreateTripWizard'; // <--- NEW IMPORT
+import CreateTripWizard from '@/components/CreateTripWizard';
+import ItineraryDisplay from '@/components/ItineraryDisplay';
 
-const LIBRARIES: ("places")[] = ["places"];
+// FIX: Type cast to prevent strict TypeScript errors
+const LIBRARIES: any[] = ["places"];
+
+// --- CONSTANTS (THE BRAIN) ---
+const DAILY_TEMPLATE = [
+  { id: 'MORNING', label: 'Morning Exploration', types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'falls', 'view point'] },
+  { id: 'LUNCH', label: 'Lunch Break', types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic', 'mess', 'bhavan'] },
+  { id: 'AFTERNOON', label: 'Afternoon Vibe', types: ['museum', 'gallery', 'mall', 'shopping', 'zoo', 'aquarium', 'hall', 'monument', 'market'] },
+  { id: 'EVENING', label: 'Evening Chill', types: ['park', 'sunset', 'lake', 'club', 'pub', 'bar', 'theater', 'beach', 'turf', 'bridge'] },
+  { id: 'DINNER', label: 'Dinner Feast', types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine', 'late_night', 'dhaba', 'hotel'] }
+];
+
+const TRIP_VIBES = [
+  { id: 'leisure', label: 'Relaxing', keywords: ['resort', 'park', 'spa', 'lake', 'nature'] },
+  { id: 'foodie', label: 'Foodie', keywords: ['restaurant', 'cafe', 'late_night', 'pub', 'bar', 'kitchen'] },
+  { id: 'heritage', label: 'Heritage', keywords: ['temple', 'museum', 'fort', 'iconic', 'landmark', 'palace'] },
+  { id: 'adventure', label: 'Adventure', keywords: ['off_roading', 'amusement_park', 'turf', 'trek', 'falls'] },
+  { id: 'shopping', label: 'Shopping', keywords: ['mall', 'market', 'shopping', 'store'] }
+];
+
+const MAP_STYLES = { width: '100%', height: '100%' };
+const PATH_OPTIONS = { strokeColor: '#2563EB', strokeOpacity: 0.5, strokeWeight: 4 };
+
+// Keywords for filtering
+const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani'];
+const NON_FOOD_KEYWORDS = [
+  'resort', 'inn', 'stay', 'cottage', 'residency', 'lodge', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb', 'homestay',
+  'temple', 'shrine', 'worship', 'church', 'mosque', 'fort', 'park', 'garden', 'museum', 'dam', 'falls', 'view point',
+  'market', 'stand', 'store', 'shop', 'complex', 'race', 'bridge', 'river', 'lake'
+];
+const ACCOMMODATION_KEYWORDS = [
+  'resort', 'inn', 'stay', 'cottage', 'residency', 'lodge', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb', 'homestay', 'hotel', 'palace'
+];
 
 // --- INITIALIZE SUPABASE ---
 const supabase = createClient(
@@ -42,6 +77,8 @@ interface Place {
   image?: string;
   votes?: number;
   distanceFromLast?: string;
+  rating?: number;
+  time?: string;
 }
 
 interface ChatMessage {
@@ -65,37 +102,6 @@ interface PackingItem {
   checked: boolean;
 }
 
-// --- CONSTANTS ---
-const DAILY_TEMPLATE = [
-  { id: 'MORNING', label: '🌞 Morning Exploration', types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'off_roading', 'falls', 'view point'] },
-  { id: 'LUNCH', label: '🍛 Lunch Break', types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic', 'mess', 'bhavan', 'canteen', 'hotel'] },
-  { id: 'AFTERNOON', label: '🎨 Afternoon Vibe', types: ['museum', 'gallery', 'mall', 'shopping', 'zoo', 'aquarium', 'hall', 'monument', 'market', 'amusement_park', 'plantation'] },
-  { id: 'EVENING', label: '🌆 Evening Chill', types: ['park', 'sunset', 'lake', 'club', 'pub', 'bar', 'theater', 'cinema', 'beach', 'turf', 'raja seat', 'bridge'] },
-  { id: 'DINNER', label: '🍽️ Dinner Feast', types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine', 'late_night', 'dhaba', 'hotel'] }
-];
-
-const TRIP_VIBES = [
-  { id: 'leisure', label: '🌴 Relaxing', keywords: ['resort', 'park', 'spa', 'lake'] },
-  { id: 'foodie', label: '🍕 Foodie', keywords: ['restaurant', 'cafe', 'late_night', 'pub', 'bar'] },
-  { id: 'heritage', label: '🏰 Heritage', keywords: ['temple', 'museum', 'fort', 'iconic', 'landmark'] },
-  { id: 'adventure', label: '🏍️ Adventure', keywords: ['off_roading', 'amusement_park', 'turf', 'trek'] },
-  { id: 'shopping', label: '🛍️ Shopping', keywords: ['mall', 'market', 'shopping'] }
-];
-
-const MAP_STYLES = { width: '100%', height: '100%' };
-const PATH_OPTIONS = { strokeColor: '#2563EB', strokeOpacity: 0.5, strokeWeight: 4 };
-
-// Keywords for filtering
-const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani'];
-const NON_FOOD_KEYWORDS = [
-  'resort', 'inn', 'stay', 'cottage', 'residency', 'lodge', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb', 'homestay',
-  'temple', 'shrine', 'worship', 'church', 'mosque', 'fort', 'park', 'garden', 'museum', 'dam', 'falls', 'view point',
-  'market', 'stand', 'store', 'shop', 'complex', 'race', 'bridge', 'river', 'lake'
-];
-const ACCOMMODATION_KEYWORDS = [
-  'resort', 'inn', 'stay', 'cottage', 'residency', 'lodge', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb', 'homestay', 'hotel', 'palace'
-];
-
 export default function Home() {
   const [session, setSession] = useState<any>(null);
 
@@ -113,20 +119,14 @@ export default function Home() {
 
   // --- APP STATE ---
   const [activeView, setActiveView] = useState<NavView>('DASHBOARD');
-  const [showWizard, setShowWizard] = useState(false); // <--- REPLACED old modal state
+  const [showWizard, setShowWizard] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // --- WIZARD STATE & DATA ---
-  const [tripMeta, setTripMeta] = useState<any>({}); // Stores Wizard Data
-  const [isWizardActive, setIsWizardActive] = useState(false); // Used for loading/processing
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [stepOptions, setStepOptions] = useState<Place[]>([]);
-  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
-  const [allCityPlaces, setAllCityPlaces] = useState<Place[]>([]);
-  const [dynamicSteps, setDynamicSteps] = useState<any[]>([]);
-  const [startCoords, setStartCoords] = useState<{ lat: number, lng: number } | null>(null);
+  const [tripMeta, setTripMeta] = useState<any>({});
+  const [isWizardActive, setIsWizardActive] = useState(false);
 
   // --- TRIP DATA ---
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
@@ -145,15 +145,11 @@ export default function Home() {
   const [collabTab, setCollabTab] = useState<'MEMBERS' | 'CHAT' | 'SPLIT' | 'PACKING'>('MEMBERS');
   const [tripMembers, setTripMembers] = useState<string[]>(['You']);
   const [inviteLink, setInviteLink] = useState('');
-
   const [messages, setMessages] = useState<ChatMessage[]>([{ id: '1', user: 'System', text: 'Welcome to the Trip Chat!', time: '10:00 AM', isMe: false }]);
   const [newMessage, setNewMessage] = useState('');
-
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [newExpense, setNewExpense] = useState({ what: '', amount: '', who: 'You' });
-
-  // PACKING LIST STATE
   const [packingList, setPackingList] = useState<PackingItem[]>([
     { id: '1', text: 'Passport / ID', checked: false },
     { id: '2', text: 'Chargers & Cables', checked: false },
@@ -201,20 +197,168 @@ export default function Home() {
     }
   };
 
-  // --- HANDLERS ---
-
-  // NEW: WIZARD COMPLETION HANDLER
+  // --- WIZARD COMPLETION HANDLER (WITH AI ENGINE) ---
   const handleWizardComplete = async (data: any) => {
     console.log("Wizard Completed:", data);
-    setTripMeta(data); // Store the data
-    setShowWizard(false); // Close Modal
-
-    // Here we can start the planning process
-    // For now, let's switch to PLAN view to show we are ready
+    setTripMeta(data);
+    setShowWizard(false);
     setActiveView('PLAN');
-    alert(`Ready to plan trip to ${data.destination}!\n(We will build the Timeline View in the next step)`);
+
+    // 1. Calculate Duration
+    let totalDays = 1;
+    if (data.dates.start && data.dates.end) {
+      const start = new Date(data.dates.start);
+      const end = new Date(data.dates.end);
+      totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
+    }
+
+    // 2. Fetch Candidates (Get ALL places in city to filter from)
+    const { data: allPlaces } = await supabase
+      .from('places')
+      .select('*')
+      .or(`city.ilike.%${data.destination}%,zone_id.ilike.%${data.destination}%`);
+
+    if (!allPlaces || allPlaces.length === 0) {
+      // FALLBACK if no data found
+      alert("No places found for this city. Loading sample data for demo.");
+      setTripPlan([
+        { id: '1', name: 'Sample Park', type: 'Park', description: 'Beautiful green space.', lat: 12.97, lng: 77.59, rating: 4.5, time: 'Morning Exploration' },
+        { id: '2', name: 'City Cafe', type: 'Cafe', description: 'Great coffee spot.', lat: 12.98, lng: 77.60, rating: 4.2, time: 'Lunch Break' },
+        { id: '3', name: 'Grand Mall', type: 'Shopping', description: 'Luxury shopping.', lat: 12.99, lng: 77.61, rating: 4.0, time: 'Afternoon Vibe' }
+      ]);
+      return;
+    }
+
+    // 3. THE GENERATION ENGINE LOOP
+    let generatedPlan: Place[] = [];
+    let usedPlaceIds = new Set<string>();
+
+    for (let day = 1; day <= totalDays; day++) {
+
+      // Loop through Morning, Lunch, Afternoon...
+      DAILY_TEMPLATE.forEach((slot) => {
+
+        // A. Filter by Slot Type (e.g., Is it a Park? A Restaurant?)
+        let candidates = allPlaces.filter(p => {
+          if (usedPlaceIds.has(p.id)) return false; // Don't repeat places
+          const typeStr = (p.type + " " + p.description).toLowerCase();
+          return slot.types.some(t => typeStr.includes(t));
+        });
+
+        // B. Filter by Diet (If Meal Slot)
+        if (slot.id === 'LUNCH' || slot.id === 'DINNER') {
+          candidates = candidates.filter(p => !NON_FOOD_KEYWORDS.some(k => p.type.toLowerCase().includes(k))); // Remove Hotels/Parks
+        } else {
+          // Remove Restaurants from Activity slots
+          candidates = candidates.filter(p => !ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k)));
+        }
+
+        // C. Score Candidates (Based on Vibe & Group)
+        let scoredCandidates = candidates.map(p => {
+          let score = 50; // Base score
+          const text = (p.name + " " + p.description + " " + p.type).toLowerCase();
+
+          TRIP_VIBES.forEach(v => {
+            if (text.includes(v.id)) score += 20;
+          });
+
+          if (data.groupType === 'FAMILY' && (p.safety_score || 0) > 4) score += 15;
+          if (data.groupType === 'FRIENDS' && (p.trend_score || 0) > 4) score += 15;
+          if (data.groupType === 'COUPLE' && text.includes('romantic')) score += 20;
+
+          return { place: p, score };
+        });
+
+        // D. Pick the Winner
+        scoredCandidates.sort((a, b) => b.score - a.score);
+
+        if (scoredCandidates.length > 0) {
+          const winner = scoredCandidates[0].place;
+          usedPlaceIds.add(winner.id);
+          // Attach the "Time Slot" label to the place object for the UI to display
+          generatedPlan.push({ ...winner, time: slot.label });
+        }
+      });
+    }
+
+    // 4. Update State
+    setTripPlan(generatedPlan);
   };
 
+  const calculateRoute = async () => {
+    if (tripPlan.length < 2) return;
+    setIsRouting(true);
+    const directionsService = new google.maps.DirectionsService();
+    const origin = { lat: tripPlan[0].lat, lng: tripPlan[0].lng };
+    const destination = { lat: tripPlan[tripPlan.length - 1].lat, lng: tripPlan[tripPlan.length - 1].lng };
+    const waypoints = tripPlan.slice(1, -1).map(p => ({ location: { lat: p.lat, lng: p.lng }, stopover: true }));
+
+    directionsService.route({
+      origin: origin,
+      destination: destination,
+      waypoints: waypoints,
+      travelMode: google.maps.TravelMode.DRIVING
+    }, (result, status) => {
+      if (status === 'OK' && result) {
+        setDirectionsResponse(result);
+      }
+      setIsRouting(false);
+    });
+  };
+
+  // --- PDF DOWNLOAD HANDLER ---
+  const handleDownloadOffline = async () => {
+    const element = document.getElementById('itinerary-container');
+
+    if (!element) {
+      alert("No itinerary to download! Please create a trip first.");
+      return;
+    }
+
+    const btn = document.getElementById('download-btn');
+    if (btn) btn.innerText = "⏳ Generating PDF...";
+
+    try {
+      const canvas = await html2canvas(element, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`2wards-Trip-${new Date().toISOString().split('T')[0]}.pdf`);
+
+      alert("PDF Downloaded successfully!");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to generate PDF.");
+    } finally {
+      if (btn) btn.innerText = "⬇️ Download Offline";
+    }
+  };
+
+  // --- STANDARD HANDLERS ---
+  const handleCopyLink = () => { navigator.clipboard.writeText(inviteLink); alert("Invite link copied!"); };
+  const handleSendMessage = () => { if (!newMessage.trim()) return; setMessages(prev => [...prev, { id: Date.now().toString(), user: 'You', text: newMessage, time: 'Now', isMe: true }]); setNewMessage(''); };
+  const handleAddExpense = () => { if (!newExpense.what) return; setExpenses([...expenses, { id: Date.now().toString(), ...newExpense, amount: Number(newExpense.amount) }]); setShowExpenseForm(false); setNewExpense({ what: '', amount: '', who: 'You' }); };
+  const addPackingItem = () => { if (!newPackingItem) return; setPackingList([...packingList, { id: Date.now().toString(), text: newPackingItem, checked: false }]); setNewPackingItem(''); };
+  const togglePackingItem = (id: string) => { setPackingList(packingList.map(i => i.id === id ? { ...i, checked: !i.checked } : i)); };
+  const submitFeedback = () => { alert("Thanks!"); setShowHelpModal(false); };
+  const handleLogout = async () => { await supabase.auth.signOut(); window.location.reload(); };
+  const removeFromTrip = (id: string) => setTripPlan(tripPlan.filter(p => p.id !== id));
+
+  // Dynamic Days based on Wizard Data
+  const calculateDays = () => {
+    if (!tripMeta?.dates?.start || !tripMeta?.dates?.end) return 1;
+    return Math.max(1, Math.ceil((new Date(tripMeta.dates.end).getTime() - new Date(tripMeta.dates.start).getTime()) / (1000 * 3600 * 24)) + 1);
+  };
+
+  const totalCost = expenses.reduce((a, b) => a + b.amount, 0);
+  const costPerPerson = tripMembers.length > 0 ? totalCost / tripMembers.length : 0;
+  const myTotalPaid = expenses.filter(e => e.who === 'You').reduce((a, b) => a + b.amount, 0);
+  const myBalance = myTotalPaid - costPerPerson;
+
+  // --- OPEN AI ASSISTANT ---
   const openAiAssistant = (place: Place) => {
     setAiActivePlace(place);
     setAiChatHistory([{
@@ -227,6 +371,7 @@ export default function Home() {
     setAiModalOpen(true);
   };
 
+  // --- HANDLE AI ASK ---
   const handleAiAsk = (query: string = aiQuery) => {
     if (!query.trim()) return;
     const userMsg: ChatMessage = { id: Date.now().toString(), user: 'You', text: query, time: 'Now', isMe: true };
@@ -242,84 +387,6 @@ export default function Home() {
       const randomResponse = responses[Math.floor(Math.random() * responses.length)];
       setAiChatHistory(prev => [...prev, { id: (Date.now() + 1).toString(), user: 'Genius', text: randomResponse, time: 'Now', isMe: false }]);
     }, 1500);
-  };
-
-  const calculateRoute = async () => {
-    if (tripPlan.length < 2) {
-      alert("Add at least 2 places to see a route.");
-      return;
-    }
-    setIsRouting(true);
-    const directionsService = new google.maps.DirectionsService();
-    const origin = { lat: tripPlan[0].lat, lng: tripPlan[0].lng };
-    const destination = { lat: tripPlan[tripPlan.length - 1].lat, lng: tripPlan[tripPlan.length - 1].lng };
-    const waypoints = tripPlan.slice(1, -1).map(p => ({ location: { lat: p.lat, lng: p.lng }, stopover: true }));
-
-    directionsService.route({
-      origin: origin,
-      destination: destination,
-      waypoints: waypoints,
-      travelMode: google.maps.TravelMode.DRIVING
-    }, (result, status) => {
-      if (status === 'OK' && result) {
-        setDirectionsResponse(result);
-      } else {
-        alert("Could not calculate route. Try fewer stops.");
-      }
-      setIsRouting(false);
-    });
-  };
-
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(inviteLink);
-    alert("Invite link copied to clipboard! 📋");
-  };
-
-  const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
-    setMessages(prev => [...prev, { id: Date.now().toString(), user: 'You', text: newMessage, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isMe: true }]);
-    setNewMessage('');
-  };
-
-  const handleAddExpense = () => {
-    if (!newExpense.what || !newExpense.amount) return;
-    setExpenses([...expenses, { id: Date.now().toString(), who: newExpense.who, what: newExpense.what, amount: Number(newExpense.amount) }]);
-    setShowExpenseForm(false);
-    setNewExpense({ what: '', amount: '', who: 'You' });
-  };
-
-  const submitFeedback = () => {
-    if (!feedbackText.trim()) return;
-    alert("Thanks for your feedback! We'll look into it.");
-    setFeedbackText('');
-    setShowHelpModal(false);
-  };
-
-  // PACKING HANDLERS
-  const addPackingItem = () => {
-    if (!newPackingItem.trim()) return;
-    setPackingList([...packingList, { id: Date.now().toString(), text: newPackingItem, checked: false }]);
-    setNewPackingItem('');
-  };
-
-  const togglePackingItem = (id: string) => {
-    setPackingList(packingList.map(item => item.id === id ? { ...item, checked: !item.checked } : item));
-  };
-
-  // --- CALCULATIONS ---
-  const totalCost = expenses.reduce((a, b) => a + b.amount, 0);
-  const costPerPerson = tripMembers.length > 0 ? totalCost / tripMembers.length : 0;
-  const myTotalPaid = expenses.filter(e => e.who === 'You').reduce((a, b) => a + b.amount, 0);
-  const myBalance = myTotalPaid - costPerPerson;
-
-  // --- HELPERS ---
-  const handleLogout = async () => { await supabase.auth.signOut(); window.location.reload(); };
-  const removeFromTrip = (id: string) => setTripPlan(tripPlan.filter(p => p.id !== id));
-
-  // Dynamic Days based on Wizard Data
-  const calculateDays = () => {
-    if (!tripMeta?.dates?.start || !tripMeta?.dates?.end) return 1;
-    return Math.max(1, Math.ceil((new Date(tripMeta.dates.end).getTime() - new Date(tripMeta.dates.start).getTime()) / (1000 * 3600 * 24)) + 1);
   };
 
   if (!session) return <LandingPage />;
@@ -350,42 +417,19 @@ export default function Home() {
 
         {/* --- GLOBAL HEADER --- */}
         <header className="absolute top-0 right-0 p-4 lg:p-6 z-50 flex items-center gap-2 lg:gap-4 w-full justify-between lg:justify-end pointer-events-none">
-
-          {/* MOBILE HAMBURGER */}
           <div className="lg:hidden pointer-events-auto">
-            <button onClick={() => setIsSidebarOpen(true)} className="w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center text-xl">
-              ☰
-            </button>
+            <button onClick={() => setIsSidebarOpen(true)} className="w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center text-xl">☰</button>
           </div>
-
           <div className="flex items-center gap-2 lg:gap-4 pointer-events-auto">
             {tripPlan.length > 0 && activeView !== 'DASHBOARD' && (
               <button onClick={() => setActiveView('COLLAB' as any)} className="bg-white text-blue-600 px-3 py-2 rounded-full shadow-sm border border-blue-100 font-bold text-[10px] lg:text-xs flex items-center gap-2 hover:bg-blue-50 transition-colors">👥 Invite</button>
             )}
-
-            {/* Controls */}
-            <div className="hidden lg:flex items-center bg-white/90 backdrop-blur rounded-full border border-gray-200 shadow-sm p-1">
-              <button className="px-3 py-1.5 hover:bg-gray-100 rounded-full text-sm font-bold text-gray-700 transition-colors">₹</button>
-              <div className="w-px h-4 bg-gray-300"></div>
-              <button className="px-3 py-1.5 hover:bg-gray-100 rounded-full text-xs font-bold text-gray-700 transition-colors">US</button>
-              <div className="w-px h-4 bg-gray-300"></div>
-              <button className="px-3 py-1.5 hover:bg-gray-100 rounded-full text-sm font-bold text-gray-700 transition-colors">°C</button>
-            </div>
-
-            {/* Profile Dropdown */}
             <div className="relative">
               <button onClick={() => setShowProfileMenu(!showProfileMenu)} className="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center text-sm font-bold text-gray-700 hover:shadow-md transition-all relative shadow-sm">
                 {session.user.email?.[0].toUpperCase()}
               </button>
               {showProfileMenu && (
-                <div className="absolute right-0 top-14 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden py-2 animate-fade-in-up origin-top-right z-50">
-                  <div className="px-4 py-3 border-b border-gray-50 mb-1">
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Signed in as</p>
-                    <p className="text-sm font-bold text-gray-900 truncate">{session.user.email}</p>
-                  </div>
-                  <button onClick={() => { setShowWizard(true); setShowProfileMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-3 text-sm font-bold text-gray-700"><span>➕</span> New Trip</button>
-                  <button onClick={() => { setActiveView('SETTINGS'); setShowProfileMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-3 text-sm font-bold text-gray-700"><span>⚙️</span> Settings</button>
-                  <div className="h-px bg-gray-100 my-1"></div>
+                <div className="absolute right-0 top-14 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden py-2 z-50">
                   <button onClick={handleLogout} className="w-full text-left px-4 py-3 hover:bg-red-50 flex items-center gap-3 text-sm font-bold text-red-500"><span>🚪</span> Sign Out</button>
                 </div>
               )}
@@ -393,17 +437,14 @@ export default function Home() {
           </div>
         </header>
 
-        {/* --- DASHBOARD VIEW (NOW USING THE COMPONENT) --- */}
+        {/* --- DASHBOARD VIEW --- */}
         {activeView === 'DASHBOARD' && !isWizardActive && (
           <div className="h-full w-full pt-20 lg:pt-24">
-            <DashboardView
-              onPlanTrip={() => setShowWizard(true)}
-              onDiscovery={() => setActiveView('DISCOVERY' as any)}
-            />
+            <DashboardView onPlanTrip={() => setShowWizard(true)} onDiscovery={() => setActiveView('DISCOVERY' as any)} />
           </div>
         )}
 
-        {/* --- SETTINGS VIEW --- */}
+        {/* --- SETTINGS VIEW (RESTORED) --- */}
         {activeView === 'SETTINGS' && (
           <div className="h-full bg-gray-50 p-4 lg:p-8 overflow-y-auto pt-24">
             <div className="max-w-2xl mx-auto space-y-6">
@@ -423,7 +464,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- COLLAB VIEW --- */}
+        {/* --- COLLAB VIEW (RESTORED) --- */}
         {activeView === 'COLLAB' && (
           <div className="h-full bg-gray-50 p-4 lg:p-8 flex flex-col items-center pt-24">
             <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col h-[80vh]">
@@ -449,19 +490,13 @@ export default function Home() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 lg:p-6 bg-gray-50">
-
-                {/* MEMBERS TAB */}
                 {collabTab === 'MEMBERS' && (
                   <div className="space-y-6">
                     <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100">
                       <h4 className="font-bold text-blue-900 text-sm mb-3">Invite Friends to Plan</h4>
                       <div className="flex gap-2">
-                        <div className="flex-1 bg-white border border-blue-200 rounded-xl px-4 py-3 text-xs font-mono text-gray-600 truncate flex items-center">
-                          {inviteLink}
-                        </div>
-                        <button onClick={handleCopyLink} className="bg-blue-600 text-white px-4 lg:px-6 rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200">
-                          Copy
-                        </button>
+                        <div className="flex-1 bg-white border border-blue-200 rounded-xl px-4 py-3 text-xs font-mono text-gray-600 truncate flex items-center">{inviteLink}</div>
+                        <button onClick={handleCopyLink} className="bg-blue-600 text-white px-4 lg:px-6 rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200">Copy</button>
                       </div>
                     </div>
                     <div>
@@ -477,42 +512,29 @@ export default function Home() {
                     </div>
                   </div>
                 )}
-
-                {/* PACKING TAB */}
                 {collabTab === 'PACKING' && (
                   <div className="space-y-4">
                     <div className="flex gap-2 mb-4">
-                      <input
-                        className="flex-1 p-3 rounded-xl border border-gray-200 text-xs font-bold"
-                        placeholder="Add item..."
-                        value={newPackingItem}
-                        onChange={e => setNewPackingItem(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && addPackingItem()}
-                      />
+                      <input className="flex-1 p-3 rounded-xl border border-gray-200 text-xs font-bold" placeholder="Add item..." value={newPackingItem} onChange={e => setNewPackingItem(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPackingItem()} />
                       <button onClick={addPackingItem} className="bg-black text-white px-6 rounded-xl font-bold text-xs">Add</button>
                     </div>
                     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       {packingList.map(item => (
                         <div key={item.id} onClick={() => togglePackingItem(item.id)} className="flex items-center gap-3 p-4 border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer">
-                          <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${item.checked ? 'bg-green-500 border-green-500' : 'border-gray-300'}`}>
-                            {item.checked && <span className="text-white text-xs">✓</span>}
-                          </div>
+                          <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${item.checked ? 'bg-green-500 border-green-500' : 'border-gray-300'}`}>{item.checked && <span className="text-white text-xs">✓</span>}</div>
                           <span className={`text-sm font-bold ${item.checked ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{item.text}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
-
-                {/* CHAT TAB */}
                 {collabTab === 'CHAT' && (
                   <div className="flex flex-col h-full">
                     <div className="flex-1 space-y-3 mb-4 overflow-y-auto pr-2">
                       {messages.map(m => (
                         <div key={m.id} className={`flex ${m.isMe ? 'justify-end' : 'justify-start'}`}>
                           <div className={`max-w-[75%] p-3 rounded-2xl text-xs ${m.isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none shadow-sm'}`}>
-                            {!m.isMe && <p className="text-[9px] font-bold opacity-60 mb-1">{m.user}</p>}
-                            {m.text}
+                            {!m.isMe && <p className="text-[9px] font-bold opacity-60 mb-1">{m.user}</p>}{m.text}
                           </div>
                         </div>
                       ))}
@@ -523,8 +545,6 @@ export default function Home() {
                     </div>
                   </div>
                 )}
-
-                {/* SPLIT TAB */}
                 {collabTab === 'SPLIT' && (
                   <div className="h-full flex flex-col">
                     <div className="bg-green-50 border border-green-100 p-6 rounded-2xl mb-6 text-center shadow-sm">
@@ -533,9 +553,7 @@ export default function Home() {
                       <p className="text-xs text-green-800 mt-1 font-bold">₹{costPerPerson.toFixed(0)} / person</p>
                       <div className="flex justify-center gap-4 mt-4">
                         <div className="bg-white px-3 py-1 rounded-lg border border-green-100 text-xs font-bold text-green-700">You Paid: ₹{myTotalPaid}</div>
-                        <div className={`bg-white px-3 py-1 rounded-lg border text-xs font-bold ${myBalance >= 0 ? 'border-green-100 text-green-700' : 'border-red-100 text-red-700'}`}>
-                          {myBalance >= 0 ? `Get Back: ₹${myBalance.toFixed(0)}` : `You Owe: ₹${Math.abs(myBalance).toFixed(0)}`}
-                        </div>
+                        <div className={`bg-white px-3 py-1 rounded-lg border text-xs font-bold ${myBalance >= 0 ? 'border-green-100 text-green-700' : 'border-red-100 text-red-700'}`}>{myBalance >= 0 ? `Get Back: ₹${myBalance.toFixed(0)}` : `You Owe: ₹${Math.abs(myBalance).toFixed(0)}`}</div>
                       </div>
                     </div>
                     <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-2">
@@ -571,15 +589,45 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- MODALS (Create Wizard) --- */}
-        {activeView === 'DASHBOARD' && showWizard && (
-          <CreateTripWizard
-            onClose={() => setShowWizard(false)}
-            onComplete={handleWizardComplete}
-          />
+        {/* --- PLAN VIEW (TIMELINE + MAP) --- */}
+        {activeView === 'PLAN' && isLoaded && (
+          <div className="h-full w-full relative flex">
+
+            {/* LEFT: VERTICAL ITINERARY TIMELINE (Wrapped for PDF) */}
+            {tripPlan.length > 0 && (
+              <div id="itinerary-container" className="h-full relative z-20">
+                <ItineraryDisplay
+                  tripMeta={tripMeta}
+                  places={tripPlan}
+                />
+              </div>
+            )}
+
+            {/* RIGHT: MAP (Background) */}
+            <div className="flex-1 h-full relative ml-0 md:ml-[480px] transition-all duration-300">
+              <GoogleMap mapContainerStyle={MAP_STYLES} center={mapCenter} zoom={12} options={{ disableDefaultUI: false, zoomControl: true }}>
+                {directionsResponse && <DirectionsRenderer directions={directionsResponse} />}
+                {tripPlan.map((place, index) => (
+                  <Marker key={place.id} position={{ lat: place.lat, lng: place.lng }} label={{ text: `${index + 1}`, color: "white", fontWeight: "bold" }} title={place.name} />
+                ))}
+              </GoogleMap>
+              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-2xl p-2 flex gap-2">
+                <button onClick={calculateRoute} className="bg-black text-white px-6 py-3 rounded-full font-bold text-xs hover:scale-105 transition-transform">{isRouting ? '...' : '🛣️ Show Route'}</button>
+                <button id="download-btn" onClick={handleDownloadOffline} className="bg-gray-100 text-gray-700 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-200 transition-colors">⬇️ Download Offline</button>
+                <button onClick={() => setDirectionsResponse(null)} className="bg-white text-gray-500 border border-gray-200 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-50">Reset</button>
+              </div>
+            </div>
+          </div>
         )}
 
-        {/* --- GENIUS BUTTON MODAL --- */}
+        {/* --- OTHER VIEWS --- */}
+        {activeView === 'DISCOVERY' && <DiscoveryView onAddToTrip={() => { }} onBack={() => setActiveView('PLAN')} initialCity={tripMeta.destination || 'Bangalore'} />}
+
+        {/* --- MODALS --- */}
+        {showWizard && <CreateTripWizard onClose={() => setShowWizard(false)} onComplete={handleWizardComplete} />}
+        {showHelpModal && <div className="fixed bottom-20 right-6 bg-white p-4 rounded-xl shadow-xl">Help Modal Placeholder</div>}
+
+        {/* GENIUS AI MODAL */}
         {aiModalOpen && aiActivePlace && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
             <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[500px]">
@@ -609,52 +657,8 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- MAP PLAN (With ROUTING & OFFLINE) --- */}
-        {activeView === 'PLAN' && isLoaded && (
-          <div className="h-full w-full relative">
-            <GoogleMap mapContainerStyle={MAP_STYLES} center={mapCenter} zoom={12} options={{ disableDefaultUI: false, zoomControl: true }}>
-              {directionsResponse ? (
-                <DirectionsRenderer directions={directionsResponse} options={{ suppressMarkers: true, polylineOptions: { strokeColor: '#2563EB', strokeOpacity: 0.8, strokeWeight: 5 } }} />
-              ) : (
-                <Polyline path={tripPlan.map(p => ({ lat: p.lat, lng: p.lng }))} options={PATH_OPTIONS} />
-              )}
-              {tripPlan.map((place, index) => (
-                <Marker key={place.id} position={{ lat: place.lat, lng: place.lng }} label={{ text: `${index + 1}`, color: "white", fontWeight: "bold" }} title={place.name} />
-              ))}
-            </GoogleMap>
-
-            {/* OFFLINE MAP & ROUTE CONTROLS */}
-            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-2xl p-2 flex gap-2 animate-fade-in-up">
-              <button onClick={calculateRoute} disabled={isRouting} className="bg-black text-white px-6 py-3 rounded-full font-bold text-xs flex items-center gap-2 hover:scale-105 transition-transform">
-                {isRouting ? 'Calculating...' : '🛣️ Show Driving Route'}
-              </button>
-              <button onClick={() => alert("Offline Map Downloaded! (Simulated)")} className="bg-gray-100 text-gray-700 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-200">
-                ⬇️ Download Offline
-              </button>
-              <button onClick={() => setDirectionsResponse(null)} className="bg-white text-gray-500 border border-gray-200 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-50">Reset</button>
-            </div>
-          </div>
-        )}
-
-        {/* --- DISCOVERY VIEW (Now properly routed) --- */}
-        {activeView === 'DISCOVERY' && <DiscoveryView onAddToTrip={() => { }} onBack={() => setActiveView('PLAN')} initialCity={tripMeta.destination || 'Bangalore'} />}
-
-        {/* --- GLOBAL HELP WIDGET --- */}
         <div className="fixed bottom-6 right-6 z-50">
-          <button onClick={() => setShowHelpModal(true)} className="w-12 h-12 bg-black text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform text-xl font-bold">?</button>
-          {showHelpModal && (
-            <div className="absolute bottom-16 right-0 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-fade-in-up origin-bottom-right">
-              <div className="bg-black p-4 flex justify-between items-center text-white"><h3 className="font-bold text-sm">Help & Support</h3><button onClick={() => setShowHelpModal(false)} className="text-gray-400 hover:text-white">✕</button></div>
-              <div className="flex border-b border-gray-100"><button onClick={() => setHelpTab('GUIDE')} className={`flex-1 py-3 text-xs font-bold ${helpTab === 'GUIDE' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Quick Guide</button><button onClick={() => setHelpTab('FEEDBACK')} className={`flex-1 py-3 text-xs font-bold ${helpTab === 'FEEDBACK' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Report / Idea</button></div>
-              <div className="p-4 h-64 overflow-y-auto bg-gray-50">
-                {helpTab === 'GUIDE' ? (
-                  <div className="space-y-4">{[{ icon: '🔎', title: 'Start a Trip', desc: 'Click "Plan New Trip" on the dashboard. Enter your city and preferences.' }, { icon: '🗺️', title: 'Customize', desc: 'Select places day-by-day. Use the "Start Location" to optimize the route.' }, { icon: '🤝', title: 'Invite Friends', desc: 'Once planned, go to the "Collab" tab to invite friends and split costs.' }, { icon: '📍', title: 'Discover', desc: 'Use the "Discover" tab to find hidden gems near you anytime.' }].map((item, i) => (<div key={i} className="flex gap-3"><div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm text-sm border border-gray-100">{item.icon}</div><div><h4 className="font-bold text-xs text-gray-900">{item.title}</h4><p className="text-[10px] text-gray-500 leading-tight">{item.desc}</p></div></div>))}</div>
-                ) : (
-                  <div className="flex flex-col h-full"><textarea className="flex-1 p-3 rounded-xl border border-gray-200 text-xs font-medium resize-none focus:outline-none focus:border-blue-500 mb-3" placeholder="Found a bug? Have an idea? Tell us..." value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} /><button onClick={submitFeedback} className="w-full bg-black text-white py-2 rounded-lg font-bold text-xs">Submit Feedback</button></div>
-                )}
-              </div>
-            </div>
-          )}
+          <button onClick={() => setShowHelpModal(!showHelpModal)} className="w-12 h-12 bg-black text-white rounded-full shadow-2xl flex items-center justify-center font-bold">?</button>
         </div>
 
       </main>

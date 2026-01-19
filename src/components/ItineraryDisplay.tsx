@@ -1,287 +1,243 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { MapPin, Utensils, Star, Flag, Check, Sun, Moon, Share2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import React, { useState, useEffect } from 'react';
 
-// --- Types ---
-interface Option {
+// --- TYPES ---
+interface Place {
     id: string;
+    name: string;
     type: string;
-    anchor?: { name: string; description?: string };
-    satellite?: { name: string };
-    place_name?: string;
-    votes: number;
-}
-
-interface Slot {
-    options: Option[];
-}
-
-interface Day {
-    day_number: number;
-    [key: string]: any; // Allow loose access for the helper
-}
-
-interface TripData {
-    trip_id: string;
-    name?: string;
-    itinerary: Day[];
+    image?: string;
+    rating?: number;
+    description?: string;
+    time?: string; // e.g. "Morning", "Lunch"
+    duration?: number; // in minutes, e.g. 90
 }
 
 interface ItineraryDisplayProps {
-    tripResult: TripData;
+    tripMeta: any;
+    places: Place[];
+    onUpdatePlaces?: (updatedPlaces: Place[]) => void; // Callback to update parent state
 }
 
-export default function ItineraryDisplay(props: ItineraryDisplayProps) {
-    console.log('ItineraryDisplay received props:', props);
-    const { tripResult } = props;
-    const [selections, setSelections] = useState<Record<string, string>>({});
+export default function ItineraryDisplay({ tripMeta, places, onUpdatePlaces }: ItineraryDisplayProps) {
+    const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'EDITABLE'>('OVERVIEW');
+    const [localPlaces, setLocalPlaces] = useState<Place[]>(places);
 
-    const getSlotKey = (dayNum: number, slotKey: string) => `day_${dayNum}_${slotKey}`;
+    // Sync local state if parent props change
+    useEffect(() => {
+        setLocalPlaces(places);
+    }, [places]);
 
-    const handleSelect = (dayNum: number, slotKey: string, optionId: string) => {
-        const key = getSlotKey(dayNum, slotKey);
-        setSelections(prev => ({ ...prev, [key]: optionId }));
+    // --- HELPERS ---
+    const formatDate = (dateStr: string, dayOffset: number) => {
+        if (!dateStr) return `Day ${dayOffset + 1}`;
+        const d = new Date(dateStr);
+        d.setDate(d.getDate() + dayOffset);
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', weekday: 'short' });
     };
 
-    const getSelection = (dayNum: number, slotKey: string) => selections[getSlotKey(dayNum, slotKey)];
-
-    // --- Smart Access Helper ---
-    const getOptions = (day: any, slotBase: string): Option[] => {
-        // Try various key formats: "Morning", "morning", "Morning_slot", "morning_slot"
-        const candidates = [
-            slotBase,
-            slotBase.toLowerCase(),
-            `${slotBase}_slot`,
-            `${slotBase.toLowerCase()}_slot`
-        ];
-
-        // 1. Direct access on day object
-        for (const key of candidates) {
-            const val = day[key];
-            if (val) {
-                if (Array.isArray(val)) return val;
-                if (val.options && Array.isArray(val.options)) return val.options;
-            }
-        }
-
-        // 2. Nested 'slots' object access (if API changes structure)
-        if (day.slots) {
-            for (const key of candidates) {
-                const val = day.slots[key];
-                if (val) {
-                    if (Array.isArray(val)) return val;
-                    if (val.options && Array.isArray(val.options)) return val.options;
-                }
-            }
-        }
-
-        return [];
+    const getDayLabel = (index: number) => {
+        const hours = 10 + Math.floor(index * 2); // Mock start at 10 AM, add 2 hours per activity
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const displayHours = hours > 12 ? hours - 12 : hours;
+        return `${displayHours}:00 ${ampm}`;
     };
 
-    const completionStatus = useMemo(() => {
-        if (!tripResult || !tripResult.itinerary) return { total: 0, current: 0, isComplete: false };
+    // --- ACTIONS (Edit Mode) ---
+    const handleDelete = (id: string) => {
+        if (!confirm("Remove this stop?")) return;
+        const updated = localPlaces.filter(p => p.id !== id);
+        setLocalPlaces(updated);
+        if (onUpdatePlaces) onUpdatePlaces(updated);
+    };
 
-        let totalSlots = 0;
-        tripResult.itinerary.forEach((day: any) => {
-            if (getOptions(day, 'Morning').length) totalSlots++;
-            if (getOptions(day, 'Lunch').length) totalSlots++;
-            if (getOptions(day, 'Afternoon').length) totalSlots++;
-        });
+    const handleMove = (index: number, direction: 'UP' | 'DOWN') => {
+        if (direction === 'UP' && index === 0) return;
+        if (direction === 'DOWN' && index === localPlaces.length - 1) return;
 
-        const currentSelections = Object.keys(selections).length;
-        return {
-            total: totalSlots,
-            current: currentSelections,
-            isComplete: currentSelections >= totalSlots && totalSlots > 0
-        };
-    }, [tripResult, selections]);
+        const newPlaces = [...localPlaces];
+        const swapIndex = direction === 'UP' ? index - 1 : index + 1;
 
+        // Swap
+        [newPlaces[index], newPlaces[swapIndex]] = [newPlaces[swapIndex], newPlaces[index]];
 
-    // --- Render Logic ---
-    let content;
-    try {
-        if (!tripResult || !tripResult.itinerary || tripResult.itinerary.length === 0) {
-            content = <div className="text-center p-12 text-gray-500">No itinerary found.</div>;
-        } else {
-            content = (
-                <>
-                    {tripResult.itinerary.map((day, index) => {
-                        // Deep Logging
-                        console.log(`Day ${index} Data Structure:`, day);
+        setLocalPlaces(newPlaces);
+        if (onUpdatePlaces) onUpdatePlaces(newPlaces);
+    };
 
-                        return (
-                            <div key={day.day_number || index} className="relative">
-                                {/* Day Marker */}
-                                <div className="sticky top-20 z-10 bg-[#FAFAFA]/95 backdrop-blur py-4 mb-6 border-b border-neutral-200">
-                                    <h2 className="text-3xl font-extrabold text-neutral-900 flex items-center gap-3">
-                                        <span className="bg-black text-white w-10 h-10 rounded-lg flex items-center justify-center text-xl">
-                                            {day.day_number}
-                                        </span>
-                                        Day {day.day_number}
-                                    </h2>
-                                </div>
-
-                                <div className="space-y-12 border-l-2 border-neutral-200 ml-5 pl-8 py-4">
-
-                                    {/* Slot Loop */}
-                                    {[
-                                        { key: 'Morning', label: 'Morning Adventure', icon: <Sun className="w-5 h-5 text-orange-500" /> },
-                                        { key: 'Lunch', label: 'Lunch Spot', icon: <Utensils className="w-5 h-5 text-red-500" /> },
-                                        { key: 'Afternoon', label: 'Afternoon Exploration', icon: <Moon className="w-5 h-5 text-purple-500" /> }
-                                    ].map((slotConfig) => {
-                                        // Use Smart Access
-                                        const options = getOptions(day, slotConfig.key);
-                                        const selectedId = getSelection(day.day_number, slotConfig.key);
-                                        const hasSelection = !!selectedId;
-
-                                        if (options.length === 0) {
-                                            console.warn(`No options found for Day ${day.day_number} - ${slotConfig.key}`);
-                                            return null;
-                                        }
-
-                                        return (
-                                            <div key={slotConfig.key} className="relative">
-                                                <h3 className="flex items-center gap-3 font-bold text-xl text-neutral-800 mb-6">
-                                                    <div className="p-2 bg-white rounded-full shadow-sm border border-neutral-100">
-                                                        {slotConfig.icon}
-                                                    </div>
-                                                    {slotConfig.label}
-                                                </h3>
-
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                    {options.map((option) => {
-                                                        const isSelected = selectedId === option.id;
-                                                        const isFaded = hasSelection && !isSelected;
-
-                                                        const title = option.type === 'FOOD' ? option.place_name : option.anchor?.name;
-                                                        const subTitle = option.type === 'ANCHOR_PLUS_SAT' && option.satellite
-                                                            ? `+ ${option.satellite.name}`
-                                                            : (option.type === 'FOOD' ? 'Local Cuisine' : '');
-                                                        const reason = option.anchor?.description || "A top-rated local favorite.";
-
-                                                        return (
-                                                            <div
-                                                                key={option.id}
-                                                                className={`
-                                                group relative flex flex-col h-full bg-white rounded-xl border-2 transition-all duration-300 cursor-pointer shadow-sm hover:shadow-md
-                                                ${isSelected ? 'border-green-500 ring-4 ring-green-500/10 z-10 scale-[1.02]' : 'border-neutral-100 hover:border-neutral-300'}
-                                                ${isFaded ? 'opacity-50 grayscale hover:opacity-100 hover:grayscale-0' : 'opacity-100'}
-                                            `}
-                                                                onClick={() => handleSelect(day.day_number, slotConfig.key, option.id)}
-                                                            >
-                                                                {isSelected && (
-                                                                    <div className="absolute -top-3 -right-3 bg-green-500 text-white p-1.5 rounded-full shadow-md z-20">
-                                                                        <Check className="w-4 h-4" />
-                                                                    </div>
-                                                                )}
-
-                                                                <div className="p-5 pb-3">
-                                                                    <div className="flex justify-between items-start mb-2">
-                                                                        <h4 className="font-bold text-lg text-neutral-900 leading-tight pr-4">
-                                                                            {title}
-                                                                        </h4>
-                                                                        {option.type === 'ANCHOR_PLUS_SAT' && (
-                                                                            <span className="text-[10px] font-bold uppercase tracking-wider bg-teal-50 text-teal-700 px-2 py-1 rounded-md">
-                                                                                Anchor
-                                                                            </span>
-                                                                        )}
-                                                                        {option.type === 'FOOD' && (
-                                                                            <span className="text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700 px-2 py-1 rounded-md">
-                                                                                Eats
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                    {subTitle && (
-                                                                        <p className="text-sm font-medium text-neutral-500 flex items-center gap-1.5">
-                                                                            {option.type === 'ANCHOR_PLUS_SAT' && <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />}
-                                                                            {subTitle}
-                                                                        </p>
-                                                                    )}
-                                                                </div>
-
-                                                                <div className="px-5 py-2 flex-grow">
-                                                                    <p className="text-sm text-neutral-600 leading-relaxed border-l-2 border-neutral-200 pl-3 italic">
-                                                                        "{reason}"
-                                                                    </p>
-                                                                </div>
-
-                                                                <div className="p-5 pt-3 mt-auto">
-                                                                    <button
-                                                                        className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-colors
-                                                    ${isSelected
-                                                                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                                                                : 'bg-neutral-100 text-neutral-600 hover:bg-black hover:text-white group-hover:bg-neutral-900 group-hover:text-white'
-                                                                            }`}
-                                                                    >
-                                                                        {isSelected ? 'Selected' : 'Select Option'}
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </>
-            );
-        }
-    } catch (error: any) {
-        console.error('Render Loop Error:', error);
-        content = (
-            <div className="p-4 bg-red-50 border border-red-200 rounded">
-                <h3 className="text-red-600 font-bold">UI Render Error</h3>
-                <p>The data arrived, but the component couldn't map it. Here is the raw data:</p>
-                <pre className="text-xs overflow-auto bg-gray-100 p-2 mt-2 max-h-96">
-                    {JSON.stringify(tripResult, null, 2)}
-                </pre>
-            </div>
-        );
-    }
+    // Grouping logic (Simple: 3 items per day for demo)
+    const placesPerDay = 3;
+    const totalDays = Math.ceil(localPlaces.length / placesPerDay) || 1;
 
     return (
-        <div className="w-full max-w-5xl mx-auto space-y-16 pb-32 animate-in fade-in duration-700">
-            {content}
+        <div className="h-full flex flex-col bg-gray-50 border-r border-gray-200 w-full md:w-[480px] shadow-2xl z-20 overflow-hidden absolute left-0 top-0 pt-20 transition-all duration-300">
 
-            {/* Sticky Footer */}
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-lg border-t border-neutral-200 z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
-                <div className="container max-w-5xl mx-auto flex items-center justify-between">
-                    <div className="hidden md:block">
-                        <p className="text-sm font-medium text-neutral-500">Trip Summary</p>
-                        <p className="font-bold text-neutral-900">
-                            {completionStatus.current} of {completionStatus.total} experiences selected
-                        </p>
-                    </div>
+            {/* --- HEADER TABS --- */}
+            <div className="bg-white px-6 pt-6 pb-0 border-b border-gray-200">
+                <h2 className="text-2xl font-black text-gray-900 mb-1">{tripMeta.destination || 'Your Trip'}</h2>
+                <p className="text-xs text-gray-500 mb-4 font-medium flex items-center gap-2">
+                    🗓️ {tripMeta.dates?.start || 'TBD'} ⮕ {tripMeta.dates?.end || 'TBD'}
+                    <span className="text-gray-300">|</span>
+                    👥 {tripMeta.groupType} Trip
+                </p>
 
-                    <div className="md:hidden flex-1 mr-4">
-                        <div className="h-2 w-full bg-neutral-100 rounded-full overflow-hidden">
-                            <div
-                                className="h-full bg-black transition-all duration-500"
-                                style={{ width: `${(completionStatus.current / completionStatus.total) * 100}%` }}
-                            />
-                        </div>
-                    </div>
-
-                    <Button
-                        size="lg"
-                        className={`min-w-[160px] font-bold shadow-lg transition-all ${completionStatus.isComplete
-                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white hover:scale-105'
-                            : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
-                            }`}
-                        disabled={!completionStatus.isComplete}
+                <div className="flex gap-6">
+                    <button
+                        onClick={() => setActiveTab('OVERVIEW')}
+                        className={`pb-3 text-xs font-bold border-b-2 transition-colors ${activeTab === 'OVERVIEW' ? 'border-black text-black' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
                     >
-                        <Share2 className="w-4 h-4 mr-2" />
-                        {completionStatus.isComplete ? 'Save & Share' : 'Select All Slots'}
-                    </Button>
+                        TIMELINE
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('EDITABLE')}
+                        className={`pb-3 text-xs font-bold border-b-2 transition-colors ${activeTab === 'EDITABLE' ? 'border-black text-black' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                    >
+                        EDIT & REORDER
+                    </button>
                 </div>
+            </div>
+
+            {/* --- SCROLLABLE CONTENT --- */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-10 custom-scrollbar">
+
+                {Array.from({ length: totalDays }).map((_, dayIndex) => {
+
+                    // Get places for this day
+                    const dayPlaces = localPlaces.slice(dayIndex * placesPerDay, (dayIndex + 1) * placesPerDay);
+                    const startIndex = dayIndex * placesPerDay;
+
+                    return (
+                        <div key={dayIndex} className="relative animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both" style={{ animationDelay: `${dayIndex * 100}ms` }}>
+
+                            {/* Day Header Sticky */}
+                            <div className="sticky top-0 z-20 bg-gray-50/95 backdrop-blur py-2 mb-4 border-b border-gray-100 flex justify-between items-end">
+                                <div>
+                                    <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-1 rounded-md">Day {dayIndex + 1}</span>
+                                    <h3 className="font-bold text-gray-900 text-lg leading-none mt-1">{formatDate(tripMeta.dates?.start, dayIndex)}</h3>
+                                </div>
+                            </div>
+
+                            {/* Connector Line */}
+                            <div className="absolute left-[27px] top-12 bottom-0 w-0.5 bg-gray-200 z-0"></div>
+
+                            <div className="space-y-6 relative z-10">
+
+                                {/* 1. MORNING TRANSPORT (Visual Only) */}
+                                <div className="flex gap-4 items-start group">
+                                    <div className="w-14 text-right pt-2">
+                                        <span className="text-[10px] font-bold text-gray-400">09:00 AM</span>
+                                    </div>
+                                    <div className="relative">
+                                        <div className="w-4 h-4 rounded-full bg-orange-100 border-2 border-orange-400 z-10 relative"></div>
+                                    </div>
+                                    <div className="flex-1 bg-orange-50/50 p-3 rounded-xl border border-orange-100/50 flex items-center gap-3 hover:bg-orange-50 transition-colors">
+                                        <span className="text-xl">🚗</span>
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-800">Start Day</p>
+                                            <p className="text-[10px] text-gray-500">Departure from Hotel</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 2. ACTIVITY CARDS */}
+                                {dayPlaces.map((place, i) => {
+                                    const globalIndex = startIndex + i;
+                                    return (
+                                        <div key={place.id} className="flex gap-4 items-start group">
+
+                                            {/* Time Column */}
+                                            <div className="w-14 text-right pt-2">
+                                                <span className="text-[10px] font-bold text-gray-500">{getDayLabel(i)}</span>
+                                            </div>
+
+                                            {/* Dot & Connector */}
+                                            <div className="relative pt-2">
+                                                <div className={`w-4 h-4 rounded-full border-2 z-10 relative bg-white ${activeTab === 'EDITABLE' ? 'border-blue-500' : 'border-gray-800'}`}></div>
+                                            </div>
+
+                                            {/* CARD */}
+                                            <div className={`flex-1 bg-white rounded-2xl border shadow-sm overflow-hidden transition-all duration-300 ${activeTab === 'EDITABLE' ? 'border-blue-200 shadow-md translate-x-1' : 'border-gray-200 hover:border-gray-300 hover:shadow-md'}`}>
+
+                                                {/* Image (Overview Mode Only) */}
+                                                {activeTab === 'OVERVIEW' && (
+                                                    <div className="h-28 bg-gray-200 relative overflow-hidden">
+                                                        <img src={place.image || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=500&q=60'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={place.name} />
+                                                        <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/60 to-transparent p-3 pt-8">
+                                                            <div className="text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-2">
+                                                                <span className="bg-white/20 backdrop-blur px-2 py-0.5 rounded">{place.type}</span>
+                                                                {place.rating && <span>★ {place.rating}</span>}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Content */}
+                                                <div className="p-4">
+                                                    <div className="flex justify-between items-start gap-2">
+                                                        <h4 className="font-bold text-sm text-gray-900 leading-snug">{place.name}</h4>
+                                                        {activeTab === 'EDITABLE' && (
+                                                            <button onClick={() => handleDelete(place.id)} className="text-gray-300 hover:text-red-500 transition-colors">🗑️</button>
+                                                        )}
+                                                    </div>
+
+                                                    {activeTab === 'OVERVIEW' && (
+                                                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{place.description}</p>
+                                                    )}
+
+                                                    {/* EDIT CONTROLS */}
+                                                    {activeTab === 'EDITABLE' && (
+                                                        <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-2">
+                                                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                                                                {place.time || 'Activity'}
+                                                            </span>
+                                                            <div className="flex gap-1">
+                                                                <button
+                                                                    onClick={() => handleMove(globalIndex, 'UP')}
+                                                                    disabled={globalIndex === 0}
+                                                                    className="w-7 h-7 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                                >
+                                                                    ⬆
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleMove(globalIndex, 'DOWN')}
+                                                                    disabled={globalIndex === localPlaces.length - 1}
+                                                                    className="w-7 h-7 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                                >
+                                                                    ⬇
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+
+                                {/* 3. LUNCH BREAK */}
+                                <div className="flex gap-4 items-center opacity-70">
+                                    <div className="w-14 text-right"></div>
+                                    <div className="relative"><div className="w-3 h-3 rounded-full bg-gray-300 z-10 relative"></div></div>
+                                    <div className="flex-1 py-3 border-t border-b border-gray-100 flex justify-center text-xs font-bold text-gray-400 uppercase tracking-widest">
+                                        Lunch Break
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    );
+                })}
+
+                {localPlaces.length === 0 && (
+                    <div className="text-center py-20 opacity-50">
+                        <div className="text-4xl mb-4 grayscale">🏳️</div>
+                        <p className="font-bold text-gray-400">Your itinerary is empty.</p>
+                        <button onClick={() => window.location.reload()} className="mt-4 text-blue-500 text-xs font-bold hover:underline">Start Over</button>
+                    </div>
+                )}
+
+                <div className="h-20"></div> {/* Spacer for bottom scroll */}
             </div>
         </div>
     );
