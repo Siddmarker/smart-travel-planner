@@ -34,25 +34,36 @@ export default function DashboardView({ onPlanTrip, onDiscovery }: DashboardProp
   // --- FETCH DATA ---
   useEffect(() => {
     async function loadDashboardData() {
-      // 1. Get User
-      const { data: { user } } = await supabase.auth.getUser();
+      try {
+        setLoading(true);
 
-      if (user) {
-        // Set Name
-        const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Traveler';
-        setUserName(name);
+        // 1. Get User
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (user) {
+          const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Traveler';
+          setUserName(name);
+        }
+
+        // 2. Fetch Blogs (Public)
+        const { data: blogsData, error } = await supabase
+          .from('blogs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(6);
+
+        if (error) {
+          console.error("Error fetching blogs:", error.message);
+        }
+
+        if (blogsData) setBlogs(blogsData);
+
+      } catch (err) {
+        console.error("Unexpected error:", err);
+      } finally {
+        // 3. ALWAYS turn off loading, even if there was an error
+        setLoading(false);
       }
-
-      // 2. Fetch Blogs (Public)
-      const { data: blogsData } = await supabase
-        .from('blogs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(6); // Showing up to 6 blogs
-
-      if (blogsData) setBlogs(blogsData);
-
-      setLoading(false);
     }
 
     loadDashboardData();
@@ -138,7 +149,7 @@ export default function DashboardView({ onPlanTrip, onDiscovery }: DashboardProp
           </div>
         ) : blogs.length === 0 ? (
           <div className="text-gray-400 text-base italic border-2 border-dashed border-gray-200 p-12 rounded-3xl text-center">
-            No blogs posted yet. Go to Supabase and add a row to the 'blogs' table!
+            No blogs found. (Check if your 'blogs' table in Supabase has data)
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
