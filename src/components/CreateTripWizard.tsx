@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface WizardProps {
     onClose: () => void;
@@ -15,7 +15,7 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
     const [scope, setScope] = useState({
         transport: false,
         stay: false,
-        activities: true, // Always true by default
+        activities: true,
     });
 
     const [dates, setDates] = useState({ start: '', end: '' });
@@ -23,6 +23,64 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
 
     const [groupType, setGroupType] = useState('FRIENDS');
     const [ageGroup, setAgeGroup] = useState<string[]>([]);
+
+    // --- AUTOCOMPLETE STATE ---
+    const [suggestions, setSuggestions] = useState<any[]>([]);
+    const [showDropdown, setShowDropdown] = useState(false);
+    const autocompleteService = useRef<any>(null);
+
+    // 1. Initial Attempt to Connect to Google
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {
+            autocompleteService.current = new window.google.maps.places.AutocompleteService();
+        } else {
+            console.warn("Google Maps Places library not ready yet.");
+        }
+    }, []);
+
+    // 2. Robust Input Handler with Debugging
+    const handleCityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        setDestination(val);
+
+        // FIX: Lazy initialization if it wasn't ready on mount
+        if (!autocompleteService.current && typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {
+            autocompleteService.current = new window.google.maps.places.AutocompleteService();
+        }
+
+        if (!val || val.length < 2) {
+            setSuggestions([]);
+            setShowDropdown(false);
+            return;
+        }
+
+        if (!autocompleteService.current) {
+            console.error("Google Autocomplete Service is STILL missing. Check API Key & Libraries.");
+            return;
+        }
+
+        // Fetch predictions
+        autocompleteService.current.getPlacePredictions(
+            { input: val, types: ['(cities)'] },
+            (predictions: any[], status: any) => {
+                console.log("Google API Response:", status, predictions); // <--- DEBUG LOG
+
+                if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+                    setSuggestions(predictions);
+                    setShowDropdown(true);
+                } else {
+                    setSuggestions([]);
+                    setShowDropdown(false);
+                }
+            }
+        );
+    };
+
+    const selectCity = (cityName: string) => {
+        setDestination(cityName);
+        setSuggestions([]);
+        setShowDropdown(false);
+    };
 
     // --- HANDLERS ---
     const toggleScope = (key: 'transport' | 'stay') => {
@@ -40,17 +98,17 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
     const handleNext = () => {
         if (step < 3) setStep(step + 1);
         else {
-            // FINISH
             onComplete({ destination, scope, dates, times, groupType, ageGroup });
         }
     };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-            <div className="bg-white w-full max-w-4xl h-[600px] rounded-3xl shadow-2xl flex overflow-hidden">
+            {/* FIX: Removed 'overflow-hidden' from main card so dropdown isn't clipped */}
+            <div className="bg-white w-full max-w-4xl h-[600px] rounded-3xl shadow-2xl flex relative">
 
-                {/* --- LEFT SIDEBAR (Progress) --- */}
-                <div className="w-1/3 bg-gray-50 border-r border-gray-100 p-8 flex flex-col justify-between hidden md:flex">
+                {/* --- LEFT SIDEBAR --- */}
+                <div className="w-1/3 bg-gray-50 border-r border-gray-100 p-8 flex flex-col justify-between hidden md:flex rounded-l-3xl">
                     <div>
                         <h2 className="text-2xl font-black text-gray-900 mb-8">Plan Your Trip</h2>
                         <div className="space-y-6">
@@ -65,24 +123,53 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
                     </div>
                 </div>
 
-                {/* --- RIGHT CONTENT (Dynamic) --- */}
-                <div className="flex-1 p-8 md:p-12 flex flex-col relative">
+                {/* --- RIGHT CONTENT --- */}
+                <div
+                    className="flex-1 p-8 md:p-12 flex flex-col relative rounded-r-3xl"
+                    onClick={() => setShowDropdown(false)} // Background click closes dropdown
+                >
 
                     <button onClick={onClose} className="absolute top-6 right-6 text-gray-400 hover:text-black">✕</button>
 
-                    {/* STEP 1: SCOPE */}
+                    {/* STEP 1: SCOPE & DESTINATION */}
                     {step === 1 && (
                         <div className="flex-1 flex flex-col justify-center animate-in slide-in-from-right-8 duration-500">
                             <h3 className="text-3xl font-black text-gray-900 mb-2">Where to?</h3>
                             <p className="text-gray-500 mb-8">Enter your destination and tell us what you need help with.</p>
 
-                            <input
-                                className="w-full text-2xl font-bold border-b-2 border-gray-200 focus:border-black outline-none py-2 mb-10 placeholder-gray-300"
-                                placeholder="e.g. Bangalore, Goa, Ooty..."
-                                value={destination}
-                                onChange={e => setDestination(e.target.value)}
-                                autoFocus
-                            />
+                            {/* DESTINATION INPUT */}
+                            <div className="relative mb-10 z-50"> {/* High Z-Index for container */}
+                                <input
+                                    className="w-full text-2xl font-bold border-b-2 border-gray-200 focus:border-black outline-none py-2 placeholder-gray-300 bg-transparent"
+                                    placeholder="e.g. Bangalore, Goa, Ooty..."
+                                    value={destination}
+                                    onChange={handleCityInput}
+                                    onClick={(e) => {
+                                        e.stopPropagation(); // FIX: Don't close dropdown when clicking input
+                                        if (suggestions.length > 0) setShowDropdown(true);
+                                    }}
+                                    autoFocus
+                                />
+
+                                {/* DROPDOWN */}
+                                {showDropdown && suggestions.length > 0 && (
+                                    <div className="absolute top-full left-0 right-0 bg-white border border-gray-100 rounded-xl shadow-2xl mt-2 max-h-60 overflow-y-auto z-[100]">
+                                        {suggestions.map((s) => (
+                                            <div
+                                                key={s.place_id}
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // FIX: Ensure click registers
+                                                    selectCity(s.description);
+                                                }}
+                                                className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 text-sm font-medium text-gray-700 flex gap-2 items-center"
+                                            >
+                                                <span className="opacity-50">📍</span>
+                                                {s.description}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
 
                             <h4 className="font-bold text-sm text-gray-500 uppercase tracking-wider mb-4">I need help with...</h4>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -99,19 +186,42 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
                             <h3 className="text-3xl font-black text-gray-900 mb-2">When are you going?</h3>
                             <p className="text-gray-500 mb-8">Exact timings help us suggest realistic plans.</p>
 
-                            <div className="grid grid-cols-2 gap-8 mb-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                                {/* ARRIVAL */}
                                 <div>
                                     <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Arrival (Start)</label>
                                     <div className="flex gap-2">
-                                        <input type="date" className="w-full p-3 bg-gray-50 rounded-xl font-bold border border-gray-200" value={dates.start} onChange={e => setDates({ ...dates, start: e.target.value })} />
-                                        <input type="time" className="w-24 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200" value={times.arrival} onChange={e => setTimes({ ...times, arrival: e.target.value })} />
+                                        <input
+                                            type="date"
+                                            className="flex-1 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200 min-w-0"
+                                            value={dates.start}
+                                            onChange={e => setDates({ ...dates, start: e.target.value })}
+                                        />
+                                        <input
+                                            type="time"
+                                            className="w-32 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200"
+                                            value={times.arrival}
+                                            onChange={e => setTimes({ ...times, arrival: e.target.value })}
+                                        />
                                     </div>
                                 </div>
+
+                                {/* DEPARTURE */}
                                 <div>
                                     <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Departure (End)</label>
                                     <div className="flex gap-2">
-                                        <input type="date" className="w-full p-3 bg-gray-50 rounded-xl font-bold border border-gray-200" value={dates.end} onChange={e => setDates({ ...dates, end: e.target.value })} />
-                                        <input type="time" className="w-24 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200" value={times.departure} onChange={e => setTimes({ ...times, departure: e.target.value })} />
+                                        <input
+                                            type="date"
+                                            className="flex-1 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200 min-w-0"
+                                            value={dates.end}
+                                            onChange={e => setDates({ ...dates, end: e.target.value })}
+                                        />
+                                        <input
+                                            type="time"
+                                            className="w-32 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200"
+                                            value={times.departure}
+                                            onChange={e => setTimes({ ...times, departure: e.target.value })}
+                                        />
                                     </div>
                                 </div>
                             </div>
