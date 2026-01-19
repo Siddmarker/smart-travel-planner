@@ -8,6 +8,7 @@ import { useLoadScript, GoogleMap, Marker, Polyline, DirectionsRenderer } from '
 import LandingPage from '@/components/LandingPage';
 import Sidebar, { NavView } from '@/components/Sidebar';
 import DiscoveryView from '@/components/DiscoveryView';
+import DashboardView from '@/components/DashboardView'; // <--- NEW IMPORT
 
 const LIBRARIES: ("places")[] = ["places"];
 
@@ -63,100 +64,51 @@ interface PackingItem {
   checked: boolean;
 }
 
-// --- CONSTANTS & CONFIG ---
+// --- CONSTANTS ---
+const DAILY_TEMPLATE = [
+  {
+    id: 'MORNING',
+    label: '🌞 Morning Exploration',
+    types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'off_roading', 'falls', 'view point']
+  },
+  {
+    id: 'LUNCH',
+    label: '🍛 Lunch Break',
+    types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic', 'mess', 'bhavan', 'canteen', 'hotel']
+  },
+  {
+    id: 'AFTERNOON',
+    label: '🎨 Afternoon Vibe',
+    types: ['museum', 'gallery', 'mall', 'shopping', 'zoo', 'aquarium', 'hall', 'monument', 'market', 'amusement_park', 'plantation']
+  },
+  {
+    id: 'EVENING',
+    label: '🌆 Evening Chill',
+    types: ['park', 'sunset', 'lake', 'club', 'pub', 'bar', 'theater', 'cinema', 'beach', 'turf', 'raja seat', 'bridge']
+  },
+  {
+    id: 'DINNER',
+    label: '🍽️ Dinner Feast',
+    types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine', 'late_night', 'dhaba', 'hotel']
+  }
+];
 
 const TRIP_VIBES = [
-  { 
-    id: 'leisure', 
-    label: '🌴 Relaxing', 
-    keywords: ['resort', 'park', 'spa', 'lake'], 
-    img: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=400&q=80' 
-  },
-  { 
-    id: 'foodie', 
-    label: '🍕 Foodie', 
-    keywords: ['restaurant', 'cafe', 'late_night', 'pub', 'bar'], 
-    img: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80' 
-  },
-  { 
-    id: 'heritage', 
-    label: '🏰 Heritage', 
-    keywords: ['temple', 'museum', 'fort', 'iconic', 'landmark'], 
-    img: 'https://images.unsplash.com/photo-1524492412937-b28074a5d7da?auto=format&fit=crop&w=400&q=80' 
-  },
-  { 
-    id: 'adventure', 
-    label: '🏍️ Adventure', 
-    keywords: ['off_roading', 'amusement_park', 'turf', 'trek'], 
-    img: 'https://images.unsplash.com/photo-1533587851505-d119e13fa0d7?auto=format&fit=crop&w=400&q=80' 
-  },
-  { 
-    id: 'shopping', 
-    label: '🛍️ Shopping', 
-    keywords: ['mall', 'market', 'shopping'], 
-    img: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=400&q=80' 
-  }
-];
-
-const POPULAR_DESTINATIONS = [
-  { 
-    name: 'Paris', 
-    img: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=600&q=80' 
-  },
-  { 
-    name: 'Tokyo', 
-    img: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=600&q=80' 
-  },
-  { 
-    name: 'Bali', 
-    img: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?auto=format&fit=crop&w=600&q=80' 
-  },
-  { 
-    name: 'Dubai', 
-    img: 'https://images.unsplash.com/photo-1512453979798-5ea90b791d5e?auto=format&fit=crop&w=600&q=80' 
-  },
-  { 
-    name: 'New York', 
-    img: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&w=600&q=80' 
-  }
-];
-
-const DAILY_TEMPLATE = [
-  { 
-    id: 'MORNING', 
-    label: '🌞 Morning Exploration', 
-    types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'off_roading', 'falls', 'view point'] 
-  },
-  { 
-    id: 'LUNCH', 
-    label: '🍛 Lunch Break', 
-    types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic', 'mess', 'bhavan', 'canteen', 'hotel'] 
-  },
-  { 
-    id: 'AFTERNOON', 
-    label: '🎨 Afternoon Vibe', 
-    types: ['museum', 'gallery', 'mall', 'shopping', 'zoo', 'aquarium', 'hall', 'monument', 'market', 'amusement_park', 'plantation'] 
-  },
-  { 
-    id: 'EVENING', 
-    label: '🌆 Evening Chill', 
-    types: ['park', 'sunset', 'lake', 'club', 'pub', 'bar', 'theater', 'cinema', 'beach', 'turf', 'raja seat', 'bridge'] 
-  },
-  { 
-    id: 'DINNER', 
-    label: '🍽️ Dinner Feast', 
-    types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine', 'late_night', 'dhaba', 'hotel'] 
-  }
+  { id: 'leisure', label: '🌴 Relaxing', keywords: ['resort', 'park', 'spa', 'lake'] },
+  { id: 'foodie', label: '🍕 Foodie', keywords: ['restaurant', 'cafe', 'late_night', 'pub', 'bar'] },
+  { id: 'heritage', label: '🏰 Heritage', keywords: ['temple', 'museum', 'fort', 'iconic', 'landmark'] },
+  { id: 'adventure', label: '🏍️ Adventure', keywords: ['off_roading', 'amusement_park', 'turf', 'trek'] },
+  { id: 'shopping', label: '🛍️ Shopping', keywords: ['mall', 'market', 'shopping'] }
 ];
 
 const MAP_STYLES = { width: '100%', height: '100%' };
 const PATH_OPTIONS = { strokeColor: '#2563EB', strokeOpacity: 0.5, strokeWeight: 4 };
 
 // Keywords for filtering
-const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani']; 
+const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani'];
 const NON_FOOD_KEYWORDS = [
   'resort', 'inn', 'stay', 'cottage', 'residency', 'lodge', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb', 'homestay',
-  'temple', 'shrine', 'worship', 'church', 'mosque', 'fort', 'park', 'garden', 'museum', 'dam', 'falls', 'view point', 
+  'temple', 'shrine', 'worship', 'church', 'mosque', 'fort', 'park', 'garden', 'museum', 'dam', 'falls', 'view point',
   'market', 'stand', 'store', 'shop', 'complex', 'race', 'bridge', 'river', 'lake'
 ];
 const ACCOMMODATION_KEYWORDS = [
@@ -165,7 +117,7 @@ const ACCOMMODATION_KEYWORDS = [
 
 export default function Home() {
   const [session, setSession] = useState<any>(null);
-  
+
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '',
     libraries: LIBRARIES,
@@ -192,18 +144,18 @@ export default function Home() {
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
   const [allCityPlaces, setAllCityPlaces] = useState<Place[]>([]);
   const [dynamicSteps, setDynamicSteps] = useState<any[]>([]);
-  const [startCoords, setStartCoords] = useState<{lat: number, lng: number} | null>(null);
-  
+  const [startCoords, setStartCoords] = useState<{ lat: number, lng: number } | null>(null);
+
   // --- TRIP DATA ---
   const [selectedCity, setSelectedCity] = useState('');
-  const [startLocation, setStartLocation] = useState(''); 
-  const [showStartHelp, setShowStartHelp] = useState(false); 
+  const [startLocation, setStartLocation] = useState('');
+  const [showStartHelp, setShowStartHelp] = useState(false);
   const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [dates, setDates] = useState({ start: '', end: '' });
-  const [budget, setBudget] = useState('MEDIUM'); 
-  const [groupType, setGroupType] = useState('FRIENDS'); 
-  const [diet, setDiet] = useState('ANY'); 
+  const [budget, setBudget] = useState('MEDIUM');
+  const [groupType, setGroupType] = useState('FRIENDS');
+  const [diet, setDiet] = useState('ANY');
   const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
@@ -221,10 +173,10 @@ export default function Home() {
   const [collabTab, setCollabTab] = useState<'MEMBERS' | 'CHAT' | 'SPLIT' | 'PACKING'>('MEMBERS');
   const [tripMembers, setTripMembers] = useState<string[]>(['You']);
   const [inviteLink, setInviteLink] = useState('');
-  
+
   const [messages, setMessages] = useState<ChatMessage[]>([{ id: '1', user: 'System', text: 'Welcome to the Trip Chat!', time: '10:00 AM', isMe: false }]);
   const [newMessage, setNewMessage] = useState('');
-  
+
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [newExpense, setNewExpense] = useState({ what: '', amount: '', who: 'You' });
@@ -251,7 +203,7 @@ export default function Home() {
 
   // Sync Email to Settings
   useEffect(() => {
-    if(session?.user?.email) {
+    if (session?.user?.email) {
       setUserSettings(prev => ({ ...prev, email: session.user.email }));
     }
   }, [session]);
@@ -259,8 +211,8 @@ export default function Home() {
   // Generate Invite Link on Mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-       const mockTripId = Math.random().toString(36).substring(2, 8).toUpperCase();
-       setInviteLink(`${window.location.origin}/join/${mockTripId}`);
+      const mockTripId = Math.random().toString(36).substring(2, 8).toUpperCase();
+      setInviteLink(`${window.location.origin}/join/${mockTripId}`);
     }
   }, []);
 
@@ -272,13 +224,12 @@ export default function Home() {
   const handleViewChange = (view: NavView) => {
     setActiveView(view);
     if (view === 'DASHBOARD') {
-        setIsWizardActive(false);
-        setShowCreateModal(false);
+      setIsWizardActive(false);
+      setShowCreateModal(false);
     }
   };
 
   // --- HANDLERS ---
-
   const openAiAssistant = (place: Place) => {
     setAiActivePlace(place);
     setAiChatHistory([{
@@ -292,7 +243,7 @@ export default function Home() {
   };
 
   const handleAiAsk = (query: string = aiQuery) => {
-    if(!query.trim()) return;
+    if (!query.trim()) return;
     const userMsg: ChatMessage = { id: Date.now().toString(), user: 'You', text: query, time: 'Now', isMe: true };
     setAiChatHistory(prev => [...prev, userMsg]);
     setAiQuery('');
@@ -304,7 +255,7 @@ export default function Home() {
         `It's a fantastic spot for photography, especially during the golden hour!`
       ];
       const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-      setAiChatHistory(prev => [...prev, { id: (Date.now()+1).toString(), user: 'Genius', text: randomResponse, time: 'Now', isMe: false }]);
+      setAiChatHistory(prev => [...prev, { id: (Date.now() + 1).toString(), user: 'Genius', text: randomResponse, time: 'Now', isMe: false }]);
     }, 1500);
   };
 
@@ -340,13 +291,13 @@ export default function Home() {
   };
 
   const handleSendMessage = () => {
-    if(!newMessage.trim()) return;
+    if (!newMessage.trim()) return;
     setMessages(prev => [...prev, { id: Date.now().toString(), user: 'You', text: newMessage, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isMe: true }]);
     setNewMessage('');
   };
 
   const handleAddExpense = () => {
-    if(!newExpense.what || !newExpense.amount) return;
+    if (!newExpense.what || !newExpense.amount) return;
     setExpenses([...expenses, { id: Date.now().toString(), who: newExpense.who, what: newExpense.what, amount: Number(newExpense.amount) }]);
     setShowExpenseForm(false);
     setNewExpense({ what: '', amount: '', who: 'You' });
@@ -361,7 +312,7 @@ export default function Home() {
 
   // PACKING HANDLERS
   const addPackingItem = () => {
-    if(!newPackingItem.trim()) return;
+    if (!newPackingItem.trim()) return;
     setPackingList([...packingList, { id: Date.now().toString(), text: newPackingItem, checked: false }]);
     setNewPackingItem('');
   };
@@ -371,9 +322,9 @@ export default function Home() {
   };
 
   // --- CALCULATIONS ---
-  const totalCost = expenses.reduce((a,b) => a + b.amount, 0);
+  const totalCost = expenses.reduce((a, b) => a + b.amount, 0);
   const costPerPerson = tripMembers.length > 0 ? totalCost / tripMembers.length : 0;
-  const myTotalPaid = expenses.filter(e => e.who === 'You').reduce((a,b) => a + b.amount, 0);
+  const myTotalPaid = expenses.filter(e => e.who === 'You').reduce((a, b) => a + b.amount, 0);
   const myBalance = myTotalPaid - costPerPerson;
 
   // --- HELPERS ---
@@ -432,7 +383,7 @@ export default function Home() {
     else setSelectedVibes([...selectedVibes, vibeId]);
   };
 
-  const getGeocode = (address: string): Promise<{lat: number, lng: number} | null> => {
+  const getGeocode = (address: string): Promise<{ lat: number, lng: number } | null> => {
     return new Promise((resolve) => {
       const geocoder = new google.maps.Geocoder();
       geocoder.geocode({ address }, (results, status) => {
@@ -489,7 +440,7 @@ export default function Home() {
     allPlaces: Place[],
     currentTrip: Place[],
     stepsList = dynamicSteps,
-    initialCoords: {lat: number, lng: number} | null = startCoords
+    initialCoords: { lat: number, lng: number } | null = startCoords
   ) => {
     setIsLoadingOptions(true);
     const stepConfig = stepsList[stepIdx];
@@ -695,47 +646,13 @@ export default function Home() {
           </div>
         </header>
 
-        {/* --- DASHBOARD VIEW --- */}
+        {/* --- DASHBOARD VIEW (NOW USING THE COMPONENT) --- */}
         {activeView === 'DASHBOARD' && !isWizardActive && (
-          <div className="h-full overflow-y-auto pt-32 lg:pt-36">
-            {/* HERO CARD */}
-            <div className="bg-black p-8 lg:p-12 mx-4 lg:mx-6 mb-8 rounded-[2rem] lg:rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col justify-center min-h-[280px] lg:min-h-[320px]">
-              <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-blue-600 to-purple-600 opacity-20 blur-3xl rounded-full transform translate-x-1/2 -translate-y-1/2"></div>
-              <div className="relative z-10 text-white max-w-2xl">
-                <span className="inline-block px-3 py-1 bg-white/10 backdrop-blur rounded-full text-[10px] font-bold tracking-widest uppercase mb-4 text-blue-200 border border-white/5">AI Travel Assistant</span>
-                <h1 className="text-4xl lg:text-5xl font-black mb-4 tracking-tight text-white leading-tight">Good Morning,<br />{userSettings.name || 'Traveler'}.</h1>
-                <p className="text-gray-300 max-w-md mb-8 text-sm leading-relaxed">Where does your next adventure take you? Let's plan something extraordinary today.</p>
-                <button onClick={() => setShowCreateModal(true)} className="bg-white text-black px-6 lg:px-8 py-3 lg:py-4 rounded-2xl font-bold text-xs lg:text-sm hover:scale-105 transition-transform inline-flex items-center gap-2 shadow-xl shadow-white/5"><span>✨</span> Plan a New Trip</button>
-              </div>
-            </div>
-
-            {/* BROWSE BY VIBE */}
-            <div className="px-4 lg:px-6 mb-10">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 px-1">Browse by Vibe</h3>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 lg:gap-4">
-                {TRIP_VIBES.map((v) => (
-                  <div key={v.id} className="relative h-20 lg:h-24 rounded-2xl overflow-hidden cursor-pointer group shadow-sm hover:shadow-md transition-all">
-                    <img src={v.img} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-90 group-hover:opacity-100" />
-                    <div className="absolute inset-0 bg-black/30 group-hover:bg-black/20 transition-colors"></div>
-                    <span className="absolute bottom-3 left-3 text-white font-bold text-xs">{v.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* POPULAR DESTINATIONS */}
-            <div className="px-4 lg:px-6 pb-20">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 px-1">Popular Destinations 🔥</h3>
-              <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-                {POPULAR_DESTINATIONS.map((city, i) => (
-                  <div key={i} className="min-w-[200px] lg:min-w-[220px] h-36 lg:h-40 bg-gray-100 rounded-2xl overflow-hidden relative cursor-pointer group shadow-sm hover:shadow-xl transition-all">
-                    <img src={city.img} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80"></div>
-                    <div className="absolute bottom-4 left-4 z-10 text-white"><span className="text-[10px] font-bold uppercase tracking-wider opacity-90 mb-1 block">Explore</span><h4 className="font-black text-lg lg:text-xl leading-none">{city.name}</h4></div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          <div className="h-full w-full pt-20 lg:pt-24">
+            <DashboardView
+              onPlanTrip={() => setShowCreateModal(true)}
+              onDiscovery={() => setActiveView('DISCOVERY' as any)}
+            />
           </div>
         )}
 
@@ -1081,6 +998,7 @@ export default function Home() {
           </div>
         )}
 
+        {/* --- DISCOVERY VIEW (Now properly routed) --- */}
         {activeView === 'DISCOVERY' && <DiscoveryView onAddToTrip={() => { }} onBack={() => setActiveView('PLAN')} initialCity={selectedCity} />}
 
         {/* --- GLOBAL HELP WIDGET --- */}
