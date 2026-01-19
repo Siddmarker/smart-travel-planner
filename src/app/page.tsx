@@ -319,6 +319,7 @@ export default function Home() {
     if (btn) btn.innerText = "⏳ Generating PDF...";
 
     try {
+      // FIX: Added 'as any' to fix build error with 'scale'
       const canvas = await html2canvas(element, { scale: 2 } as any);
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -657,6 +658,7 @@ export default function Home() {
           </div>
         )}
 
+        {/* HELP BUTTON */}
         <div className="fixed bottom-6 right-6 z-50">
           <button onClick={() => setShowHelpModal(!showHelpModal)} className="w-12 h-12 bg-black text-white rounded-full shadow-2xl flex items-center justify-center font-bold">?</button>
         </div>
