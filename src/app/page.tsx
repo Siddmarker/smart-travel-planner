@@ -184,30 +184,34 @@ export default function Home() {
   // --- PERSISTENCE (AUTO-SAVE) ---
   // Load data from LocalStorage on startup
   useEffect(() => {
-    const savedData = localStorage.getItem('2wards_trip_data');
-    if (savedData) {
-      try {
-        const parsed = JSON.parse(savedData);
-        if (parsed.expenses) setExpenses(parsed.expenses);
-        if (parsed.packingList) setPackingList(parsed.packingList);
-        if (parsed.messages) setMessages(parsed.messages);
-        if (parsed.members) setTripMembers(parsed.members);
-        if (parsed.userSettings) setUserSettings(parsed.userSettings);
-      } catch (e) {
-        console.error("Failed to load saved trip data", e);
+    if (typeof window !== 'undefined') {
+      const savedData = localStorage.getItem('2wards_trip_data');
+      if (savedData) {
+        try {
+          const parsed = JSON.parse(savedData);
+          if (parsed.expenses) setExpenses(parsed.expenses);
+          if (parsed.packingList) setPackingList(parsed.packingList);
+          if (parsed.messages) setMessages(parsed.messages);
+          if (parsed.members) setTripMembers(parsed.members);
+          if (parsed.userSettings) setUserSettings(parsed.userSettings);
+        } catch (e) {
+          console.error("Failed to load saved trip data", e);
+        }
       }
     }
   }, []);
 
   // Save data to LocalStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('2wards_trip_data', JSON.stringify({
-      expenses,
-      packingList,
-      messages,
-      members: tripMembers,
-      userSettings
-    }));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('2wards_trip_data', JSON.stringify({
+        expenses,
+        packingList,
+        messages,
+        members: tripMembers,
+        userSettings
+      }));
+    }
   }, [expenses, packingList, messages, tripMembers, userSettings]);
 
   // Sync Email to Settings
@@ -256,13 +260,21 @@ export default function Home() {
       totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
     }
 
-    // 2. Fetch Candidates
+    // 2. Fetch Candidates (Robust Search)
     const destinations = data.destinations || [];
-    if (destinations.length === 0 && data.destination) destinations.push(data.destination);
+    // Fallback: If user used old single input or typed without tagging, the new Wizard sends it in 'destinations' array.
+    if (destinations.length === 0 && data.destination) {
+      destinations.push(data.destination);
+    }
 
-    const searchString = destinations
-      .map((d: string) => `city.ilike.%${d.trim()}%`)
-      .join(',');
+    // FIX: Generate a search that looks in BOTH 'city' and 'zone_id' for matches
+    const searchConditions = destinations.flatMap((d: string) => [
+      `city.ilike.%${d.trim()}%`,
+      `zone_id.ilike.%${d.trim()}%`
+    ]);
+    const searchString = searchConditions.join(',');
+
+    console.log("Searching Supabase with:", searchString); // Debug log
 
     const { data: allPlaces, error } = await supabase
       .from('places')
@@ -272,7 +284,8 @@ export default function Home() {
     if (error) console.error("Supabase Error:", error);
 
     if (!allPlaces || allPlaces.length === 0) {
-      alert(`No places found. Loading sample data.`);
+      alert(`No places found for ${destinations.join(', ')}. Loading sample data.`);
+      // Sample data logic could go here
       return;
     }
 
