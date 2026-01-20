@@ -338,13 +338,45 @@ export default function Home() {
     }
   };
 
+  // --- UPDATED FEEDBACK HANDLER (DATABASE WRITE) ---
+  const submitFeedback = async () => {
+    if (!feedbackText.trim()) return;
+
+    console.log("Submitting feedback...", {
+      message: feedbackText,
+      user_email: session?.user?.email || 'anonymous'
+    });
+
+    // 1. Send to Supabase
+    // Make sure your Supabase table columns are named 'message' and 'user_email'
+    const { data, error } = await supabase
+      .from('feedback')
+      .insert([
+        {
+          message: feedbackText,
+          user_email: session?.user?.email || 'anonymous'
+        }
+      ])
+      .select();
+
+    if (error) {
+      console.error('Feedback Error Details:', error);
+      alert(`Error saving feedback: ${error.message}`);
+    } else {
+      console.log("Feedback saved:", data);
+      alert("Thanks! We have received your feedback. 📨");
+      setFeedbackText('');
+      setShowHelpModal(false);
+    }
+  };
+
   // --- STANDARD HANDLERS ---
   const handleCopyLink = () => { navigator.clipboard.writeText(inviteLink); alert("Invite link copied!"); };
   const handleSendMessage = () => { if (!newMessage.trim()) return; setMessages(prev => [...prev, { id: Date.now().toString(), user: 'You', text: newMessage, time: 'Now', isMe: true }]); setNewMessage(''); };
   const handleAddExpense = () => { if (!newExpense.what) return; setExpenses([...expenses, { id: Date.now().toString(), ...newExpense, amount: Number(newExpense.amount) }]); setShowExpenseForm(false); setNewExpense({ what: '', amount: '', who: 'You' }); };
   const addPackingItem = () => { if (!newPackingItem) return; setPackingList([...packingList, { id: Date.now().toString(), text: newPackingItem, checked: false }]); setNewPackingItem(''); };
   const togglePackingItem = (id: string) => { setPackingList(packingList.map(i => i.id === id ? { ...i, checked: !i.checked } : i)); };
-  const submitFeedback = () => { alert("Thanks!"); setShowHelpModal(false); };
+
   const handleLogout = async () => { await supabase.auth.signOut(); window.location.reload(); };
   const removeFromTrip = (id: string) => setTripPlan(tripPlan.filter(p => p.id !== id));
 
@@ -626,7 +658,20 @@ export default function Home() {
 
         {/* --- MODALS --- */}
         {showWizard && <CreateTripWizard onClose={() => setShowWizard(false)} onComplete={handleWizardComplete} />}
-        {showHelpModal && <div className="fixed bottom-20 right-6 bg-white p-4 rounded-xl shadow-xl">Help Modal Placeholder</div>}
+
+        {showHelpModal && (
+          <div className="fixed bottom-20 right-6 z-50 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-fade-in-up origin-bottom-right">
+            <div className="bg-black p-4 flex justify-between items-center text-white"><h3 className="font-bold text-sm">Help & Support</h3><button onClick={() => setShowHelpModal(false)} className="text-gray-400 hover:text-white">✕</button></div>
+            <div className="flex border-b border-gray-100"><button onClick={() => setHelpTab('GUIDE')} className={`flex-1 py-3 text-xs font-bold ${helpTab === 'GUIDE' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Quick Guide</button><button onClick={() => setHelpTab('FEEDBACK')} className={`flex-1 py-3 text-xs font-bold ${helpTab === 'FEEDBACK' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Report / Idea</button></div>
+            <div className="p-4 h-64 overflow-y-auto bg-gray-50">
+              {helpTab === 'GUIDE' ? (
+                <div className="space-y-4">{[{ icon: '🔎', title: 'Start a Trip', desc: 'Click "Plan New Trip" on the dashboard. Enter your city and preferences.' }, { icon: '🗺️', title: 'Customize', desc: 'Select places day-by-day. Use the "Start Location" to optimize the route.' }, { icon: '🤝', title: 'Invite Friends', desc: 'Once planned, go to the "Collab" tab to invite friends and split costs.' }, { icon: '📍', title: 'Discover', desc: 'Use the "Discover" tab to find hidden gems near you anytime.' }].map((item, i) => (<div key={i} className="flex gap-3"><div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm text-sm border border-gray-100">{item.icon}</div><div><h4 className="font-bold text-xs text-gray-900">{item.title}</h4><p className="text-[10px] text-gray-500 leading-tight">{item.desc}</p></div></div>))}</div>
+              ) : (
+                <div className="flex flex-col h-full"><textarea className="flex-1 p-3 rounded-xl border border-gray-200 text-xs font-medium resize-none focus:outline-none focus:border-blue-500 mb-3" placeholder="Found a bug? Have an idea? Tell us..." value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} /><button onClick={submitFeedback} className="w-full bg-black text-white py-2 rounded-lg font-bold text-xs">Submit Feedback</button></div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* GENIUS AI MODAL */}
         {aiModalOpen && aiActivePlace && (
@@ -658,7 +703,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* HELP BUTTON */}
         <div className="fixed bottom-6 right-6 z-50">
           <button onClick={() => setShowHelpModal(!showHelpModal)} className="w-12 h-12 bg-black text-white rounded-full shadow-2xl flex items-center justify-center font-bold">?</button>
         </div>
