@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { useLoadScript, GoogleMap, Marker, Polyline, DirectionsRenderer } from '@react-google-maps/api';
+import { useLoadScript, GoogleMap, Marker, Polyline, DirectionsRenderer, InfoWindow } from '@react-google-maps/api';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -81,6 +81,13 @@ interface Place {
   time?: string;
 }
 
+// NEW INTERFACE FOR SELECTION QUEUE
+interface SelectionStep {
+  day: number;
+  slotLabel: string;
+  candidates: Place[];
+}
+
 interface ChatMessage {
   id: string;
   user: string;
@@ -131,6 +138,11 @@ export default function Home() {
   // --- TRIP DATA ---
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
+  // --- SELECTION MODE STATE ---
+  const [selectionQueue, setSelectionQueue] = useState<SelectionStep[]>([]);
+  const [currentSelectionIdx, setCurrentSelectionIdx] = useState(0);
+  const [isSelecting, setIsSelecting] = useState(false);
+
   // --- SETTINGS STATE ---
   const [userSettings, setUserSettings] = useState({
     name: 'Traveler',
@@ -169,9 +181,38 @@ export default function Home() {
   const [helpTab, setHelpTab] = useState<'GUIDE' | 'FEEDBACK'>('GUIDE');
   const [feedbackText, setFeedbackText] = useState('');
 
+  // --- PERSISTENCE (AUTO-SAVE) ---
+  // Load data from LocalStorage on startup
+  useEffect(() => {
+    const savedData = localStorage.getItem('2wards_trip_data');
+    if (savedData) {
+      try {
+        const parsed = JSON.parse(savedData);
+        if (parsed.expenses) setExpenses(parsed.expenses);
+        if (parsed.packingList) setPackingList(parsed.packingList);
+        if (parsed.messages) setMessages(parsed.messages);
+        if (parsed.members) setTripMembers(parsed.members);
+        if (parsed.userSettings) setUserSettings(parsed.userSettings);
+      } catch (e) {
+        console.error("Failed to load saved trip data", e);
+      }
+    }
+  }, []);
+
+  // Save data to LocalStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('2wards_trip_data', JSON.stringify({
+      expenses,
+      packingList,
+      messages,
+      members: tripMembers,
+      userSettings
+    }));
+  }, [expenses, packingList, messages, tripMembers, userSettings]);
+
   // Sync Email to Settings
   useEffect(() => {
-    if (session?.user?.email) {
+    if (session?.user?.email && !userSettings.email) {
       setUserSettings(prev => ({ ...prev, email: session.user.email }));
     }
   }, [session]);
@@ -185,24 +226,27 @@ export default function Home() {
   }, []);
 
   const mapCenter = useMemo(() => {
+    if (isSelecting && selectionQueue[currentSelectionIdx]?.candidates.length > 0) {
+      return { lat: selectionQueue[currentSelectionIdx].candidates[0].lat, lng: selectionQueue[currentSelectionIdx].candidates[0].lng };
+    }
     if (tripPlan.length > 0) return { lat: tripPlan[0].lat, lng: tripPlan[0].lng };
     return { lat: 12.9716, lng: 77.5946 };
-  }, [tripPlan]);
+  }, [tripPlan, isSelecting, selectionQueue, currentSelectionIdx]);
 
   const handleViewChange = (view: NavView) => {
     setActiveView(view);
     if (view === 'DASHBOARD') {
       setIsWizardActive(false);
       setShowWizard(false);
+      setIsSelecting(false);
     }
   };
 
-  // --- WIZARD COMPLETION HANDLER (WITH AI ENGINE) ---
+  // --- WIZARD COMPLETION & AI ENGINE ---
   const handleWizardComplete = async (data: any) => {
-    console.log("Wizard Completed:", data);
+    console.log("Wizard Data:", data);
     setTripMeta(data);
     setShowWizard(false);
-    setActiveView('PLAN');
 
     // 1. Calculate Duration
     let totalDays = 1;
@@ -212,77 +256,95 @@ export default function Home() {
       totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
     }
 
-    // 2. Fetch Candidates (Get ALL places in city to filter from)
-    const { data: allPlaces } = await supabase
+    // 2. Fetch Candidates
+    const destinations = data.destinations || [];
+    if (destinations.length === 0 && data.destination) destinations.push(data.destination);
+
+    const searchString = destinations
+      .map((d: string) => `city.ilike.%${d.trim()}%`)
+      .join(',');
+
+    const { data: allPlaces, error } = await supabase
       .from('places')
       .select('*')
-      .or(`city.ilike.%${data.destination}%,zone_id.ilike.%${data.destination}%`);
+      .or(searchString);
+
+    if (error) console.error("Supabase Error:", error);
 
     if (!allPlaces || allPlaces.length === 0) {
-      // FALLBACK if no data found
-      alert("No places found for this city. Loading sample data for demo.");
-      setTripPlan([
-        { id: '1', name: 'Sample Park', type: 'Park', description: 'Beautiful green space.', lat: 12.97, lng: 77.59, rating: 4.5, time: 'Morning Exploration' },
-        { id: '2', name: 'City Cafe', type: 'Cafe', description: 'Great coffee spot.', lat: 12.98, lng: 77.60, rating: 4.2, time: 'Lunch Break' },
-        { id: '3', name: 'Grand Mall', type: 'Shopping', description: 'Luxury shopping.', lat: 12.99, lng: 77.61, rating: 4.0, time: 'Afternoon Vibe' }
-      ]);
+      alert(`No places found. Loading sample data.`);
       return;
     }
 
-    // 3. THE GENERATION ENGINE LOOP
-    let generatedPlan: Place[] = [];
-    let usedPlaceIds = new Set<string>();
+    // 3. THE AI ENGINE LOOP
+    let newSelectionQueue: SelectionStep[] = [];
+    let suggestedPlaceIds = new Set<string>();
 
     for (let day = 1; day <= totalDays; day++) {
-
-      // Loop through Morning, Lunch, Afternoon...
       DAILY_TEMPLATE.forEach((slot) => {
 
-        // A. Filter by Slot Type (e.g., Is it a Park? A Restaurant?)
         let candidates = allPlaces.filter(p => {
-          if (usedPlaceIds.has(p.id)) return false; // Don't repeat places
+          if (suggestedPlaceIds.has(p.id)) return false;
           const typeStr = (p.type + " " + p.description).toLowerCase();
           return slot.types.some(t => typeStr.includes(t));
         });
 
-        // B. Filter by Diet (If Meal Slot)
         if (slot.id === 'LUNCH' || slot.id === 'DINNER') {
-          candidates = candidates.filter(p => !NON_FOOD_KEYWORDS.some(k => p.type.toLowerCase().includes(k))); // Remove Hotels/Parks
+          candidates = candidates.filter(p => !NON_FOOD_KEYWORDS.some(k => p.type.toLowerCase().includes(k)));
         } else {
-          // Remove Restaurants from Activity slots
           candidates = candidates.filter(p => !ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k)));
         }
 
-        // C. Score Candidates (Based on Vibe & Group)
         let scoredCandidates = candidates.map(p => {
-          let score = 50; // Base score
+          let score = 50;
           const text = (p.name + " " + p.description + " " + p.type).toLowerCase();
-
           TRIP_VIBES.forEach(v => {
             if (text.includes(v.id)) score += 20;
           });
-
           if (data.groupType === 'FAMILY' && (p.safety_score || 0) > 4) score += 15;
           if (data.groupType === 'FRIENDS' && (p.trend_score || 0) > 4) score += 15;
           if (data.groupType === 'COUPLE' && text.includes('romantic')) score += 20;
-
           return { place: p, score };
         });
 
-        // D. Pick the Winner
         scoredCandidates.sort((a, b) => b.score - a.score);
 
         if (scoredCandidates.length > 0) {
-          const winner = scoredCandidates[0].place;
-          usedPlaceIds.add(winner.id);
-          // Attach the "Time Slot" label to the place object for the UI to display
-          generatedPlan.push({ ...winner, time: slot.label });
+          const top4 = scoredCandidates.slice(0, 4).map(c => c.place);
+          top4.forEach(p => suggestedPlaceIds.add(p.id));
+          newSelectionQueue.push({
+            day,
+            slotLabel: slot.label,
+            candidates: top4
+          });
         }
       });
     }
 
-    // 4. Update State
-    setTripPlan(generatedPlan);
+    if (newSelectionQueue.length === 0) {
+      alert("Could not generate a plan with these filters. Try fewer constraints.");
+      return;
+    }
+
+    setSelectionQueue(newSelectionQueue);
+    setCurrentSelectionIdx(0);
+    setTripPlan([]);
+    setIsSelecting(true);
+    setActiveView('PLAN');
+  };
+
+  // --- HANDLE USER SELECTION ---
+  const handleSelectPlace = (place: Place) => {
+    const currentStep = selectionQueue[currentSelectionIdx];
+    const placeWithTime = { ...place, time: `Day ${currentStep.day} - ${currentStep.slotLabel}` };
+    setTripPlan(prev => [...prev, placeWithTime]);
+
+    if (currentSelectionIdx < selectionQueue.length - 1) {
+      setCurrentSelectionIdx(prev => prev + 1);
+    } else {
+      setIsSelecting(false);
+      alert("Itinerary Complete! 🎉");
+    }
   };
 
   const calculateRoute = async () => {
@@ -319,7 +381,6 @@ export default function Home() {
     if (btn) btn.innerText = "⏳ Generating PDF...";
 
     try {
-      // FIX: Added 'as any' to fix build error with 'scale'
       const canvas = await html2canvas(element, { scale: 2 } as any);
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -338,32 +399,21 @@ export default function Home() {
     }
   };
 
-  // --- UPDATED FEEDBACK HANDLER (DATABASE WRITE) ---
+  // --- FEEDBACK HANDLER ---
   const submitFeedback = async () => {
     if (!feedbackText.trim()) return;
 
-    console.log("Submitting feedback...", {
-      message: feedbackText,
-      user_email: session?.user?.email || 'anonymous'
-    });
+    console.log("Submitting feedback...", { message: feedbackText, user_email: session?.user?.email || 'anonymous' });
 
-    // 1. Send to Supabase
-    // Make sure your Supabase table columns are named 'message' and 'user_email'
     const { data, error } = await supabase
       .from('feedback')
-      .insert([
-        {
-          message: feedbackText,
-          user_email: session?.user?.email || 'anonymous'
-        }
-      ])
+      .insert([{ message: feedbackText, user_email: session?.user?.email || 'anonymous' }])
       .select();
 
     if (error) {
       console.error('Feedback Error Details:', error);
       alert(`Error saving feedback: ${error.message}`);
     } else {
-      console.log("Feedback saved:", data);
       alert("Thanks! We have received your feedback. 📨");
       setFeedbackText('');
       setShowHelpModal(false);
@@ -380,7 +430,6 @@ export default function Home() {
   const handleLogout = async () => { await supabase.auth.signOut(); window.location.reload(); };
   const removeFromTrip = (id: string) => setTripPlan(tripPlan.filter(p => p.id !== id));
 
-  // Dynamic Days based on Wizard Data
   const calculateDays = () => {
     if (!tripMeta?.dates?.start || !tripMeta?.dates?.end) return 1;
     return Math.max(1, Math.ceil((new Date(tripMeta.dates.end).getTime() - new Date(tripMeta.dates.start).getTime()) / (1000 * 3600 * 24)) + 1);
@@ -391,32 +440,19 @@ export default function Home() {
   const myTotalPaid = expenses.filter(e => e.who === 'You').reduce((a, b) => a + b.amount, 0);
   const myBalance = myTotalPaid - costPerPerson;
 
-  // --- OPEN AI ASSISTANT ---
   const openAiAssistant = (place: Place) => {
     setAiActivePlace(place);
-    setAiChatHistory([{
-      id: 'system',
-      user: 'Genius',
-      text: `Hello! I'm your expert guide for ${place.name}. Ask me about tickets, dress code, or best times to visit!`,
-      time: 'Now',
-      isMe: false
-    }]);
+    setAiChatHistory([{ id: 'system', user: 'Genius', text: `Hello! I'm your expert guide for ${place.name}. Ask me about tickets, dress code, or best times to visit!`, time: 'Now', isMe: false }]);
     setAiModalOpen(true);
   };
 
-  // --- HANDLE AI ASK ---
   const handleAiAsk = (query: string = aiQuery) => {
     if (!query.trim()) return;
     const userMsg: ChatMessage = { id: Date.now().toString(), user: 'You', text: query, time: 'Now', isMe: true };
     setAiChatHistory(prev => [...prev, userMsg]);
     setAiQuery('');
     setTimeout(() => {
-      const responses = [
-        `Great question about ${aiActivePlace?.name}! The best time to visit is usually early morning to avoid crowds.`,
-        `Wear comfortable shoes! ${aiActivePlace?.name} involves a bit of walking.`,
-        `Entry is typically free, but special exhibits might cost around ₹50-100.`,
-        `It's a fantastic spot for photography, especially during the golden hour!`
-      ];
+      const responses = [`Great question about ${aiActivePlace?.name}! The best time to visit is usually early morning to avoid crowds.`, `Wear comfortable shoes! ${aiActivePlace?.name} involves a bit of walking.`, `Entry is typically free, but special exhibits might cost around ₹50-100.`, `It's a fantastic spot for photography, especially during the golden hour!`];
       const randomResponse = responses[Math.floor(Math.random() * responses.length)];
       setAiChatHistory(prev => [...prev, { id: (Date.now() + 1).toString(), user: 'Genius', text: randomResponse, time: 'Now', isMe: false }]);
     }, 1500);
@@ -431,9 +467,9 @@ export default function Home() {
       <Sidebar
         currentView={activeView}
         onChangeView={handleViewChange}
-        selectedCity={tripMeta.destination || ''}
+        selectedCity={tripMeta.destinations?.[0] || 'Trip'}
         tripPlan={tripPlan}
-        isTripActive={!!tripMeta.destination}
+        isTripActive={!!tripMeta.destinations}
         totalDays={calculateDays()}
         budget={'MEDIUM'}
         travelers={tripMembers.length}
@@ -477,7 +513,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- SETTINGS VIEW (RESTORED) --- */}
+        {/* --- SETTINGS VIEW --- */}
         {activeView === 'SETTINGS' && (
           <div className="h-full bg-gray-50 p-4 lg:p-8 overflow-y-auto pt-24">
             <div className="max-w-2xl mx-auto space-y-6">
@@ -489,18 +525,46 @@ export default function Home() {
                   <button className="text-blue-600 text-xs font-bold hover:underline">Change Avatar</button>
                 </div>
                 <div className="grid gap-4">
-                  <div><label className="block text-xs font-bold text-gray-500 uppercase mb-2">Display Name</label><input className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold" value={userSettings.name} onChange={(e) => setUserSettings({ ...userSettings, name: e.target.value })} /></div>
-                  <div><label className="block text-xs font-bold text-gray-500 uppercase mb-2">Email Address</label><input className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-400 cursor-not-allowed" value={userSettings.email} disabled /></div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Display Name</label>
+                    <input
+                      className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold"
+                      value={userSettings.name}
+                      onChange={(e) => setUserSettings({ ...userSettings, name: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Email Address</label>
+                    <input
+                      className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-400 cursor-not-allowed"
+                      value={userSettings.email}
+                      disabled
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Currency</label>
+                    <select
+                      className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold"
+                      value={userSettings.currency}
+                      onChange={(e) => setUserSettings({ ...userSettings, currency: e.target.value })}
+                    >
+                      <option value="INR">INR (₹)</option>
+                      <option value="USD">USD ($)</option>
+                      <option value="EUR">EUR (€)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* --- COLLAB VIEW (RESTORED) --- */}
+        {/* --- COLLAB VIEW --- */}
         {activeView === 'COLLAB' && (
           <div className="h-full bg-gray-50 p-4 lg:p-8 flex flex-col items-center pt-24">
             <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col h-[80vh]">
+
+              {/* COLLAB HEADER */}
               <div className="bg-white border-b border-gray-100 p-4 lg:p-6 flex flex-col lg:flex-row justify-between items-center gap-4">
                 <div>
                   <h2 className="text-xl lg:text-2xl font-black text-gray-900">Trip Hub</h2>
@@ -522,6 +586,7 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* COLLAB CONTENT */}
               <div className="flex-1 overflow-y-auto p-4 lg:p-6 bg-gray-50">
                 {collabTab === 'MEMBERS' && (
                   <div className="space-y-6">
@@ -582,11 +647,11 @@ export default function Home() {
                   <div className="h-full flex flex-col">
                     <div className="bg-green-50 border border-green-100 p-6 rounded-2xl mb-6 text-center shadow-sm">
                       <p className="text-[10px] font-bold text-green-600 uppercase tracking-widest mb-1">Total Trip Cost</p>
-                      <h3 className="text-4xl font-black text-gray-900">₹{totalCost.toLocaleString()}</h3>
-                      <p className="text-xs text-green-800 mt-1 font-bold">₹{costPerPerson.toFixed(0)} / person</p>
+                      <h3 className="text-4xl font-black text-gray-900">{userSettings.currency === 'INR' ? '₹' : '$'}{totalCost.toLocaleString()}</h3>
+                      <p className="text-xs text-green-800 mt-1 font-bold">{userSettings.currency === 'INR' ? '₹' : '$'}{costPerPerson.toFixed(0)} / person</p>
                       <div className="flex justify-center gap-4 mt-4">
-                        <div className="bg-white px-3 py-1 rounded-lg border border-green-100 text-xs font-bold text-green-700">You Paid: ₹{myTotalPaid}</div>
-                        <div className={`bg-white px-3 py-1 rounded-lg border text-xs font-bold ${myBalance >= 0 ? 'border-green-100 text-green-700' : 'border-red-100 text-red-700'}`}>{myBalance >= 0 ? `Get Back: ₹${myBalance.toFixed(0)}` : `You Owe: ₹${Math.abs(myBalance).toFixed(0)}`}</div>
+                        <div className="bg-white px-3 py-1 rounded-lg border border-green-100 text-xs font-bold text-green-700">You Paid: {userSettings.currency === 'INR' ? '₹' : '$'}{myTotalPaid}</div>
+                        <div className={`bg-white px-3 py-1 rounded-lg border text-xs font-bold ${myBalance >= 0 ? 'border-green-100 text-green-700' : 'border-red-100 text-red-700'}`}>{myBalance >= 0 ? `Get Back: ${userSettings.currency === 'INR' ? '₹' : '$'}${myBalance.toFixed(0)}` : `You Owe: ${userSettings.currency === 'INR' ? '₹' : '$'}${Math.abs(myBalance).toFixed(0)}`}</div>
                       </div>
                     </div>
                     <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-2">
@@ -596,7 +661,7 @@ export default function Home() {
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${e.who === 'You' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>{e.who[0]}</div>
                             <div><p className="font-bold text-xs text-gray-900">{e.what}</p><p className="text-[9px] text-gray-400">Paid by {e.who}</p></div>
                           </div>
-                          <span className="font-mono font-bold text-xs text-gray-900">₹{e.amount}</span>
+                          <span className="font-mono font-bold text-xs text-gray-900">{userSettings.currency === 'INR' ? '₹' : '$'}{e.amount}</span>
                         </div>
                       ))}
                     </div>
@@ -622,52 +687,123 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- PLAN VIEW (TIMELINE + MAP) --- */}
+        {/* --- PLAN VIEW (TIMELINE OR SELECTION) --- */}
         {activeView === 'PLAN' && isLoaded && (
           <div className="h-full w-full relative flex">
 
-            {/* LEFT: VERTICAL ITINERARY TIMELINE (Wrapped for PDF) */}
-            {tripPlan.length > 0 && (
-              <div id="itinerary-container" className="h-full relative z-20">
-                <ItineraryDisplay
-                  tripMeta={tripMeta}
-                  places={tripPlan}
-                />
+            {/* MODE 1: SELECTION MODE (Choosing 4 Options) */}
+            {isSelecting ? (
+              <div className="h-full flex flex-col bg-gray-50 border-r border-gray-200 w-full md:w-[480px] shadow-2xl z-20 overflow-hidden absolute left-0 top-0 pt-20">
+                <div className="bg-white px-6 py-6 border-b border-gray-200">
+                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Day {selectionQueue[currentSelectionIdx]?.day}</span>
+                  <h2 className="text-2xl font-black text-gray-900 mt-1">{selectionQueue[currentSelectionIdx]?.slotLabel}</h2>
+                  <p className="text-xs text-gray-500 mt-2">Choose the best option for this slot.</p>
+                  <div className="w-full bg-gray-200 h-1.5 rounded-full mt-4 overflow-hidden">
+                    <div
+                      className="bg-blue-600 h-full transition-all duration-300"
+                      style={{ width: `${((currentSelectionIdx + 1) / selectionQueue.length) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {selectionQueue[currentSelectionIdx]?.candidates.map((place) => (
+                    <button
+                      key={place.id}
+                      onClick={() => handleSelectPlace(place)}
+                      className="w-full bg-white border border-gray-200 rounded-2xl p-4 text-left hover:border-blue-500 hover:ring-2 hover:ring-blue-100 transition-all group"
+                    >
+                      <div className="h-32 bg-gray-100 rounded-xl mb-3 overflow-hidden relative">
+                        <img src={place.image || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={place.name} />
+                        <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded text-xs font-bold">★ {place.rating || 4.5}</div>
+                      </div>
+                      <h3 className="font-bold text-lg text-gray-900">{place.name}</h3>
+                      <p className="text-xs text-gray-500 line-clamp-2 mt-1">{place.description}</p>
+                      <div className="mt-3 flex gap-2">
+                        <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-[10px] font-bold uppercase">{place.type}</span>
+                        {place.price_tier && <span className="bg-green-50 text-green-700 px-2 py-1 rounded text-[10px] font-bold">{place.price_tier}</span>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
+            ) : (
+              // MODE 2: FINAL ITINERARY VIEW (Wrapped for PDF)
+              tripPlan.length > 0 && (
+                <div id="itinerary-container" className="h-full relative z-20">
+                  <ItineraryDisplay
+                    tripMeta={tripMeta}
+                    places={tripPlan}
+                  />
+                </div>
+              )
             )}
 
             {/* RIGHT: MAP (Background) */}
             <div className="flex-1 h-full relative ml-0 md:ml-[480px] transition-all duration-300">
               <GoogleMap mapContainerStyle={MAP_STYLES} center={mapCenter} zoom={12} options={{ disableDefaultUI: false, zoomControl: true }}>
                 {directionsResponse && <DirectionsRenderer directions={directionsResponse} />}
-                {tripPlan.map((place, index) => (
-                  <Marker key={place.id} position={{ lat: place.lat, lng: place.lng }} label={{ text: `${index + 1}`, color: "white", fontWeight: "bold" }} title={place.name} />
-                ))}
+
+                {/* SHOW CANDIDATES IF SELECTING */}
+                {isSelecting ? (
+                  selectionQueue[currentSelectionIdx]?.candidates.map((place, i) => (
+                    <Marker key={place.id} position={{ lat: place.lat, lng: place.lng }} label={{ text: `${i + 1}`, color: "white", fontWeight: "bold" }} title={place.name} />
+                  ))
+                ) : (
+                  // SHOW FINAL PLAN
+                  tripPlan.map((place, index) => (
+                    <Marker key={place.id} position={{ lat: place.lat, lng: place.lng }} label={{ text: `${index + 1}`, color: "white", fontWeight: "bold" }} title={place.name} />
+                  ))
+                )}
               </GoogleMap>
-              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-2xl p-2 flex gap-2">
-                <button onClick={calculateRoute} className="bg-black text-white px-6 py-3 rounded-full font-bold text-xs hover:scale-105 transition-transform">{isRouting ? '...' : '🛣️ Show Route'}</button>
-                <button id="download-btn" onClick={handleDownloadOffline} className="bg-gray-100 text-gray-700 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-200 transition-colors">⬇️ Download Offline</button>
-                <button onClick={() => setDirectionsResponse(null)} className="bg-white text-gray-500 border border-gray-200 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-50">Reset</button>
-              </div>
+
+              {/* BOTTOM CONTROLS (Only visible if NOT selecting) */}
+              {!isSelecting && (
+                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-2xl p-2 flex gap-2">
+                  <button onClick={calculateRoute} className="bg-black text-white px-6 py-3 rounded-full font-bold text-xs hover:scale-105 transition-transform">{isRouting ? '...' : '🛣️ Show Route'}</button>
+                  <button id="download-btn" onClick={handleDownloadOffline} className="bg-gray-100 text-gray-700 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-200 transition-colors">⬇️ Download Offline</button>
+                  <button onClick={() => setDirectionsResponse(null)} className="bg-white text-gray-500 border border-gray-200 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-50">Reset</button>
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {/* --- OTHER VIEWS --- */}
-        {activeView === 'DISCOVERY' && <DiscoveryView onAddToTrip={() => { }} onBack={() => setActiveView('PLAN')} initialCity={tripMeta.destination || 'Bangalore'} />}
+        {activeView === 'DISCOVERY' && <DiscoveryView onAddToTrip={() => { }} onBack={() => setActiveView('PLAN')} initialCity={tripMeta.destinations?.[0] || 'Bangalore'} />}
 
         {/* --- MODALS --- */}
         {showWizard && <CreateTripWizard onClose={() => setShowWizard(false)} onComplete={handleWizardComplete} />}
 
         {showHelpModal && (
           <div className="fixed bottom-20 right-6 z-50 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-fade-in-up origin-bottom-right">
-            <div className="bg-black p-4 flex justify-between items-center text-white"><h3 className="font-bold text-sm">Help & Support</h3><button onClick={() => setShowHelpModal(false)} className="text-gray-400 hover:text-white">✕</button></div>
-            <div className="flex border-b border-gray-100"><button onClick={() => setHelpTab('GUIDE')} className={`flex-1 py-3 text-xs font-bold ${helpTab === 'GUIDE' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Quick Guide</button><button onClick={() => setHelpTab('FEEDBACK')} className={`flex-1 py-3 text-xs font-bold ${helpTab === 'FEEDBACK' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Report / Idea</button></div>
+            <div className="bg-black p-4 flex justify-between items-center text-white">
+              <h3 className="font-bold text-sm">Help & Support</h3>
+              <button onClick={() => setShowHelpModal(false)} className="text-gray-400 hover:text-white">✕</button>
+            </div>
+            <div className="flex border-b border-gray-100">
+              <button onClick={() => setHelpTab('GUIDE')} className={`flex-1 py-3 text-xs font-bold ${helpTab === 'GUIDE' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Quick Guide</button>
+              <button onClick={() => setHelpTab('FEEDBACK')} className={`flex-1 py-3 text-xs font-bold ${helpTab === 'FEEDBACK' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Report / Idea</button>
+            </div>
             <div className="p-4 h-64 overflow-y-auto bg-gray-50">
               {helpTab === 'GUIDE' ? (
-                <div className="space-y-4">{[{ icon: '🔎', title: 'Start a Trip', desc: 'Click "Plan New Trip" on the dashboard. Enter your city and preferences.' }, { icon: '🗺️', title: 'Customize', desc: 'Select places day-by-day. Use the "Start Location" to optimize the route.' }, { icon: '🤝', title: 'Invite Friends', desc: 'Once planned, go to the "Collab" tab to invite friends and split costs.' }, { icon: '📍', title: 'Discover', desc: 'Use the "Discover" tab to find hidden gems near you anytime.' }].map((item, i) => (<div key={i} className="flex gap-3"><div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm text-sm border border-gray-100">{item.icon}</div><div><h4 className="font-bold text-xs text-gray-900">{item.title}</h4><p className="text-[10px] text-gray-500 leading-tight">{item.desc}</p></div></div>))}</div>
+                <div className="space-y-4">
+                  {[{ icon: '🔎', title: 'Start a Trip', desc: 'Click "Plan New Trip" on the dashboard. Enter your city and preferences.' }, { icon: '🗺️', title: 'Customize', desc: 'Select places day-by-day. Use the "Start Location" to optimize the route.' }, { icon: '🤝', title: 'Invite Friends', desc: 'Once planned, go to the "Collab" tab to invite friends and split costs.' }, { icon: '📍', title: 'Discover', desc: 'Use the "Discover" tab to find hidden gems near you anytime.' }].map((item, i) => (
+                    <div key={i} className="flex gap-3">
+                      <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm text-sm border border-gray-100">{item.icon}</div>
+                      <div><h4 className="font-bold text-xs text-gray-900">{item.title}</h4><p className="text-[10px] text-gray-500 leading-tight">{item.desc}</p></div>
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <div className="flex flex-col h-full"><textarea className="flex-1 p-3 rounded-xl border border-gray-200 text-xs font-medium resize-none focus:outline-none focus:border-blue-500 mb-3" placeholder="Found a bug? Have an idea? Tell us..." value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} /><button onClick={submitFeedback} className="w-full bg-black text-white py-2 rounded-lg font-bold text-xs">Submit Feedback</button></div>
+                <div className="flex flex-col h-full">
+                  <textarea
+                    className="flex-1 p-3 rounded-xl border border-gray-200 text-xs font-medium resize-none focus:outline-none focus:border-blue-500 mb-3"
+                    placeholder="Found a bug? Have an idea? Tell us..."
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value)}
+                  />
+                  <button onClick={submitFeedback} className="w-full bg-black text-white py-2 rounded-lg font-bold text-xs">Submit Feedback</button>
+                </div>
               )}
             </div>
           </div>
