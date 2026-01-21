@@ -1,29 +1,28 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
+// 1. Initialize the Font (Inter)
 const inter = Inter({ subsets: ["latin"] });
 
+// 2. Define SEO Metadata (Title & Description)
 export const metadata: Metadata = {
-  title: "2wards",
-  description: "AI-Powered Travel Planning",
-  manifest: "/manifest.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "2wards",
-  },
+  title: "2wards - AI Travel Planner",
+  description: "Plan your next adventure with AI, collaborate with friends, and track expenses.",
 };
 
+// 3. CRITICAL MOBILE FIX: Define Viewport Settings
+// This tells the browser: "Do not auto-zoom out. Scale 1:1 on mobile."
 export const viewport: Viewport = {
-  themeColor: "#000000",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // Also good for iPhone notch support:
+  viewportFit: "cover",
 };
 
+// 4. The Root Layout Component
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -31,11 +30,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      {/* FIX: 'overflow-x-hidden' is the key. 
-         It stops the page from ever scrolling sideways on mobile. 
-      */}
-      <body className={`${inter.className} overflow-x-hidden w-full bg-gray-50`}>
-        <ServiceWorkerRegister />
+      <body className={inter.className}>
+        {/* The main app content renders here */}
         {children}
       </body>
     </html>

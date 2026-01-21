@@ -182,7 +182,6 @@ export default function Home() {
   const [feedbackText, setFeedbackText] = useState('');
 
   // --- PERSISTENCE (AUTO-SAVE) ---
-  // Load data from LocalStorage on startup
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedData = localStorage.getItem('2wards_trip_data');
@@ -201,7 +200,6 @@ export default function Home() {
     }
   }, []);
 
-  // Save data to LocalStorage whenever it changes
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('2wards_trip_data', JSON.stringify({
@@ -214,14 +212,14 @@ export default function Home() {
     }
   }, [expenses, packingList, messages, tripMembers, userSettings]);
 
-  // Sync Email to Settings
+  // Sync Email
   useEffect(() => {
     if (session?.user?.email && !userSettings.email) {
       setUserSettings(prev => ({ ...prev, email: session.user.email }));
     }
   }, [session]);
 
-  // Generate Invite Link on Mount
+  // Generate Invite Link
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const mockTripId = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -260,21 +258,16 @@ export default function Home() {
       totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
     }
 
-    // 2. Fetch Candidates (Robust Search)
+    // 2. Fetch Candidates
     const destinations = data.destinations || [];
-    // Fallback: If user used old single input or typed without tagging, the new Wizard sends it in 'destinations' array.
-    if (destinations.length === 0 && data.destination) {
-      destinations.push(data.destination);
-    }
+    if (destinations.length === 0 && data.destination) destinations.push(data.destination);
 
-    // FIX: Generate a search that looks in BOTH 'city' and 'zone_id' for matches
+    // FIX: Generate a search that looks in BOTH 'city' and 'zone_id'
     const searchConditions = destinations.flatMap((d: string) => [
       `city.ilike.%${d.trim()}%`,
       `zone_id.ilike.%${d.trim()}%`
     ]);
     const searchString = searchConditions.join(',');
-
-    console.log("Searching Supabase with:", searchString); // Debug log
 
     const { data: allPlaces, error } = await supabase
       .from('places')
@@ -284,8 +277,7 @@ export default function Home() {
     if (error) console.error("Supabase Error:", error);
 
     if (!allPlaces || allPlaces.length === 0) {
-      alert(`No places found for ${destinations.join(', ')}. Loading sample data.`);
-      // Sample data logic could go here
+      alert(`No places found. Loading sample data.`);
       return;
     }
 
@@ -346,7 +338,6 @@ export default function Home() {
     setActiveView('PLAN');
   };
 
-  // --- HANDLE USER SELECTION ---
   const handleSelectPlace = (place: Place) => {
     const currentStep = selectionQueue[currentSelectionIdx];
     const placeWithTime = { ...place, time: `Day ${currentStep.day} - ${currentStep.slotLabel}` };
@@ -381,7 +372,6 @@ export default function Home() {
     });
   };
 
-  // --- PDF DOWNLOAD HANDLER ---
   const handleDownloadOffline = async () => {
     const element = document.getElementById('itinerary-container');
 
@@ -412,7 +402,6 @@ export default function Home() {
     }
   };
 
-  // --- FEEDBACK HANDLER ---
   const submitFeedback = async () => {
     if (!feedbackText.trim()) return;
 
@@ -474,7 +463,8 @@ export default function Home() {
   if (!session) return <LandingPage />;
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
+    // FIX: ADDED 'w-full max-w-[100vw] overflow-x-hidden relative' for MOBILE
+    <div className="flex h-screen w-full max-w-[100vw] bg-gray-50 overflow-hidden font-sans relative">
 
       {/* SIDEBAR */}
       <Sidebar
@@ -498,13 +488,17 @@ export default function Home() {
       <main className="flex-1 relative h-full flex flex-col bg-gray-50">
 
         {/* --- GLOBAL HEADER --- */}
-        <header className="absolute top-0 right-0 p-4 lg:p-6 z-50 flex items-center gap-2 lg:gap-4 w-full justify-between lg:justify-end pointer-events-none">
+        <header className="absolute top-0 right-0 p-4 lg:p-6 z-50 flex items-center justify-between w-full pointer-events-none">
           <div className="lg:hidden pointer-events-auto">
             <button onClick={() => setIsSidebarOpen(true)} className="w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center text-xl">☰</button>
           </div>
-          <div className="flex items-center gap-2 lg:gap-4 pointer-events-auto">
+
+          <div className="flex items-center gap-2 lg:gap-4 pointer-events-auto ml-auto">
             {tripPlan.length > 0 && activeView !== 'DASHBOARD' && (
-              <button onClick={() => setActiveView('COLLAB' as any)} className="bg-white text-blue-600 px-3 py-2 rounded-full shadow-sm border border-blue-100 font-bold text-[10px] lg:text-xs flex items-center gap-2 hover:bg-blue-50 transition-colors">👥 Invite</button>
+              <button onClick={() => setActiveView('COLLAB' as any)} className="bg-white text-blue-600 px-3 py-2 rounded-full shadow-sm border border-blue-100 font-bold text-[10px] lg:text-xs flex items-center gap-2 hover:bg-blue-50 transition-colors">
+                <span className="hidden sm:inline">Invite Friends</span>
+                <span className="sm:hidden">Invite</span>
+              </button>
             )}
             <div className="relative">
               <button onClick={() => setShowProfileMenu(!showProfileMenu)} className="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center text-sm font-bold text-gray-700 hover:shadow-md transition-all relative shadow-sm">
