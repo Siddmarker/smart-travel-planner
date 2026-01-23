@@ -11,8 +11,11 @@ interface Place {
     image?: string;
     rating?: number;
     description?: string;
-    time?: string; // e.g. "Morning", "Lunch"
-    duration?: number; // in minutes, e.g. 90
+    time?: string;
+    duration?: number;
+    // ADD THESE TWO LINES TO FIX THE ERROR:
+    lat: number;
+    lng: number;
 }
 
 interface ItineraryDisplayProps {
