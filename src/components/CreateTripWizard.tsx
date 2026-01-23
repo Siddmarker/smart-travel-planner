@@ -7,43 +7,51 @@ interface WizardProps {
     onComplete: (data: any) => void;
 }
 
+// LOGIC HELPERS
+const COASTAL_CITIES = ['Goa', 'Gokarna', 'Pondicherry', 'Varkala', 'Mangalore', 'Udupi', 'Alibaug', 'Andaman'];
+const HILL_STATIONS = ['Coorg', 'Ooty', 'Munnar', 'Manali', 'Shimla', 'Wayanad', 'Kodaikanal', 'Darjeeling', 'Leh'];
+
+type TabView = 'ITINERARY' | 'TRAVELERS' | 'PREFERENCES';
+
 export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
-    // --- WIZARD STEP STATE ---
-    const [step, setStep] = useState(1);
+    // --- UI STATE ---
+    const [activeTab, setActiveTab] = useState<TabView>('ITINERARY');
 
     // --- FORM DATA STATE ---
-    // We use an array for destinations to support multi-city trips
     const [destinations, setDestinations] = useState<string[]>([]);
     const [inputValue, setInputValue] = useState('');
-
-    const [scope, setScope] = useState({
-        transport: false,
-        stay: false,
-        activities: true,
-    });
-
     const [dates, setDates] = useState({
         start: '',
         end: ''
     });
 
-    const [times, setTimes] = useState({
-        arrival: '10:00',
-        departure: '18:00'
-    });
-
+    // Travelers
     const [groupType, setGroupType] = useState('FRIENDS');
     const [ageGroup, setAgeGroup] = useState<string[]>([]);
 
-    // --- GOOGLE AUTOCOMPLETE STATE ---
+    // Preferences (The critical new data)
+    const [budget, setBudget] = useState({
+        total: '',
+        nightly: ''
+    });
+    const [preferences, setPreferences] = useState({
+        pool: false,
+        ambience: [] as string[],
+        view: ''
+    });
+    const [scope, setScope] = useState({
+        transport: false,
+        stay: true,
+        activities: true
+    });
+
+    // --- GOOGLE PLACES STATE ---
     const [suggestions, setSuggestions] = useState<any[]>([]);
     const [showDropdown, setShowDropdown] = useState(false);
-    
-    // Feature 4: Session Token for Cost Optimization & Smart Context
     const [sessionToken, setSessionToken] = useState<any>(null);
     const autocompleteService = useRef<any>(null);
 
-    // 1. Initialize Google Autocomplete Service
+    // --- INIT GOOGLE SERVICE ---
     useEffect(() => {
         if (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {
             autocompleteService.current = new window.google.maps.places.AutocompleteService();
@@ -51,16 +59,10 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
         }
     }, []);
 
-    // 2. Handle Typing in Destination Input
+    // --- HANDLERS ---
     const handleCityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value;
         setInputValue(val);
-
-        // Lazy load service if it wasn't ready on mount
-        if (!autocompleteService.current && typeof window !== 'undefined' && window.google) {
-            autocompleteService.current = new window.google.maps.places.AutocompleteService();
-            setSessionToken(new window.google.maps.places.AutocompleteSessionToken());
-        }
 
         if (!val || val.length < 2) {
             setSuggestions([]);
@@ -68,13 +70,12 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
             return;
         }
 
-        // Fetch predictions from Google (Added Session Token & City Filter)
-        autocompleteService.current.getPlacePredictions(
-            { 
-                input: val, 
-                types: ['(cities)'], // Wanderlog Style: Suggest Cities first
-                sessionToken: sessionToken 
-            },
+        if (!autocompleteService.current && window.google) {
+            autocompleteService.current = new window.google.maps.places.AutocompleteService();
+        }
+
+        autocompleteService.current?.getPlacePredictions(
+            { input: val, types: ['(cities)'], sessionToken: sessionToken },
             (predictions: any[], status: any) => {
                 if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
                     setSuggestions(predictions);
@@ -87,173 +88,130 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
         );
     };
 
-    // 3. Add City Tag on Selection
     const selectCity = (cityName: string) => {
-        if (!destinations.includes(cityName)) {
-            setDestinations([...destinations, cityName]);
-        }
-        setInputValue(''); // Clear input for next city
+        setDestinations([cityName]);
+        setInputValue(cityName);
         setSuggestions([]);
         setShowDropdown(false);
-        
-        // Refresh token for next search
         if (window.google) {
             setSessionToken(new window.google.maps.places.AutocompleteSessionToken());
         }
     };
 
-    // 4. Remove City Tag
-    const removeCity = (cityToRemove: string) => {
-        setDestinations(destinations.filter(c => c !== cityToRemove));
-    };
-
-    // --- TOGGLE HANDLERS ---
-    const toggleScope = (key: 'transport' | 'stay') => {
-        setScope(prev => ({ ...prev, [key]: !prev[key] }));
+    const getLocationType = () => {
+        const primaryDest = destinations[0] || '';
+        if (COASTAL_CITIES.some(c => primaryDest.includes(c))) return 'COASTAL';
+        if (HILL_STATIONS.some(c => primaryDest.includes(c))) return 'HILL';
+        return 'STANDARD';
     };
 
     const toggleAge = (age: string) => {
-        if (ageGroup.includes(age)) {
-            setAgeGroup(prev => prev.filter(a => a !== age));
-        } else {
-            setAgeGroup(prev => [...prev, age]);
-        }
+        setAgeGroup(prev =>
+            prev.includes(age)
+                ? prev.filter(a => a !== age)
+                : [...prev, age]
+        );
     };
 
-    // --- NAVIGATION HANDLER ---
-    const handleNext = () => {
-        if (step < 3) {
-            // Validation / Auto-add for Step 1
-            if (step === 1) {
-                // If user typed something but didn't select it, assume that's the destination
-                if (destinations.length === 0 && inputValue.trim()) {
-                    setDestinations([inputValue.trim()]);
-                    setInputValue('');
-                } else if (destinations.length === 0 && !inputValue.trim()) {
-                    // If absolutely nothing is entered, don't proceed
-                    return;
-                }
-            }
-            setStep(step + 1);
+    const toggleAmbience = (vib: string) => {
+        setPreferences(prev =>
+            prev.ambience.includes(vib)
+                ? { ...prev, ambience: prev.ambience.filter(v => v !== vib) }
+                : { ...prev, ambience: [...prev.ambience, vib] }
+        );
+    };
+
+    // Navigation & Submission Logic
+    const handleAction = () => {
+        if (activeTab === 'ITINERARY') {
+            // Validation
+            if (destinations.length === 0 && !inputValue) return;
+            if (destinations.length === 0 && inputValue) setDestinations([inputValue]);
+            setActiveTab('TRAVELERS');
+        } else if (activeTab === 'TRAVELERS') {
+            setActiveTab('PREFERENCES');
         } else {
-            // FINAL SUBMISSION
-            let finalDestinations = [...destinations];
-
-            // Edge case: User typed a city in Step 1 but didn't hit enter, then clicked through
-            if (finalDestinations.length === 0 && inputValue.trim()) {
-                finalDestinations.push(inputValue.trim());
-            }
-
+            // Final Submit
             onComplete({
-                destinations: finalDestinations,
-                scope,
+                destinations,
                 dates,
-                times,
                 groupType,
-                ageGroup
+                ageGroup,
+                budget,
+                preferences,
+                scope
             });
         }
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-300">
 
-            {/* MAIN MODAL CONTAINER */}
-            <div className="bg-white w-full max-w-4xl h-[600px] rounded-3xl shadow-2xl flex relative overflow-hidden">
+            {/* MAIN CARD CONTAINER */}
+            <div className="bg-white w-full max-w-2xl h-[700px] md:h-auto rounded-[2.5rem] shadow-2xl overflow-hidden relative flex flex-col transition-all duration-500">
 
-                {/* --- LEFT SIDEBAR (Progress & Branding) --- */}
-                <div className="w-1/3 bg-gray-50 border-r border-gray-100 p-8 flex flex-col justify-between hidden md:flex rounded-l-3xl">
-                    <div>
-                        <h2 className="text-2xl font-black text-gray-900 mb-8">Plan Your Trip</h2>
-                        <div className="space-y-6">
-                            <StepIndicator
-                                num={1}
-                                title="Destinations"
-                                active={step === 1}
-                                done={step > 1}
-                            />
-                            <StepIndicator
-                                num={2}
-                                title="Logistics"
-                                active={step === 2}
-                                done={step > 2}
-                            />
-                            <StepIndicator
-                                num={3}
-                                title="Travelers"
-                                active={step === 3}
-                                done={step > 3}
-                            />
-                        </div>
-                    </div>
+                {/* CLOSE BUTTON */}
+                <button
+                    onClick={onClose}
+                    className="absolute top-6 right-6 w-10 h-10 flex items-center justify-center bg-gray-50 rounded-full text-gray-400 hover:bg-gray-100 hover:text-black transition-colors z-20 font-bold"
+                >
+                    ✕
+                </button>
 
-                    <div className="text-xs text-gray-400">
-                        Step {step} of 3
+                {/* --- HEADER & TABS --- */}
+                <div className="pt-10 px-10 pb-6 bg-white shrink-0">
+                    <h2 className="text-3xl font-black text-gray-900 tracking-tight mb-6">Plan your journey</h2>
+
+                    {/* CUSTOM TAB BAR */}
+                    <div className="flex bg-gray-50 p-1.5 rounded-2xl w-full">
+                        {(['ITINERARY', 'TRAVELERS', 'PREFERENCES'] as TabView[]).map((tab) => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab)}
+                                className={`flex-1 py-3 rounded-xl text-xs font-bold tracking-wide transition-all duration-300 ${activeTab === tab
+                                        ? 'bg-white text-black shadow-sm scale-100'
+                                        : 'text-gray-400 hover:text-gray-600'
+                                    }`}
+                            >
+                                {tab === 'ITINERARY' && '📍 Itinerary'}
+                                {tab === 'TRAVELERS' && '👥 Travelers'}
+                                {tab === 'PREFERENCES' && '⚙️ Preferences'}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
-                {/* --- RIGHT CONTENT AREA --- */}
-                <div
-                    className="flex-1 p-8 md:p-12 flex flex-col relative rounded-r-3xl"
-                    onClick={() => setShowDropdown(false)}
-                >
+                {/* --- SCROLLABLE CONTENT AREA --- */}
+                <div className="flex-1 overflow-y-auto px-10 pb-4 custom-scrollbar">
 
-                    {/* CLOSE BUTTON */}
-                    <button
-                        onClick={onClose}
-                        className="absolute top-6 right-6 text-gray-400 hover:text-black transition-colors"
-                    >
-                        ✕
-                    </button>
+                    {/* TAB 1: ITINERARY */}
+                    {activeTab === 'ITINERARY' && (
+                        <div className="animate-in slide-in-from-right-8 duration-300 space-y-8">
 
-                    {/* --- STEP 1: DESTINATIONS --- */}
-                    {step === 1 && (
-                        <div className="flex-1 flex flex-col justify-center animate-in slide-in-from-right-8 duration-500">
-                            <h3 className="text-3xl font-black text-gray-900 mb-2">Where to?</h3>
-                            <p className="text-gray-500 mb-6">Type a city (e.g. Ooty, Coorg). You can add multiple for a road trip.</p>
-
-                            {/* ACTIVE TAGS */}
-                            <div className="flex flex-wrap gap-2 mb-4 min-h-[32px]">
-                                {destinations.map(city => (
-                                    <span key={city} className="bg-black text-white px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2 animate-in zoom-in duration-300">
-                                        {city}
-                                        <button onClick={() => removeCity(city)} className="hover:text-red-400 font-bold ml-1">✕</button>
-                                    </span>
-                                ))}
-                            </div>
-
-                            {/* SEARCH INPUT */}
-                            <div className="relative mb-10 z-50">
+                            {/* DESTINATION INPUT */}
+                            <div className="relative">
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-3 ml-1">Where to?</label>
                                 <input
-                                    className="w-full text-2xl font-bold border-b-2 border-gray-200 focus:border-black outline-none py-2 placeholder-gray-300 bg-transparent"
-                                    placeholder="Type & Select City..."
+                                    className="w-full p-5 pl-14 rounded-3xl border-2 border-gray-100 bg-gray-50 text-xl font-bold text-gray-900 focus:border-black focus:bg-white focus:outline-none transition-all placeholder:text-gray-300"
+                                    placeholder="Japan, Goa, Paris..."
                                     value={inputValue}
                                     onChange={handleCityInput}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (suggestions.length > 0) setShowDropdown(true);
-                                    }}
                                     autoFocus
                                 />
+                                <span className="absolute left-5 top-[3.25rem] -translate-y-1/2 text-2xl grayscale opacity-40">🗺️</span>
 
-                                {/* DROPDOWN MENU (Visually Upgraded) */}
                                 {showDropdown && suggestions.length > 0 && (
-                                    <div className="absolute top-full left-0 right-0 bg-white border border-gray-100 rounded-2xl shadow-xl mt-2 max-h-60 overflow-y-auto z-[100] p-2">
+                                    <div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden z-50 p-2">
                                         {suggestions.map((s) => (
                                             <div
                                                 key={s.place_id}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    selectCity(s.description);
-                                                }}
-                                                className="px-4 py-3 hover:bg-gray-50 rounded-xl cursor-pointer text-sm font-medium text-gray-700 flex gap-3 items-center transition-colors group"
+                                                onClick={() => selectCity(s.description)}
+                                                className="px-5 py-4 hover:bg-gray-50 cursor-pointer flex items-center gap-4 rounded-2xl transition-colors"
                                             >
-                                                <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 group-hover:bg-white group-hover:shadow-sm transition-all">
-                                                    📍
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <span className="font-bold text-gray-900">{s.structured_formatting.main_text}</span>
-                                                    <span className="text-xs text-gray-400">{s.structured_formatting.secondary_text}</span>
+                                                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-lg">📍</div>
+                                                <div>
+                                                    <p className="font-bold text-gray-900 text-sm">{s.structured_formatting.main_text}</p>
+                                                    <p className="text-xs text-gray-400">{s.structured_formatting.secondary_text}</p>
                                                 </div>
                                             </div>
                                         ))}
@@ -261,194 +219,165 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
                                 )}
                             </div>
 
-                            <h4 className="font-bold text-sm text-gray-500 uppercase tracking-wider mb-4">I need help with...</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <ScopeCard
-                                    icon="✈️"
-                                    label="Transport"
-                                    selected={scope.transport}
-                                    onClick={() => toggleScope('transport')}
-                                />
-                                <ScopeCard
-                                    icon="🏨"
-                                    label="Accommodation"
-                                    selected={scope.stay}
-                                    onClick={() => toggleScope('stay')}
-                                />
-                                <ScopeCard
-                                    icon="🎡"
-                                    label="Itinerary"
-                                    selected={true}
-                                    onClick={() => { }}
-                                    disabled
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    {/* --- STEP 2: LOGISTICS --- */}
-                    {step === 2 && (
-                        <div className="flex-1 flex flex-col justify-center animate-in slide-in-from-right-8 duration-500">
-                            <h3 className="text-3xl font-black text-gray-900 mb-2">When?</h3>
-                            <p className="text-gray-500 mb-8">Dates help us check weather and events.</p>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                                {/* ARRIVAL INPUTS */}
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Arrival (Start)</label>
-                                    <div className="flex gap-2">
+                            {/* DATES INPUT */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-3 ml-1">When?</label>
+                                <div className="flex gap-4">
+                                    <div className="flex-1">
+                                        <span className="block text-[10px] font-bold text-gray-400 mb-1 ml-2">Start Date</span>
                                         <input
                                             type="date"
-                                            className="flex-1 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200 focus:border-black focus:outline-none transition-colors"
+                                            className="w-full p-4 rounded-2xl border-2 border-gray-100 bg-gray-50 font-bold text-gray-900 focus:border-black outline-none"
                                             value={dates.start}
-                                            onChange={e => setDates({ ...dates, start: e.target.value })}
-                                        />
-                                        <input
-                                            type="time"
-                                            className="w-32 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200 focus:border-black focus:outline-none transition-colors"
-                                            value={times.arrival}
-                                            onChange={e => setTimes({ ...times, arrival: e.target.value })}
+                                            onChange={(e) => setDates({ ...dates, start: e.target.value })}
                                         />
                                     </div>
-                                </div>
-
-                                {/* DEPARTURE INPUTS */}
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Departure (End)</label>
-                                    <div className="flex gap-2">
+                                    <div className="flex-1">
+                                        <span className="block text-[10px] font-bold text-gray-400 mb-1 ml-2">End Date</span>
                                         <input
                                             type="date"
-                                            className="flex-1 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200 focus:border-black focus:outline-none transition-colors"
+                                            className="w-full p-4 rounded-2xl border-2 border-gray-100 bg-gray-50 font-bold text-gray-900 focus:border-black outline-none"
                                             value={dates.end}
-                                            onChange={e => setDates({ ...dates, end: e.target.value })}
+                                            onChange={(e) => setDates({ ...dates, end: e.target.value })}
                                         />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB 2: TRAVELERS */}
+                    {activeTab === 'TRAVELERS' && (
+                        <div className="animate-in slide-in-from-right-8 duration-300 space-y-8">
+
+                            {/* GROUP TYPE */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-3 ml-1">Who is going?</label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {['SOLO', 'COUPLE', 'FAMILY', 'FRIENDS'].map((type) => (
+                                        <button
+                                            key={type}
+                                            onClick={() => setGroupType(type)}
+                                            className={`p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-3 ${groupType === type ? 'border-black bg-black text-white shadow-xl' : 'border-gray-100 hover:border-gray-300 text-gray-400'}`}
+                                        >
+                                            <span className="text-3xl">{type === 'SOLO' ? '🧍' : type === 'COUPLE' ? '👫' : type === 'FAMILY' ? '👨‍👩‍👧‍👦' : '👯‍♂️'}</span>
+                                            <span className="text-xs font-bold tracking-widest">{type}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* AGE GROUPS */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-3 ml-1">Age Groups</label>
+                                <div className="flex flex-wrap gap-3">
+                                    {['18-30', '31-50', '50+', 'Kids', 'Toddlers'].map(age => (
+                                        <button
+                                            key={age}
+                                            onClick={() => toggleAge(age)}
+                                            className={`px-6 py-3 rounded-full font-bold text-sm border-2 transition-all ${ageGroup.includes(age) ? 'bg-[#FF5C69] text-white border-[#FF5C69]' : 'bg-white text-gray-500 border-gray-100 hover:border-gray-300'}`}
+                                        >
+                                            {age}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB 3: PREFERENCES */}
+                    {activeTab === 'PREFERENCES' && (
+                        <div className="animate-in slide-in-from-right-8 duration-300 space-y-8">
+
+                            {/* BUDGET SECTION */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2 ml-1">Total Budget</label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-4 text-gray-400 font-bold">₹</span>
                                         <input
-                                            type="time"
-                                            className="w-32 p-3 bg-gray-50 rounded-xl font-bold border border-gray-200 focus:border-black focus:outline-none transition-colors"
-                                            value={times.departure}
-                                            onChange={e => setTimes({ ...times, departure: e.target.value })}
+                                            type="number"
+                                            placeholder="50000"
+                                            className="w-full pl-8 p-4 bg-gray-50 rounded-2xl font-bold border-2 border-gray-100 focus:border-black outline-none"
+                                            value={budget.total}
+                                            onChange={e => setBudget({ ...budget, total: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2 ml-1">Avg. Nightly</label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-4 text-gray-400 font-bold">₹</span>
+                                        <input
+                                            type="number"
+                                            placeholder="3000"
+                                            className="w-full pl-8 p-4 bg-gray-50 rounded-2xl font-bold border-2 border-gray-100 focus:border-black outline-none"
+                                            value={budget.nightly}
+                                            onChange={e => setBudget({ ...budget, nightly: e.target.value })}
                                         />
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="bg-blue-50 p-4 rounded-xl flex gap-3">
-                                <span className="text-xl">💡</span>
-                                <p className="text-sm text-blue-800 font-medium">We optimize your route based on these times to save you travel hours!</p>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* --- STEP 3: TRAVELERS --- */}
-                    {step === 3 && (
-                        <div className="flex-1 flex flex-col justify-center animate-in slide-in-from-right-8 duration-500">
-                            <h3 className="text-3xl font-black text-gray-900 mb-2">Who is going?</h3>
-                            <p className="text-gray-500 mb-8">We tailor the vibe (Party vs Chill) based on this.</p>
-
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                                <GroupCard
-                                    icon="🧍"
-                                    label="Solo"
-                                    selected={groupType === 'SOLO'}
-                                    onClick={() => setGroupType('SOLO')}
-                                />
-                                <GroupCard
-                                    icon="👫"
-                                    label="Couple"
-                                    selected={groupType === 'COUPLE'}
-                                    onClick={() => setGroupType('COUPLE')}
-                                />
-                                <GroupCard
-                                    icon="👨‍👩‍👧‍👦"
-                                    label="Family"
-                                    selected={groupType === 'FAMILY'}
-                                    onClick={() => setGroupType('FAMILY')}
-                                />
-                                <GroupCard
-                                    icon="👯‍♂️"
-                                    label="Friends"
-                                    selected={groupType === 'FRIENDS'}
-                                    onClick={() => setGroupType('FRIENDS')}
-                                />
-                            </div>
-
-                            <h4 className="font-bold text-sm text-gray-500 uppercase tracking-wider mb-4">Age Group (Select all that apply)</h4>
-                            <div className="flex gap-3">
-                                {['18-30', '31-50', '50+', 'Kids'].map(age => (
+                            {/* VIBE & AMENITIES */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-3 ml-1">Vibe & Amenities</label>
+                                <div className="flex flex-wrap gap-2">
                                     <button
-                                        key={age}
-                                        onClick={() => toggleAge(age)}
-                                        className={`px-6 py-3 rounded-full font-bold text-sm border transition-all ${ageGroup.includes(age) ? 'bg-black text-white border-black' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}
+                                        onClick={() => setPreferences({ ...preferences, pool: !preferences.pool })}
+                                        className={`px-5 py-3 rounded-2xl font-bold text-sm border-2 transition-all flex items-center gap-2 ${preferences.pool ? 'bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-gray-100 text-gray-500 hover:border-gray-300'}`}
                                     >
-                                        {age}
+                                        🏊 Pool {preferences.pool && '✓'}
                                     </button>
-                                ))}
+                                    {['Cozy', 'Luxury', 'Rustic', 'Party', 'Secluded', 'Work-friendly'].map(vib => (
+                                        <button
+                                            key={vib}
+                                            onClick={() => toggleAmbience(vib)}
+                                            className={`px-5 py-3 rounded-2xl font-bold text-sm border-2 transition-all ${preferences.ambience.includes(vib) ? 'bg-black border-black text-white' : 'bg-white border-gray-100 text-gray-500 hover:border-gray-300'}`}
+                                        >
+                                            {vib}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
+
+                            {/* DYNAMIC VIEW SECTION (Conditional) */}
+                            {getLocationType() !== 'STANDARD' && (
+                                <div className="p-4 bg-gray-50 rounded-3xl border border-gray-100">
+                                    <label className="block text-xs font-bold text-blue-600 uppercase mb-3 tracking-wider">
+                                        {getLocationType() === 'COASTAL' ? '🌊 Ocean View?' : '⛰️ Mountain View?'}
+                                    </label>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => setPreferences({ ...preferences, view: 'VIEW' })}
+                                            className={`flex-1 py-3 rounded-xl border-2 text-sm font-bold transition-all ${preferences.view === 'VIEW' ? 'border-blue-500 bg-white text-blue-600 shadow-md' : 'border-transparent bg-gray-100 text-gray-400 hover:bg-white'}`}
+                                        >
+                                            Yes, please!
+                                        </button>
+                                        <button
+                                            onClick={() => setPreferences({ ...preferences, view: 'STANDARD' })}
+                                            className={`flex-1 py-3 rounded-xl border-2 text-sm font-bold transition-all ${preferences.view === 'STANDARD' ? 'border-black bg-white text-black shadow-md' : 'border-transparent bg-gray-100 text-gray-400 hover:bg-white'}`}
+                                        >
+                                            No preference
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
-
-                    {/* --- FOOTER NAVIGATION --- */}
-                    <div className="mt-auto flex justify-between pt-6 border-t border-gray-100">
-                        {step > 1 ? (
-                            <button
-                                onClick={() => setStep(step - 1)}
-                                className="px-6 py-3 font-bold text-gray-500 hover:text-black transition-colors"
-                            >
-                                Back
-                            </button>
-                        ) : (
-                            <div></div>
-                        )}
-
-                        <button
-                            onClick={handleNext}
-                            className="bg-black text-white px-8 py-3 rounded-xl font-bold hover:scale-105 transition-transform shadow-lg"
-                        >
-                            {step === 3 ? 'Generate Itinerary ✨' : 'Next Step →'}
-                        </button>
-                    </div>
-
                 </div>
+
+                {/* --- FOOTER ACTION --- */}
+                <div className="p-8 border-t border-gray-50 bg-white shrink-0">
+                    <button
+                        onClick={handleAction}
+                        className="w-full bg-[#FF5C69] text-white text-lg font-bold py-4 rounded-full shadow-xl shadow-red-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                    >
+                        {activeTab === 'PREFERENCES' ? 'Generate Itinerary ✨' : 'Continue →'}
+                    </button>
+                </div>
+
             </div>
         </div>
-    );
-}
-
-// --- SUB-COMPONENTS ---
-
-function StepIndicator({ num, title, active, done }: any) {
-    return (
-        <div className={`flex items-center gap-4 transition-opacity duration-300 ${active ? 'opacity-100' : 'opacity-40'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 transition-all ${active || done ? 'bg-black border-black text-white' : 'border-gray-300 text-gray-400'}`}>
-                {done ? '✓' : num}
-            </div>
-            <span className="font-bold text-gray-900">{title}</span>
-        </div>
-    );
-}
-
-function ScopeCard({ icon, label, selected, onClick, disabled }: any) {
-    return (
-        <button
-            onClick={onClick}
-            disabled={disabled}
-            className={`p-4 rounded-xl border-2 text-left transition-all flex flex-col gap-2 ${selected ? 'border-blue-500 bg-blue-50' : 'border-gray-100 hover:border-gray-300'} ${disabled ? 'opacity-70 cursor-not-allowed' : ''}`}
-        >
-            <span className="text-2xl">{icon}</span>
-            <span className={`font-bold text-sm ${selected ? 'text-blue-700' : 'text-gray-600'}`}>{label}</span>
-            {selected && <span className="text-[10px] font-bold uppercase text-blue-500">Selected</span>}
-        </button>
-    );
-}
-
-function GroupCard({ icon, label, selected, onClick }: any) {
-    return (
-        <button
-            onClick={onClick}
-            className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 ${selected ? 'border-black bg-gray-900 text-white shadow-xl scale-105' : 'border-gray-100 hover:border-gray-300 text-gray-500 hover:bg-gray-50'}`}
-        >
-            <span className="text-4xl">{icon}</span>
-            <span className="font-bold text-sm">{label}</span>
-        </button>
     );
 }
