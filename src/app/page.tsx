@@ -158,9 +158,7 @@ export default function Home() {
   const [collabTab, setCollabTab] = useState<'MEMBERS' | 'CHAT' | 'SPLIT' | 'PACKING'>('MEMBERS');
   const [tripMembers, setTripMembers] = useState<string[]>(['You']);
   const [inviteLink, setInviteLink] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: '1', user: 'System', text: 'Welcome to the Trip Chat!', time: '10:00 AM', isMe: false }
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([{ id: '1', user: 'System', text: 'Welcome to the Trip Chat!', time: '10:00 AM', isMe: false }]);
   const [newMessage, setNewMessage] = useState('');
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -272,16 +270,14 @@ export default function Home() {
     if (destinations.length === 0 && data.destination) destinations.push(data.destination);
 
     // FIX: Sanitize input to handle "City, Country" format
-    // We split by comma and take only the first part (the city name)
     const searchConditions = destinations.flatMap((d: string) => {
-      const cleanName = d.split(',')[0].trim(); // "Bangalore, India" -> "Bangalore"
+      const cleanName = d.split(',')[0].trim();
       return [
         `city.ilike.%${cleanName}%`,
         `zone_id.ilike.%${cleanName}%`
       ];
     });
 
-    // Join with commas for the OR filter
     const searchString = searchConditions.join(',');
 
     const { data: allPlaces, error } = await supabase
@@ -297,7 +293,6 @@ export default function Home() {
     }
 
     // --- PREPARE LOGIC VARIABLES ---
-    // Logic Update 4: Map Nightly Budget to Price Tier (1-4)
     let maxPriceTier = 4;
     const nightlyBudget = parseInt(data.budget?.nightly || '5000');
     if (nightlyBudget < 2000) maxPriceTier = 1;      // Budget
@@ -319,13 +314,19 @@ export default function Home() {
           return slot.types.some(t => typeStr.includes(t));
         });
 
-        // Specific Logic for Stays vs Food vs Activities
+        // FIXED LOGIC: Checking price tier inside the filter scope
         if (slot.id === 'LUNCH' || slot.id === 'DINNER') {
           candidates = candidates.filter(p => !NON_FOOD_KEYWORDS.some(k => p.type.toLowerCase().includes(k)));
         } else {
-          candidates = candidates.filter(p => !ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k)));
-          // Apply Budget Logic only to Activities/Stays
-          if (p.price_level && p.price_level > maxPriceTier) return;
+          candidates = candidates.filter(p => {
+            // 1. Exclude accomodation
+            const isNotStay = !ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k));
+
+            // 2. Check Budget (if price_level exists)
+            const isWithinBudget = p.price_level ? p.price_level <= maxPriceTier : true;
+
+            return isNotStay && isWithinBudget;
+          });
         }
 
         // --- SCORING SYSTEM ---
@@ -343,20 +344,17 @@ export default function Home() {
           if (data.groupType === 'FRIENDS' && (p.trend_score || 0) > 4) score += 15;
           if (data.groupType === 'COUPLE' && text.includes('romantic')) score += 20;
 
-          // --- NEW: Granular Preference Scoring ---
-          // Logic Update 2: Amenities (Pool)
+          // Granular Preference Scoring
           if (data.preferences?.pool && (text.includes('pool') || (p.amenities || []).includes('pool'))) {
-            score += 40; // Huge boost if pool is required
+            score += 40;
           }
 
-          // Logic Update 2: Ambience Keywords
           if (data.preferences?.ambience && data.preferences.ambience.length > 0) {
             data.preferences.ambience.forEach((amb: string) => {
               if (text.includes(amb.toLowerCase())) score += 25;
             });
           }
 
-          // Logic Update 3: View Preference
           if (data.preferences?.view === 'VIEW' && (text.includes('view') || text.includes('sea') || text.includes('valley'))) {
             score += 30;
           }
@@ -775,7 +773,9 @@ export default function Home() {
                     <button
                       key={place.id}
                       onClick={() => handleSelectPlace(place)}
-                      className="w-full bg-white border border-gray-200 rounded-2xl p-4 text-left hover:border-blue-500 hover:ring-2 hover:ring-blue-100 transition-all group"
+                      onMouseEnter={() => setHoveredPlaceId(place.id)}
+                      onMouseLeave={() => setHoveredPlaceId(null)}
+                      className="w-full bg-white border border-gray-200 rounded-2xl p-4 text-left hover:border-blue-500 hover:ring-2 hover:ring-blue-100 transition-all group hover-lift shadow-sm hover:shadow-wanderlog"
                     >
                       <div className="h-32 bg-gray-100 rounded-xl mb-3 overflow-hidden relative">
                         <img src={place.image || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={place.name} />
