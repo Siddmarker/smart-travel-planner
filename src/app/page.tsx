@@ -38,10 +38,10 @@ const MAP_STYLES = { width: '100%', height: '100%' };
 const PATH_OPTIONS = { strokeColor: '#2563EB', strokeOpacity: 0.5, strokeWeight: 4 };
 
 // Keywords for filtering
-const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani'];
+const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani']; 
 const NON_FOOD_KEYWORDS = [
   'resort', 'inn', 'stay', 'cottage', 'residency', 'lodge', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb', 'homestay',
-  'temple', 'shrine', 'worship', 'church', 'mosque', 'fort', 'park', 'garden', 'museum', 'dam', 'falls', 'view point',
+  'temple', 'shrine', 'worship', 'church', 'mosque', 'fort', 'park', 'garden', 'museum', 'dam', 'falls', 'view point', 
   'market', 'stand', 'store', 'shop', 'complex', 'race', 'bridge', 'river', 'lake'
 ];
 const ACCOMMODATION_KEYWORDS = [
@@ -142,6 +142,9 @@ export default function Home() {
   const [selectionQueue, setSelectionQueue] = useState<SelectionStep[]>([]);
   const [currentSelectionIdx, setCurrentSelectionIdx] = useState(0);
   const [isSelecting, setIsSelecting] = useState(false);
+  
+  // --- FEATURE 1: SYNC STATE ---
+  const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
 
   // --- SETTINGS STATE ---
   const [userSettings, setUserSettings] = useState({
@@ -228,12 +231,18 @@ export default function Home() {
   }, []);
 
   const mapCenter = useMemo(() => {
+    // Sync Feature: If hovering, center the map on that place
+    if (hoveredPlaceId) {
+        const place = (isSelecting ? selectionQueue[currentSelectionIdx]?.candidates : tripPlan).find(p => p.id === hoveredPlaceId);
+        if (place) return { lat: place.lat, lng: place.lng };
+    }
+    
     if (isSelecting && selectionQueue[currentSelectionIdx]?.candidates.length > 0) {
       return { lat: selectionQueue[currentSelectionIdx].candidates[0].lat, lng: selectionQueue[currentSelectionIdx].candidates[0].lng };
     }
     if (tripPlan.length > 0) return { lat: tripPlan[0].lat, lng: tripPlan[0].lng };
     return { lat: 12.9716, lng: 77.5946 };
-  }, [tripPlan, isSelecting, selectionQueue, currentSelectionIdx]);
+  }, [tripPlan, isSelecting, selectionQueue, currentSelectionIdx, hoveredPlaceId]);
 
   const handleViewChange = (view: NavView) => {
     setActiveView(view);
@@ -342,6 +351,7 @@ export default function Home() {
     const currentStep = selectionQueue[currentSelectionIdx];
     const placeWithTime = { ...place, time: `Day ${currentStep.day} - ${currentStep.slotLabel}` };
     setTripPlan(prev => [...prev, placeWithTime]);
+    setHoveredPlaceId(null);
 
     if (currentSelectionIdx < selectionQueue.length - 1) {
       setCurrentSelectionIdx(prev => prev + 1);
@@ -349,6 +359,11 @@ export default function Home() {
       setIsSelecting(false);
       alert("Itinerary Complete! 🎉");
     }
+  };
+  
+  // Feature 2: Handle Drag and Drop Reordering
+  const handleReorder = (newOrder: Place[]) => {
+      setTripPlan(newOrder);
   };
 
   const calculateRoute = async () => {
@@ -697,159 +712,160 @@ export default function Home() {
         {/* --- PLAN VIEW (TIMELINE OR SELECTION) --- */}
         {activeView === 'PLAN' && isLoaded && (
           <div className="h-full w-full relative flex">
-
-            {/* MODE 1: SELECTION MODE (Choosing 4 Options) */}
-            {isSelecting ? (
-              <div className="h-full flex flex-col bg-gray-50 border-r border-gray-200 w-full md:w-[480px] shadow-2xl z-20 overflow-hidden absolute left-0 top-0 pt-20">
-                <div className="bg-white px-6 py-6 border-b border-gray-200">
-                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Day {selectionQueue[currentSelectionIdx]?.day}</span>
-                  <h2 className="text-2xl font-black text-gray-900 mt-1">{selectionQueue[currentSelectionIdx]?.slotLabel}</h2>
-                  <p className="text-xs text-gray-500 mt-2">Choose the best option for this slot.</p>
-                  <div className="w-full bg-gray-200 h-1.5 rounded-full mt-4 overflow-hidden">
-                    <div
-                      className="bg-blue-600 h-full transition-all duration-300"
-                      style={{ width: `${((currentSelectionIdx + 1) / selectionQueue.length) * 100}%` }}
-                    ></div>
-                  </div>
+             
+             {/* MODE 1: SELECTION MODE (Choosing 4 Options) */}
+             {isSelecting ? (
+                <div className="h-full flex flex-col bg-gray-50 border-r border-gray-200 w-full md:w-[480px] shadow-2xl z-20 overflow-hidden absolute left-0 top-0 pt-20">
+                   <div className="bg-white px-6 py-6 border-b border-gray-200">
+                       <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Day {selectionQueue[currentSelectionIdx]?.day}</span>
+                       <h2 className="text-2xl font-black text-gray-900 mt-1">{selectionQueue[currentSelectionIdx]?.slotLabel}</h2>
+                       <p className="text-xs text-gray-500 mt-2">Choose the best option for this slot.</p>
+                       <div className="w-full bg-gray-200 h-1.5 rounded-full mt-4 overflow-hidden">
+                           <div className="bg-blue-600 h-full transition-all duration-300" style={{ width: `${((currentSelectionIdx + 1) / selectionQueue.length) * 100}%` }}></div>
+                       </div>
+                   </div>
+                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                       {selectionQueue[currentSelectionIdx]?.candidates.map((place) => (
+                           <button 
+                               key={place.id} 
+                               onClick={() => handleSelectPlace(place)} 
+                               // Feature 1: Sync Hover State
+                               onMouseEnter={() => setHoveredPlaceId(place.id)} 
+                               onMouseLeave={() => setHoveredPlaceId(null)} 
+                               // Feature 3: Visual Polish Classes
+                               className="w-full bg-white rounded-3xl p-4 text-left transition-all group relative border border-transparent hover:border-blue-500/30 hover-lift shadow-sm hover:shadow-wanderlog mb-6"
+                           >
+                               <div className="h-40 bg-gray-100 rounded-2xl mb-4 overflow-hidden relative">
+                                   <img src={place.image || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800'} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={place.name} />
+                                   <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full text-xs font-black shadow-sm flex items-center gap-1"><span>★</span> {place.rating || 4.8}</div>
+                                   <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
+                               </div>
+                               <div className="px-1">
+                                   <div className="flex justify-between items-start">
+                                       <h3 className="font-black text-xl text-gray-900 leading-tight mb-1 group-hover:text-blue-600 transition-colors">{place.name}</h3>
+                                       {place.price_tier && (<span className="shrink-0 bg-green-50 text-green-700 px-2 py-1 rounded-lg text-[10px] font-bold tracking-wide uppercase">{place.price_tier}</span>)}
+                                   </div>
+                                   <p className="text-sm text-gray-500 font-medium line-clamp-2 mt-1 leading-relaxed">{place.description || "A wonderful place to explore."}</p>
+                                   <div className="mt-4 flex flex-wrap gap-2">
+                                       <span className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider">{place.type}</span>
+                                       {place.safety_score && place.safety_score > 4 && (<span className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-full text-[10px] font-bold flex items-center gap-1">🛡️ Safe</span>)}
+                                   </div>
+                               </div>
+                           </button>
+                       ))}
+                   </div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  {selectionQueue[currentSelectionIdx]?.candidates.map((place) => (
-                    <button
-                      key={place.id}
-                      onClick={() => handleSelectPlace(place)}
-                      className="w-full bg-white border border-gray-200 rounded-2xl p-4 text-left hover:border-blue-500 hover:ring-2 hover:ring-blue-100 transition-all group"
-                    >
-                      <div className="h-32 bg-gray-100 rounded-xl mb-3 overflow-hidden relative">
-                        <img src={place.image || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={place.name} />
-                        <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded text-xs font-bold">★ {place.rating || 4.5}</div>
-                      </div>
-                      <h3 className="font-bold text-lg text-gray-900">{place.name}</h3>
-                      <p className="text-xs text-gray-500 line-clamp-2 mt-1">{place.description}</p>
-                      <div className="mt-3 flex gap-2">
-                        <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-[10px] font-bold uppercase">{place.type}</span>
-                        {place.price_tier && <span className="bg-green-50 text-green-700 px-2 py-1 rounded text-[10px] font-bold">{place.price_tier}</span>}
-                      </div>
-                    </button>
+             ) : (
+                // MODE 2: FINAL ITINERARY VIEW (Wrapped for PDF)
+                tripPlan.length > 0 && (
+                    <div id="itinerary-container" className="h-full relative z-20">
+                        <ItineraryDisplay 
+                            tripMeta={tripMeta} 
+                            places={tripPlan} 
+                            onUpdatePlaces={handleReorder} // Feature 2: Drag & Drop Callback
+                            onPlaceHover={setHoveredPlaceId} // Feature 1: Sync Callback
+                        />
+                    </div>
+                )
+             )}
+
+             <div className="flex-1 h-full relative ml-0 md:ml-[480px] transition-all duration-300">
+                <GoogleMap mapContainerStyle={MAP_STYLES} center={mapCenter} zoom={12} options={{ disableDefaultUI: false, zoomControl: true }}>
+                  {directionsResponse && <DirectionsRenderer directions={directionsResponse} />}
+                  
+                  {/* RENDER MARKERS FOR BOTH SELECTING AND PLANNING MODES */}
+                  {(isSelecting ? selectionQueue[currentSelectionIdx]?.candidates : tripPlan).map((place, index) => (
+                    <Marker 
+                        key={place.id} 
+                        position={{ lat: place.lat, lng: place.lng }} 
+                        label={{ text: `${index + 1}`, color: "white", fontWeight: "bold" }} 
+                        title={place.name} 
+                        // Feature 1: Bounce on Hover
+                        animation={hoveredPlaceId === place.id ? (window.google as any).maps.Animation.BOUNCE : null} 
+                        zIndex={hoveredPlaceId === place.id ? 999 : 1} 
+                    />
                   ))}
-                </div>
-              </div>
-            ) : (
-              // MODE 2: FINAL ITINERARY VIEW (Wrapped for PDF)
-              tripPlan.length > 0 && (
-                <div id="itinerary-container" className="h-full relative z-20">
-                  <ItineraryDisplay
-                    tripMeta={tripMeta}
-                    places={tripPlan}
-                  />
-                </div>
-              )
-            )}
-
-            {/* RIGHT: MAP (Background) */}
-            <div className="flex-1 h-full relative ml-0 md:ml-[480px] transition-all duration-300">
-              <GoogleMap mapContainerStyle={MAP_STYLES} center={mapCenter} zoom={12} options={{ disableDefaultUI: false, zoomControl: true }}>
-                {directionsResponse && <DirectionsRenderer directions={directionsResponse} />}
-
-                {/* SHOW CANDIDATES IF SELECTING */}
-                {isSelecting ? (
-                  selectionQueue[currentSelectionIdx]?.candidates.map((place, i) => (
-                    <Marker key={place.id} position={{ lat: place.lat, lng: place.lng }} label={{ text: `${i + 1}`, color: "white", fontWeight: "bold" }} title={place.name} />
-                  ))
-                ) : (
-                  // SHOW FINAL PLAN
-                  tripPlan.map((place, index) => (
-                    <Marker key={place.id} position={{ lat: place.lat, lng: place.lng }} label={{ text: `${index + 1}`, color: "white", fontWeight: "bold" }} title={place.name} />
-                  ))
+                </GoogleMap>
+                
+                {/* BOTTOM CONTROLS (Only visible if NOT selecting) */}
+                {!isSelecting && (
+                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-2xl p-2 flex gap-2">
+                        <button onClick={calculateRoute} className="bg-black text-white px-6 py-3 rounded-full font-bold text-xs hover:scale-105 transition-transform">{isRouting ? '...' : '🛣️ Show Route'}</button>
+                        <button id="download-btn" onClick={handleDownloadOffline} className="bg-gray-100 text-gray-700 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-200 transition-colors">⬇️ Download Offline</button>
+                        <button onClick={() => setDirectionsResponse(null)} className="bg-white text-gray-500 border border-gray-200 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-50">Reset</button>
+                    </div>
                 )}
-              </GoogleMap>
-
-              {/* BOTTOM CONTROLS (Only visible if NOT selecting) */}
-              {!isSelecting && (
-                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-2xl p-2 flex gap-2">
-                  <button onClick={calculateRoute} className="bg-black text-white px-6 py-3 rounded-full font-bold text-xs hover:scale-105 transition-transform">{isRouting ? '...' : '🛣️ Show Route'}</button>
-                  <button id="download-btn" onClick={handleDownloadOffline} className="bg-gray-100 text-gray-700 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-200 transition-colors">⬇️ Download Offline</button>
-                  <button onClick={() => setDirectionsResponse(null)} className="bg-white text-gray-500 border border-gray-200 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-50">Reset</button>
-                </div>
-              )}
-            </div>
+             </div>
           </div>
         )}
 
         {/* --- OTHER VIEWS --- */}
         {activeView === 'DISCOVERY' && <DiscoveryView onAddToTrip={() => { }} onBack={() => setActiveView('PLAN')} initialCity={tripMeta.destinations?.[0] || 'Bangalore'} />}
-
+        
         {/* --- MODALS --- */}
         {showWizard && <CreateTripWizard onClose={() => setShowWizard(false)} onComplete={handleWizardComplete} />}
-
+        
         {showHelpModal && (
-          <div className="fixed bottom-20 right-6 z-50 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-fade-in-up origin-bottom-right">
-            <div className="bg-black p-4 flex justify-between items-center text-white">
-              <h3 className="font-bold text-sm">Help & Support</h3>
-              <button onClick={() => setShowHelpModal(false)} className="text-gray-400 hover:text-white">✕</button>
+            <div className="fixed bottom-20 right-6 z-50 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-fade-in-up origin-bottom-right">
+              <div className="bg-black p-4 flex justify-between items-center text-white">
+                  <h3 className="font-bold text-sm">Help & Support</h3>
+                  <button onClick={() => setShowHelpModal(false)} className="text-gray-400 hover:text-white">✕</button>
+              </div>
+              <div className="flex border-b border-gray-100">
+                  <button onClick={() => setHelpTab('GUIDE')} className={`flex-1 py-3 text-xs font-bold ${helpTab === 'GUIDE' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Quick Guide</button>
+                  <button onClick={() => setHelpTab('FEEDBACK')} className={`flex-1 py-3 text-xs font-bold ${helpTab === 'FEEDBACK' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Report / Idea</button>
+              </div>
+              <div className="p-4 h-64 overflow-y-auto bg-gray-50">
+                  {helpTab === 'GUIDE' ? (
+                      <div className="space-y-4">
+                          {[{ icon: '🔎', title: 'Start a Trip', desc: 'Click "Plan New Trip" on the dashboard. Enter your city and preferences.' }, { icon: '🗺️', title: 'Customize', desc: 'Select places day-by-day. Use the "Start Location" to optimize the route.' }, { icon: '🤝', title: 'Invite Friends', desc: 'Once planned, go to the "Collab" tab to invite friends and split costs.' }, { icon: '📍', title: 'Discover', desc: 'Use the "Discover" tab to find hidden gems near you anytime.' }].map((item, i) => (
+                              <div key={i} className="flex gap-3">
+                                  <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm text-sm border border-gray-100">{item.icon}</div>
+                                  <div><h4 className="font-bold text-xs text-gray-900">{item.title}</h4><p className="text-[10px] text-gray-500 leading-tight">{item.desc}</p></div>
+                              </div>
+                          ))}
+                      </div>
+                  ) : (
+                      <div className="flex flex-col h-full">
+                          <textarea className="flex-1 p-3 rounded-xl border border-gray-200 text-xs font-medium resize-none focus:outline-none focus:border-blue-500 mb-3" placeholder="Found a bug? Have an idea? Tell us..." value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} />
+                          <button onClick={submitFeedback} className="w-full bg-black text-white py-2 rounded-lg font-bold text-xs">Submit Feedback</button>
+                      </div>
+                  )}
+              </div>
             </div>
-            <div className="flex border-b border-gray-100">
-              <button onClick={() => setHelpTab('GUIDE')} className={`flex-1 py-3 text-xs font-bold ${helpTab === 'GUIDE' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Quick Guide</button>
-              <button onClick={() => setHelpTab('FEEDBACK')} className={`flex-1 py-3 text-xs font-bold ${helpTab === 'FEEDBACK' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Report / Idea</button>
-            </div>
-            <div className="p-4 h-64 overflow-y-auto bg-gray-50">
-              {helpTab === 'GUIDE' ? (
-                <div className="space-y-4">
-                  {[{ icon: '🔎', title: 'Start a Trip', desc: 'Click "Plan New Trip" on the dashboard. Enter your city and preferences.' }, { icon: '🗺️', title: 'Customize', desc: 'Select places day-by-day. Use the "Start Location" to optimize the route.' }, { icon: '🤝', title: 'Invite Friends', desc: 'Once planned, go to the "Collab" tab to invite friends and split costs.' }, { icon: '📍', title: 'Discover', desc: 'Use the "Discover" tab to find hidden gems near you anytime.' }].map((item, i) => (
-                    <div key={i} className="flex gap-3">
-                      <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm text-sm border border-gray-100">{item.icon}</div>
-                      <div><h4 className="font-bold text-xs text-gray-900">{item.title}</h4><p className="text-[10px] text-gray-500 leading-tight">{item.desc}</p></div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col h-full">
-                  <textarea
-                    className="flex-1 p-3 rounded-xl border border-gray-200 text-xs font-medium resize-none focus:outline-none focus:border-blue-500 mb-3"
-                    placeholder="Found a bug? Have an idea? Tell us..."
-                    value={feedbackText}
-                    onChange={(e) => setFeedbackText(e.target.value)}
-                  />
-                  <button onClick={submitFeedback} className="w-full bg-black text-white py-2 rounded-lg font-bold text-xs">Submit Feedback</button>
-                </div>
-              )}
-            </div>
-          </div>
         )}
-
+        
         {/* GENIUS AI MODAL */}
         {aiModalOpen && aiActivePlace && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[500px]">
-              <div className="bg-gradient-to-r from-purple-600 to-blue-600 p-6 flex justify-between items-start text-white">
-                <div><div className="text-[10px] uppercase font-bold tracking-widest opacity-80 mb-1">AI Concierge</div><h3 className="font-black text-xl leading-tight">{aiActivePlace.name}</h3></div>
-                <button onClick={() => setAiModalOpen(false)} className="text-white/80 hover:text-white bg-white/10 rounded-full w-8 h-8 flex items-center justify-center">✕</button>
-              </div>
-              <div className="flex-1 bg-gray-50 p-4 overflow-y-auto space-y-3">
-                {aiChatHistory.map((msg) => (
-                  <div key={msg.id} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] p-3 rounded-2xl text-xs font-medium leading-relaxed ${msg.isMe ? 'bg-black text-white rounded-br-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none shadow-sm'}`}>{msg.text}</div>
+              <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[500px]">
+                  <div className="bg-gradient-to-r from-purple-600 to-blue-600 p-6 flex justify-between items-start text-white">
+                      <div><div className="text-[10px] uppercase font-bold tracking-widest opacity-80 mb-1">AI Concierge</div><h3 className="font-black text-xl leading-tight">{aiActivePlace.name}</h3></div>
+                      <button onClick={() => setAiModalOpen(false)} className="text-white/80 hover:text-white bg-white/10 rounded-full w-8 h-8 flex items-center justify-center">✕</button>
                   </div>
-                ))}
+                  <div className="flex-1 bg-gray-50 p-4 overflow-y-auto space-y-3">
+                      {aiChatHistory.map((msg) => (
+                          <div key={msg.id} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[85%] p-3 rounded-2xl text-xs font-medium leading-relaxed ${msg.isMe ? 'bg-black text-white rounded-br-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none shadow-sm'}`}>{msg.text}</div></div>
+                      ))}
+                  </div>
+                  <div className="p-4 bg-white border-t border-gray-100">
+                      <div className="flex gap-2 overflow-x-auto pb-3 mb-2 no-scrollbar">
+                          {['Best time to visit?', 'Dress code?', 'Entry fee?', 'Is it crowded?'].map(q => (
+                              <button key={q} onClick={() => handleAiAsk(q)} className="whitespace-nowrap px-3 py-1.5 rounded-full border border-purple-100 bg-purple-50 text-purple-700 text-[10px] font-bold hover:bg-purple-100 transition-colors">{q}</button>
+                          ))}
+                      </div>
+                      <div className="flex gap-2">
+                          <input className="flex-1 bg-gray-100 rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-purple-500/20" placeholder="Ask anything..." value={aiQuery} onChange={(e) => setAiQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAiAsk()} />
+                          <button onClick={() => handleAiAsk()} className="bg-black text-white w-10 h-10 rounded-xl flex items-center justify-center hover:scale-105 transition-transform">➤</button>
+                      </div>
+                  </div>
               </div>
-              <div className="p-4 bg-white border-t border-gray-100">
-                <div className="flex gap-2 overflow-x-auto pb-3 mb-2 no-scrollbar">
-                  {['Best time to visit?', 'Dress code?', 'Entry fee?', 'Is it crowded?'].map(q => (
-                    <button key={q} onClick={() => handleAiAsk(q)} className="whitespace-nowrap px-3 py-1.5 rounded-full border border-purple-100 bg-purple-50 text-purple-700 text-[10px] font-bold hover:bg-purple-100 transition-colors">{q}</button>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <input className="flex-1 bg-gray-100 rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-purple-500/20" placeholder="Ask anything..." value={aiQuery} onChange={(e) => setAiQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAiAsk()} />
-                  <button onClick={() => handleAiAsk()} className="bg-black text-white w-10 h-10 rounded-xl flex items-center justify-center hover:scale-105 transition-transform">➤</button>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
         <div className="fixed bottom-6 right-6 z-50">
-          <button onClick={() => setShowHelpModal(!showHelpModal)} className="w-12 h-12 bg-black text-white rounded-full shadow-2xl flex items-center justify-center font-bold">?</button>
+            <button onClick={() => setShowHelpModal(!showHelpModal)} className="w-12 h-12 bg-black text-white rounded-full shadow-2xl flex items-center justify-center font-bold">?</button>
         </div>
-
       </main>
     </div>
   );

@@ -38,12 +38,16 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
     // --- GOOGLE AUTOCOMPLETE STATE ---
     const [suggestions, setSuggestions] = useState<any[]>([]);
     const [showDropdown, setShowDropdown] = useState(false);
+    
+    // Feature 4: Session Token for Cost Optimization & Smart Context
+    const [sessionToken, setSessionToken] = useState<any>(null);
     const autocompleteService = useRef<any>(null);
 
     // 1. Initialize Google Autocomplete Service
     useEffect(() => {
         if (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {
             autocompleteService.current = new window.google.maps.places.AutocompleteService();
+            setSessionToken(new window.google.maps.places.AutocompleteSessionToken());
         }
     }, []);
 
@@ -55,6 +59,7 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
         // Lazy load service if it wasn't ready on mount
         if (!autocompleteService.current && typeof window !== 'undefined' && window.google) {
             autocompleteService.current = new window.google.maps.places.AutocompleteService();
+            setSessionToken(new window.google.maps.places.AutocompleteSessionToken());
         }
 
         if (!val || val.length < 2) {
@@ -63,9 +68,13 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
             return;
         }
 
-        // Fetch predictions from Google
+        // Fetch predictions from Google (Added Session Token & City Filter)
         autocompleteService.current.getPlacePredictions(
-            { input: val, types: ['(cities)'] },
+            { 
+                input: val, 
+                types: ['(cities)'], // Wanderlog Style: Suggest Cities first
+                sessionToken: sessionToken 
+            },
             (predictions: any[], status: any) => {
                 if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
                     setSuggestions(predictions);
@@ -86,6 +95,11 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
         setInputValue(''); // Clear input for next city
         setSuggestions([]);
         setShowDropdown(false);
+        
+        // Refresh token for next search
+        if (window.google) {
+            setSessionToken(new window.google.maps.places.AutocompleteSessionToken());
+        }
     };
 
     // 4. Remove City Tag
@@ -116,7 +130,7 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
                     setDestinations([inputValue.trim()]);
                     setInputValue('');
                 } else if (destinations.length === 0 && !inputValue.trim()) {
-                    // If absolutely nothing is entered, don't proceed (or show alert)
+                    // If absolutely nothing is entered, don't proceed
                     return;
                 }
             }
@@ -145,7 +159,7 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
 
             {/* MAIN MODAL CONTAINER */}
-            <div className="bg-white w-full max-w-4xl h-[600px] rounded-3xl shadow-2xl flex relative">
+            <div className="bg-white w-full max-w-4xl h-[600px] rounded-3xl shadow-2xl flex relative overflow-hidden">
 
                 {/* --- LEFT SIDEBAR (Progress & Branding) --- */}
                 <div className="w-1/3 bg-gray-50 border-r border-gray-100 p-8 flex flex-col justify-between hidden md:flex rounded-l-3xl">
@@ -222,9 +236,9 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
                                     autoFocus
                                 />
 
-                                {/* DROPDOWN MENU */}
+                                {/* DROPDOWN MENU (Visually Upgraded) */}
                                 {showDropdown && suggestions.length > 0 && (
-                                    <div className="absolute top-full left-0 right-0 bg-white border border-gray-100 rounded-xl shadow-2xl mt-2 max-h-60 overflow-y-auto z-[100]">
+                                    <div className="absolute top-full left-0 right-0 bg-white border border-gray-100 rounded-2xl shadow-xl mt-2 max-h-60 overflow-y-auto z-[100] p-2">
                                         {suggestions.map((s) => (
                                             <div
                                                 key={s.place_id}
@@ -232,9 +246,15 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
                                                     e.stopPropagation();
                                                     selectCity(s.description);
                                                 }}
-                                                className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 text-sm font-medium text-gray-700 flex gap-2 items-center transition-colors"
+                                                className="px-4 py-3 hover:bg-gray-50 rounded-xl cursor-pointer text-sm font-medium text-gray-700 flex gap-3 items-center transition-colors group"
                                             >
-                                                <span className="opacity-50">📍</span> {s.description}
+                                                <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 group-hover:bg-white group-hover:shadow-sm transition-all">
+                                                    📍
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold text-gray-900">{s.structured_formatting.main_text}</span>
+                                                    <span className="text-xs text-gray-400">{s.structured_formatting.secondary_text}</span>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
