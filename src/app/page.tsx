@@ -16,7 +16,7 @@ import ItineraryDisplay from '@/components/ItineraryDisplay';
 
 const LIBRARIES: any[] = ["places"];
 
-// --- CONSTANTS (THE BRAIN) ---
+// --- CONSTANTS ---
 const DAILY_TEMPLATE = [
   { id: 'MORNING', label: 'Morning Exploration', types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'falls', 'view point'] },
   { id: 'LUNCH', label: 'Lunch Break', types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic', 'mess', 'bhavan'] },
@@ -34,7 +34,6 @@ const TRIP_VIBES = [
 ];
 
 const MAP_STYLES = { width: '100%', height: '100%' };
-const PATH_OPTIONS = { strokeColor: '#2563EB', strokeOpacity: 0.5, strokeWeight: 4 };
 
 // Keywords for filtering
 const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani'];
@@ -141,7 +140,7 @@ export default function Home() {
   const [currentSelectionIdx, setCurrentSelectionIdx] = useState(0);
   const [isSelecting, setIsSelecting] = useState(false);
 
-  // --- FEATURE 1: SYNC STATE ---
+  // Feature 1: Sync State (Hover Effect)
   const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
 
   // --- SETTINGS STATE ---
@@ -229,12 +228,10 @@ export default function Home() {
   }, []);
 
   const mapCenter = useMemo(() => {
-    // Sync Feature: If hovering, center the map on that place
     if (hoveredPlaceId) {
       const place = (isSelecting ? selectionQueue[currentSelectionIdx]?.candidates : tripPlan).find(p => p.id === hoveredPlaceId);
       if (place) return { lat: place.lat, lng: place.lng };
     }
-
     if (isSelecting && selectionQueue[currentSelectionIdx]?.candidates.length > 0) {
       return { lat: selectionQueue[currentSelectionIdx].candidates[0].lat, lng: selectionQueue[currentSelectionIdx].candidates[0].lng };
     }
@@ -269,9 +266,9 @@ export default function Home() {
     const destinations = data.destinations || [];
     if (destinations.length === 0 && data.destination) destinations.push(data.destination);
 
-    // FIX: Sanitize input to handle "City, Country" format
+    // Sanitize input to handle "City, Country" format
     const searchConditions = destinations.flatMap((d: string) => {
-      const cleanName = d.split(',')[0].trim();
+      const cleanName = d.split(',')[0].trim(); // "Bangalore, India" -> "Bangalore"
       return [
         `city.ilike.%${cleanName}%`,
         `zone_id.ilike.%${cleanName}%`
@@ -304,6 +301,28 @@ export default function Home() {
     let newSelectionQueue: SelectionStep[] = [];
     let suggestedPlaceIds = new Set<string>();
 
+    // --- STEP 2.5: RECOMMEND A STAY ---
+    const possibleStays = allPlaces.filter(p => {
+      const isStay = ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k));
+      const matchesBudget = p.price_level ? p.price_level <= maxPriceTier : true;
+      const matchesVibe = data.preferences?.stayType?.length
+        ? data.preferences.stayType.some((t: string) => p.type.toLowerCase().includes(t.toLowerCase()) || p.description?.toLowerCase().includes(t.toLowerCase()))
+        : true;
+      return isStay && matchesBudget && matchesVibe;
+    });
+
+    if (possibleStays.length > 0) {
+      possibleStays.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+
+      newSelectionQueue.push({
+        day: 1,
+        slotLabel: "Check-in: Perfect Stay 🏨",
+        candidates: possibleStays.slice(0, 4)
+      });
+
+      possibleStays.slice(0, 4).forEach(p => suggestedPlaceIds.add(p.id));
+    }
+
     for (let day = 1; day <= totalDays; day++) {
       DAILY_TEMPLATE.forEach((slot) => {
 
@@ -314,17 +333,14 @@ export default function Home() {
           return slot.types.some(t => typeStr.includes(t));
         });
 
-        // FIXED LOGIC: Checking price tier inside the filter scope
+        // FIXED: Correct logic block for filtering budget
         if (slot.id === 'LUNCH' || slot.id === 'DINNER') {
           candidates = candidates.filter(p => !NON_FOOD_KEYWORDS.some(k => p.type.toLowerCase().includes(k)));
         } else {
           candidates = candidates.filter(p => {
-            // 1. Exclude accomodation
             const isNotStay = !ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k));
-
-            // 2. Check Budget (if price_level exists)
+            // Budget Check happens INSIDE the filter loop now
             const isWithinBudget = p.price_level ? p.price_level <= maxPriceTier : true;
-
             return isNotStay && isWithinBudget;
           });
         }
@@ -334,25 +350,20 @@ export default function Home() {
           let score = 50;
           const text = (p.name + " " + p.description + " " + p.type + " " + (p.vibes || []).join(' ')).toLowerCase();
 
-          // Base Vibe Matching
-          TRIP_VIBES.forEach(v => {
-            if (text.includes(v.id)) score += 20;
-          });
+          if (data.preferences?.tripVibe) {
+            data.preferences.tripVibe.forEach((v: string) => {
+              if (text.includes(v.toLowerCase())) score += 25;
+            });
+          } else {
+            TRIP_VIBES.forEach(v => { if (text.includes(v.id)) score += 10; });
+          }
 
-          // Group Logic
           if (data.groupType === 'FAMILY' && (p.safety_score || 0) > 4) score += 15;
           if (data.groupType === 'FRIENDS' && (p.trend_score || 0) > 4) score += 15;
           if (data.groupType === 'COUPLE' && text.includes('romantic')) score += 20;
 
-          // Granular Preference Scoring
           if (data.preferences?.pool && (text.includes('pool') || (p.amenities || []).includes('pool'))) {
             score += 40;
-          }
-
-          if (data.preferences?.ambience && data.preferences.ambience.length > 0) {
-            data.preferences.ambience.forEach((amb: string) => {
-              if (text.includes(amb.toLowerCase())) score += 25;
-            });
           }
 
           if (data.preferences?.view === 'VIEW' && (text.includes('view') || text.includes('sea') || text.includes('valley'))) {
@@ -402,7 +413,6 @@ export default function Home() {
     }
   };
 
-  // Feature 2: Handle Drag and Drop Reordering
   const handleReorder = (newOrder: Place[]) => {
     setTripPlan(newOrder);
   };
