@@ -16,7 +16,7 @@ import ItineraryDisplay from '@/components/ItineraryDisplay';
 
 const LIBRARIES: any[] = ["places"];
 
-// --- CONSTANTS ---
+// --- CONSTANTS (THE BRAIN) ---
 const DAILY_TEMPLATE = [
   { id: 'MORNING', label: 'Morning Exploration', types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'falls', 'view point'] },
   { id: 'LUNCH', label: 'Lunch Break', types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic', 'mess', 'bhavan'] },
@@ -140,7 +140,7 @@ export default function Home() {
   const [currentSelectionIdx, setCurrentSelectionIdx] = useState(0);
   const [isSelecting, setIsSelecting] = useState(false);
 
-  // Feature 1: Sync State (Hover Effect)
+  // --- FEATURE 1: SYNC STATE ---
   const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
 
   // --- SETTINGS STATE ---
@@ -228,10 +228,12 @@ export default function Home() {
   }, []);
 
   const mapCenter = useMemo(() => {
+    // Sync Feature: If hovering, center the map on that place
     if (hoveredPlaceId) {
       const place = (isSelecting ? selectionQueue[currentSelectionIdx]?.candidates : tripPlan).find(p => p.id === hoveredPlaceId);
       if (place) return { lat: place.lat, lng: place.lng };
     }
+
     if (isSelecting && selectionQueue[currentSelectionIdx]?.candidates.length > 0) {
       return { lat: selectionQueue[currentSelectionIdx].candidates[0].lat, lng: selectionQueue[currentSelectionIdx].candidates[0].lng };
     }
@@ -266,7 +268,8 @@ export default function Home() {
     const destinations = data.destinations || [];
     if (destinations.length === 0 && data.destination) destinations.push(data.destination);
 
-    // Sanitize input to handle "City, Country" format
+    // FIX: Sanitize input to handle "City, Country" format
+    // We split by comma and take only the first part (the city name)
     const searchConditions = destinations.flatMap((d: string) => {
       const cleanName = d.split(',')[0].trim(); // "Bangalore, India" -> "Bangalore"
       return [
@@ -275,6 +278,7 @@ export default function Home() {
       ];
     });
 
+    // Join with commas for the OR filter
     const searchString = searchConditions.join(',');
 
     const { data: allPlaces, error } = await supabase
@@ -333,13 +337,12 @@ export default function Home() {
           return slot.types.some(t => typeStr.includes(t));
         });
 
-        // FIXED: Correct logic block for filtering budget
+        // FIXED: Correct logic block for filtering budget and category
         if (slot.id === 'LUNCH' || slot.id === 'DINNER') {
           candidates = candidates.filter(p => !NON_FOOD_KEYWORDS.some(k => p.type.toLowerCase().includes(k)));
         } else {
           candidates = candidates.filter(p => {
             const isNotStay = !ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k));
-            // Budget Check happens INSIDE the filter loop now
             const isWithinBudget = p.price_level ? p.price_level <= maxPriceTier : true;
             return isNotStay && isWithinBudget;
           });
@@ -350,6 +353,7 @@ export default function Home() {
           let score = 50;
           const text = (p.name + " " + p.description + " " + p.type + " " + (p.vibes || []).join(' ')).toLowerCase();
 
+          // Match Trip Vibe (Activities)
           if (data.preferences?.tripVibe) {
             data.preferences.tripVibe.forEach((v: string) => {
               if (text.includes(v.toLowerCase())) score += 25;
@@ -358,14 +362,15 @@ export default function Home() {
             TRIP_VIBES.forEach(v => { if (text.includes(v.id)) score += 10; });
           }
 
+          // Group Logic
           if (data.groupType === 'FAMILY' && (p.safety_score || 0) > 4) score += 15;
           if (data.groupType === 'FRIENDS' && (p.trend_score || 0) > 4) score += 15;
           if (data.groupType === 'COUPLE' && text.includes('romantic')) score += 20;
 
+          // Pool/View Logic
           if (data.preferences?.pool && (text.includes('pool') || (p.amenities || []).includes('pool'))) {
             score += 40;
           }
-
           if (data.preferences?.view === 'VIEW' && (text.includes('view') || text.includes('sea') || text.includes('valley'))) {
             score += 30;
           }
@@ -413,6 +418,7 @@ export default function Home() {
     }
   };
 
+  // Feature 2: Handle Drag and Drop Reordering
   const handleReorder = (newOrder: Place[]) => {
     setTripPlan(newOrder);
   };

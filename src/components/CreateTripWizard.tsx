@@ -48,7 +48,7 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
 
     const [preferences, setPreferences] = useState({
         tripVibe: [] as string[],   // What you want to DO (Adventure, Relaxing)
-        stayType: [] as string[],   // Where you want to STAY (Resort, Homestay)
+        stayType: [] as string[],   // Where you want to STAY (Hotel, Hostel, Resort)
         amenities: [] as string[],  // Must-haves (Pool, WiFi)
         view: ''                    // Special (Sea View, etc.)
     });
@@ -359,12 +359,12 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
                     )}
 
                     {/* ==========================
-                        TAB 3: PREFERENCES
+                        TAB 3: PREFERENCES (LOGIC SPLIT)
                        ========================== */}
                     {activeTab === 'PREFERENCES' && (
                         <div className="animate-in slide-in-from-right-8 duration-300 space-y-10">
 
-                            {/* SECTION A: TRAVEL VIBE */}
+                            {/* SECTION A: TRAVEL VIBE (Activities) */}
                             <div>
                                 <h3 className="text-lg font-black text-gray-900 mb-4 flex items-center gap-2">
                                     <span>🎒</span> Trip Vibe
@@ -387,7 +387,7 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
 
                             <hr className="border-gray-100" />
 
-                            {/* SECTION B: ACCOMMODATION & BUDGET */}
+                            {/* SECTION B: ACCOMMODATION (Stay) */}
                             <div>
                                 <h3 className="text-lg font-black text-gray-900 mb-4 flex items-center gap-2">
                                     <span>🏨</span> Accommodation
@@ -427,13 +427,16 @@ export default function CreateTripWizard({ onClose, onComplete }: WizardProps) {
                                     </div>
                                 </div>
 
-                                {/* STAY TYPE */}
+                                {/* STAY TYPE & VIBE (UPDATED with Hotel/Hostel) */}
                                 <div className="mb-4">
                                     <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2 ml-1">
-                                        Stay Type & Vibe
+                                        Stay Type
                                     </label>
                                     <div className="flex flex-wrap gap-2">
-                                        {['Luxury', 'Boutique', 'Rustic', 'Homestay', 'Resort', 'Cozy'].map(type => (
+                                        {[
+                                            'Hotel', 'Hostel', 'Resort', 'Homestay',
+                                            'Apartment', 'Luxury', 'Boutique', 'Rustic'
+                                        ].map(type => (
                                             <button
                                                 key={type}
                                                 onClick={() => togglePreference('stayType', type)}
