@@ -6,7 +6,7 @@ import { useLoadScript, GoogleMap, Marker, Polyline, DirectionsRenderer, InfoWin
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
-// COMPONENTS
+// --- COMPONENTS ---
 import LandingPage from '@/components/LandingPage';
 import Sidebar, { NavView } from '@/components/Sidebar';
 import DiscoveryView from '@/components/DiscoveryView';
@@ -14,17 +14,41 @@ import DashboardView from '@/components/DashboardView';
 import CreateTripWizard from '@/components/CreateTripWizard';
 import ItineraryDisplay from '@/components/ItineraryDisplay';
 
+// --- LIBRARIES ---
 const LIBRARIES: any[] = ["places"];
 
 // --- CONSTANTS (THE BRAIN) ---
+
+// 1. Daily Activity Slots
 const DAILY_TEMPLATE = [
-  { id: 'MORNING', label: 'Morning Exploration', types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'falls', 'view point'] },
-  { id: 'LUNCH', label: 'Lunch Break', types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic', 'mess', 'bhavan'] },
-  { id: 'AFTERNOON', label: 'Afternoon Vibe', types: ['museum', 'gallery', 'mall', 'shopping', 'zoo', 'aquarium', 'hall', 'monument', 'market'] },
-  { id: 'EVENING', label: 'Evening Chill', types: ['park', 'sunset', 'lake', 'club', 'pub', 'bar', 'theater', 'beach', 'turf', 'bridge'] },
-  { id: 'DINNER', label: 'Dinner Feast', types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine', 'late_night', 'dhaba', 'hotel'] }
+  { 
+    id: 'MORNING', 
+    label: 'Morning Exploration', 
+    types: ['park', 'nature', 'temple', 'religious', 'landmark', 'museum', 'fort', 'sightseeing', 'falls', 'view point'] 
+  },
+  { 
+    id: 'LUNCH', 
+    label: 'Lunch Break', 
+    types: ['restaurant', 'cafe', 'food', 'kitchen', 'bistro', 'dining', 'eatery', 'iconic', 'mess', 'bhavan'] 
+  },
+  { 
+    id: 'AFTERNOON', 
+    label: 'Afternoon Vibe', 
+    types: ['museum', 'gallery', 'mall', 'shopping', 'zoo', 'aquarium', 'hall', 'monument', 'market'] 
+  },
+  { 
+    id: 'EVENING', 
+    label: 'Evening Chill', 
+    types: ['park', 'sunset', 'lake', 'club', 'pub', 'bar', 'theater', 'beach', 'turf', 'bridge'] 
+  },
+  { 
+    id: 'DINNER', 
+    label: 'Dinner Feast', 
+    types: ['restaurant', 'food', 'bar', 'grill', 'kitchen', 'dine', 'late_night', 'dhaba', 'hotel'] 
+  }
 ];
 
+// 2. Trip Vibes (Keywords for Matching)
 const TRIP_VIBES = [
   { id: 'leisure', label: 'Relaxing', keywords: ['resort', 'park', 'spa', 'lake', 'nature'] },
   { id: 'foodie', label: 'Foodie', keywords: ['restaurant', 'cafe', 'late_night', 'pub', 'bar', 'kitchen'] },
@@ -33,17 +57,24 @@ const TRIP_VIBES = [
   { id: 'shopping', label: 'Shopping', keywords: ['mall', 'market', 'shopping', 'store'] }
 ];
 
+// 3. Map Styles
 const MAP_STYLES = { width: '100%', height: '100%' };
 
-// Keywords for filtering
-const NON_VEG_KEYWORDS = ['chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani'];
+// 4. Filtering Keywords
+const NON_VEG_KEYWORDS = [
+    'chicken', 'mutton', 'lamb', 'beef', 'pork', 'steak', 'seafood', 'fish', 'kebab', 'biryani'
+]; 
+
 const NON_FOOD_KEYWORDS = [
-  'resort', 'inn', 'stay', 'cottage', 'residency', 'lodge', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb', 'homestay',
-  'temple', 'shrine', 'worship', 'church', 'mosque', 'fort', 'park', 'garden', 'museum', 'dam', 'falls', 'view point',
+  'resort', 'inn', 'stay', 'cottage', 'residency', 'lodge', 'dorm', 'hostel', 'room', 
+  'living', 'apartment', 'villa', 'bnb', 'homestay', 'temple', 'shrine', 'worship', 
+  'church', 'mosque', 'fort', 'park', 'garden', 'museum', 'dam', 'falls', 'view point', 
   'market', 'stand', 'store', 'shop', 'complex', 'race', 'bridge', 'river', 'lake'
 ];
+
 const ACCOMMODATION_KEYWORDS = [
-  'resort', 'inn', 'stay', 'cottage', 'residency', 'lodge', 'dorm', 'hostel', 'room', 'living', 'apartment', 'villa', 'bnb', 'homestay', 'hotel', 'palace'
+  'resort', 'inn', 'stay', 'cottage', 'residency', 'lodge', 'dorm', 'hostel', 'room', 
+  'living', 'apartment', 'villa', 'bnb', 'homestay', 'hotel', 'palace', 'luxury', 'boutique'
 ];
 
 // --- INITIALIZE SUPABASE ---
@@ -114,36 +145,36 @@ export default function Home() {
     libraries: LIBRARIES,
   });
 
-  // Auth Session Management
+  // --- AUTH MANAGEMENT ---
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setSession(session);
+    });
+    
     return () => subscription.unsubscribe();
   }, []);
 
-  // --- APP STATE ---
+  // --- APP NAVIGATION STATE ---
   const [activeView, setActiveView] = useState<NavView>('DASHBOARD');
   const [showWizard, setShowWizard] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // --- WIZARD STATE & DATA ---
+  // --- TRIP DATA STATE ---
   const [tripMeta, setTripMeta] = useState<any>({});
   const [isWizardActive, setIsWizardActive] = useState(false);
-
-  // --- TRIP DATA ---
   const [tripPlan, setTripPlan] = useState<Place[]>([]);
 
-  // --- SELECTION MODE STATE ---
+  // --- SELECTION / PLANNING STATE ---
   const [selectionQueue, setSelectionQueue] = useState<SelectionStep[]>([]);
   const [currentSelectionIdx, setCurrentSelectionIdx] = useState(0);
   const [isSelecting, setIsSelecting] = useState(false);
-
-  // --- FEATURE 1: SYNC STATE ---
   const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
 
-  // --- SETTINGS STATE ---
+  // --- USER SETTINGS STATE ---
   const [userSettings, setUserSettings] = useState({
     name: 'Traveler',
     email: '',
@@ -153,15 +184,23 @@ export default function Home() {
     theme: 'light'
   });
 
-  // --- COLLAB & PACKING STATE ---
+  // --- COLLABORATION & TOOLS STATE ---
   const [collabTab, setCollabTab] = useState<'MEMBERS' | 'CHAT' | 'SPLIT' | 'PACKING'>('MEMBERS');
   const [tripMembers, setTripMembers] = useState<string[]>(['You']);
   const [inviteLink, setInviteLink] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([{ id: '1', user: 'System', text: 'Welcome to the Trip Chat!', time: '10:00 AM', isMe: false }]);
+  
+  // Chat
+  const [messages, setMessages] = useState<ChatMessage[]>([
+      { id: '1', user: 'System', text: 'Welcome to the Trip Chat!', time: '10:00 AM', isMe: false }
+  ]);
   const [newMessage, setNewMessage] = useState('');
+  
+  // Expenses
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [newExpense, setNewExpense] = useState({ what: '', amount: '', who: 'You' });
+  
+  // Packing List
   const [packingList, setPackingList] = useState<PackingItem[]>([
     { id: '1', text: 'Passport / ID', checked: false },
     { id: '2', text: 'Chargers & Cables', checked: false },
@@ -169,7 +208,7 @@ export default function Home() {
   ]);
   const [newPackingItem, setNewPackingItem] = useState('');
 
-  // --- AI & MAP STATE ---
+  // --- AI ASSISTANT & MAP STATE ---
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiActivePlace, setAiActivePlace] = useState<Place | null>(null);
   const [aiChatHistory, setAiChatHistory] = useState<ChatMessage[]>([]);
@@ -177,7 +216,7 @@ export default function Home() {
   const [directionsResponse, setDirectionsResponse] = useState<google.maps.DirectionsResult | null>(null);
   const [isRouting, setIsRouting] = useState(false);
 
-  // HELP FORM STATE
+  // --- HELP & FEEDBACK STATE ---
   const [helpTab, setHelpTab] = useState<'GUIDE' | 'FEEDBACK'>('GUIDE');
   const [feedbackText, setFeedbackText] = useState('');
 
@@ -219,7 +258,7 @@ export default function Home() {
     }
   }, [session]);
 
-  // Generate Invite Link
+  // Generate Random Invite Link
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const mockTripId = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -227,17 +266,23 @@ export default function Home() {
     }
   }, []);
 
+  // --- MAP LOGIC ---
   const mapCenter = useMemo(() => {
-    // Sync Feature: If hovering, center the map on that place
+    // 1. If hovering a card, center on that place
     if (hoveredPlaceId) {
-      const place = (isSelecting ? selectionQueue[currentSelectionIdx]?.candidates : tripPlan).find(p => p.id === hoveredPlaceId);
-      if (place) return { lat: place.lat, lng: place.lng };
+        const place = (isSelecting ? selectionQueue[currentSelectionIdx]?.candidates : tripPlan).find(p => p.id === hoveredPlaceId);
+        if (place) return { lat: place.lat, lng: place.lng };
     }
-
+    
+    // 2. If selecting, center on first candidate
     if (isSelecting && selectionQueue[currentSelectionIdx]?.candidates.length > 0) {
       return { lat: selectionQueue[currentSelectionIdx].candidates[0].lat, lng: selectionQueue[currentSelectionIdx].candidates[0].lng };
     }
+    
+    // 3. If plan exists, center on first stop
     if (tripPlan.length > 0) return { lat: tripPlan[0].lat, lng: tripPlan[0].lng };
+    
+    // 4. Default: Bangalore
     return { lat: 12.9716, lng: 77.5946 };
   }, [tripPlan, isSelecting, selectionQueue, currentSelectionIdx, hoveredPlaceId]);
 
@@ -250,13 +295,15 @@ export default function Home() {
     }
   };
 
-  // --- WIZARD COMPLETION & AI ENGINE ---
+  // ============================================================
+  //  THE AI ENGINE: GENERATION LOGIC
+  // ============================================================
   const handleWizardComplete = async (data: any) => {
     console.log("Wizard Data:", data);
     setTripMeta(data);
     setShowWizard(false);
 
-    // 1. Calculate Duration
+    // 1. Calculate Trip Duration
     let totalDays = 1;
     if (data.dates.start && data.dates.end) {
       const start = new Date(data.dates.start);
@@ -264,21 +311,21 @@ export default function Home() {
       totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
     }
 
-    // 2. Fetch Candidates
+    // 2. Fetch Places (BROAD SEARCH FIX)
     const destinations = data.destinations || [];
     if (destinations.length === 0 && data.destination) destinations.push(data.destination);
 
-    // FIX: Sanitize input to handle "City, Country" format
-    // We split by comma and take only the first part (the city name)
+    // Sanitize input to handle "City, Country" format and search all relevant text fields
     const searchConditions = destinations.flatMap((d: string) => {
-      const cleanName = d.split(',')[0].trim(); // "Bangalore, India" -> "Bangalore"
-      return [
-        `city.ilike.%${cleanName}%`,
-        `zone_id.ilike.%${cleanName}%`
-      ];
+        const cleanName = d.split(',')[0].trim(); 
+        return [
+            `city.ilike.%${cleanName}%`,
+            `zone_id.ilike.%${cleanName}%`,
+            `name.ilike.%${cleanName}%`,
+            `description.ilike.%${cleanName}%`
+        ];
     });
-
-    // Join with commas for the OR filter
+    
     const searchString = searchConditions.join(',');
 
     const { data: allPlaces, error } = await supabase
@@ -289,100 +336,142 @@ export default function Home() {
     if (error) console.error("Supabase Error:", error);
 
     if (!allPlaces || allPlaces.length === 0) {
-      alert(`No places found. Loading sample data.`);
+      alert(`No places found. Loading sample data or try a different city.`);
       return;
     }
 
-    // --- PREPARE LOGIC VARIABLES ---
+    // --- PREPARE BUDGET LOGIC ---
     let maxPriceTier = 4;
     const nightlyBudget = parseInt(data.budget?.nightly || '5000');
+    
     if (nightlyBudget < 2000) maxPriceTier = 1;      // Budget
     else if (nightlyBudget < 5000) maxPriceTier = 2; // Mid
     else if (nightlyBudget < 10000) maxPriceTier = 3; // Premium
     else maxPriceTier = 4; // Luxury
 
-    // 3. THE AI ENGINE LOOP
+    // --- INITIALIZE QUEUE ---
     let newSelectionQueue: SelectionStep[] = [];
     let suggestedPlaceIds = new Set<string>();
 
-    // --- STEP 2.5: RECOMMEND A STAY ---
-    const possibleStays = allPlaces.filter(p => {
-      const isStay = ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k));
-      const matchesBudget = p.price_level ? p.price_level <= maxPriceTier : true;
-      const matchesVibe = data.preferences?.stayType?.length
-        ? data.preferences.stayType.some((t: string) => p.type.toLowerCase().includes(t.toLowerCase()) || p.description?.toLowerCase().includes(t.toLowerCase()))
-        : true;
-      return isStay && matchesBudget && matchesVibe;
+    // --- STEP 1: FIND THE PERFECT STAY ---
+    // Filter places that are accommodations
+    let bestStays = allPlaces.filter(p => {
+        const isStay = ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k));
+        const matchesBudget = p.price_level ? p.price_level <= maxPriceTier : true;
+        
+        // Strict match on stay type if selected (e.g. Resort)
+        const matchesType = data.preferences?.stayType?.length 
+            ? data.preferences.stayType.some((t: string) => 
+                p.type.toLowerCase().includes(t.toLowerCase()) || 
+                p.description?.toLowerCase().includes(t.toLowerCase())
+              ) 
+            : true; 
+            
+        return isStay && matchesBudget && matchesType;
     });
 
-    if (possibleStays.length > 0) {
-      possibleStays.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-
-      newSelectionQueue.push({
-        day: 1,
-        slotLabel: "Check-in: Perfect Stay 🏨",
-        candidates: possibleStays.slice(0, 4)
-      });
-
-      possibleStays.slice(0, 4).forEach(p => suggestedPlaceIds.add(p.id));
+    // Fallback 1: If strict match fails, relax "Type" constraint but keep Budget
+    if (bestStays.length === 0) {
+        bestStays = allPlaces.filter(p => {
+            const isStay = ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k));
+            const matchesBudget = p.price_level ? p.price_level <= maxPriceTier : true;
+            return isStay && matchesBudget;
+        });
     }
 
+    // Fallback 2: Just give ANY accommodation in the city
+    if (bestStays.length === 0) {
+        bestStays = allPlaces.filter(p => ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k)));
+    }
+
+    // Add Stay to Queue (if found)
+    if (bestStays.length > 0) {
+        // Score them based on rating and amenities
+        const scoredStays = bestStays.map(p => {
+            let score = p.rating || 0;
+            const text = (p.name + " " + p.description).toLowerCase();
+            
+            if (data.preferences?.pool && text.includes('pool')) score += 5;
+            if (data.preferences?.view === 'VIEW' && (text.includes('sea') || text.includes('view'))) score += 5;
+            
+            return { place: p, score };
+        });
+        
+        scoredStays.sort((a, b) => b.score - a.score);
+        const topStays = scoredStays.slice(0, 4).map(s => s.place);
+
+        newSelectionQueue.push({
+            day: 1,
+            slotLabel: "Check-in: Your Stay 🏨",
+            candidates: topStays
+        });
+        
+        // Mark these as used so they don't show up as "Activities"
+        topStays.forEach(p => suggestedPlaceIds.add(p.id));
+    }
+
+    // --- STEP 2: GENERATE DAILY ITINERARY ---
     for (let day = 1; day <= totalDays; day++) {
       DAILY_TEMPLATE.forEach((slot) => {
 
-        // Initial Filter
+        // 1. Filter candidates by Slot Type (e.g. Morning -> Park/Temple)
         let candidates = allPlaces.filter(p => {
           if (suggestedPlaceIds.has(p.id)) return false;
           const typeStr = (p.type + " " + p.description).toLowerCase();
           return slot.types.some(t => typeStr.includes(t));
         });
 
-        // FIXED: Correct logic block for filtering budget and category
+        // 2. Filter by Category & Budget
         if (slot.id === 'LUNCH' || slot.id === 'DINNER') {
+          // For food, exclude hotels/attractions
           candidates = candidates.filter(p => !NON_FOOD_KEYWORDS.some(k => p.type.toLowerCase().includes(k)));
         } else {
+          // For activities, exclude food/hotels
           candidates = candidates.filter(p => {
-            const isNotStay = !ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k));
-            const isWithinBudget = p.price_level ? p.price_level <= maxPriceTier : true;
-            return isNotStay && isWithinBudget;
+             const isNotStay = !ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k));
+             const isWithinBudget = p.price_level ? p.price_level <= maxPriceTier : true;
+             return isNotStay && isWithinBudget;
           });
         }
 
-        // --- SCORING SYSTEM ---
+        // 3. Score Candidates based on User Preferences
         let scoredCandidates = candidates.map(p => {
           let score = 50;
           const text = (p.name + " " + p.description + " " + p.type + " " + (p.vibes || []).join(' ')).toLowerCase();
-
-          // Match Trip Vibe (Activities)
+          
+          // Match Trip Vibe
           if (data.preferences?.tripVibe) {
-            data.preferences.tripVibe.forEach((v: string) => {
-              if (text.includes(v.toLowerCase())) score += 25;
-            });
+              data.preferences.tripVibe.forEach((v: string) => {
+                  if (text.includes(v.toLowerCase())) score += 25;
+              });
           } else {
-            TRIP_VIBES.forEach(v => { if (text.includes(v.id)) score += 10; });
+              TRIP_VIBES.forEach(v => { if (text.includes(v.id)) score += 10; });
           }
-
-          // Group Logic
+          
+          // Match Group Type
           if (data.groupType === 'FAMILY' && (p.safety_score || 0) > 4) score += 15;
           if (data.groupType === 'FRIENDS' && (p.trend_score || 0) > 4) score += 15;
           if (data.groupType === 'COUPLE' && text.includes('romantic')) score += 20;
 
-          // Pool/View Logic
+          // Match Amenities (Pool / View) - Bonus points
           if (data.preferences?.pool && (text.includes('pool') || (p.amenities || []).includes('pool'))) {
-            score += 40;
+              score += 40;
           }
           if (data.preferences?.view === 'VIEW' && (text.includes('view') || text.includes('sea') || text.includes('valley'))) {
-            score += 30;
+              score += 30;
           }
 
           return { place: p, score };
         });
 
+        // 4. Sort by Score
         scoredCandidates.sort((a, b) => b.score - a.score);
 
+        // 5. Add Top 4 to Queue
         if (scoredCandidates.length > 0) {
           const top4 = scoredCandidates.slice(0, 4).map(c => c.place);
           top4.forEach(p => suggestedPlaceIds.add(p.id));
+          
           newSelectionQueue.push({
             day,
             slotLabel: slot.label,
@@ -393,10 +482,11 @@ export default function Home() {
     }
 
     if (newSelectionQueue.length === 0) {
-      alert("Could not generate a plan with these filters. Try fewer constraints.");
+      alert("Could not generate a plan. Please try broader search terms.");
       return;
     }
 
+    // --- FINALIZE ---
     setSelectionQueue(newSelectionQueue);
     setCurrentSelectionIdx(0);
     setTripPlan([]);
@@ -404,12 +494,20 @@ export default function Home() {
     setActiveView('PLAN');
   };
 
+  // --- SELECTION HANDLER ---
   const handleSelectPlace = (place: Place) => {
     const currentStep = selectionQueue[currentSelectionIdx];
-    const placeWithTime = { ...place, time: `Day ${currentStep.day} - ${currentStep.slotLabel}` };
+    
+    // Customize label for Stay
+    const timeLabel = currentStep.slotLabel.includes("Stay") 
+        ? "Check-in" 
+        : `Day ${currentStep.day} - ${currentStep.slotLabel}`;
+    
+    const placeWithTime = { ...place, time: timeLabel };
     setTripPlan(prev => [...prev, placeWithTime]);
     setHoveredPlaceId(null);
 
+    // Advance or Finish
     if (currentSelectionIdx < selectionQueue.length - 1) {
       setCurrentSelectionIdx(prev => prev + 1);
     } else {
@@ -417,19 +515,26 @@ export default function Home() {
       alert("Itinerary Complete! 🎉");
     }
   };
-
-  // Feature 2: Handle Drag and Drop Reordering
+  
+  // --- DRAG AND DROP HANDLER ---
   const handleReorder = (newOrder: Place[]) => {
-    setTripPlan(newOrder);
+      setTripPlan(newOrder);
   };
 
+  // --- ROUTING HANDLER ---
   const calculateRoute = async () => {
     if (tripPlan.length < 2) return;
+    
     setIsRouting(true);
     const directionsService = new google.maps.DirectionsService();
+    
     const origin = { lat: tripPlan[0].lat, lng: tripPlan[0].lng };
     const destination = { lat: tripPlan[tripPlan.length - 1].lat, lng: tripPlan[tripPlan.length - 1].lng };
-    const waypoints = tripPlan.slice(1, -1).map(p => ({ location: { lat: p.lat, lng: p.lng }, stopover: true }));
+    
+    const waypoints = tripPlan.slice(1, -1).map(p => ({ 
+        location: { lat: p.lat, lng: p.lng }, 
+        stopover: true 
+    }));
 
     directionsService.route({
       origin: origin,
@@ -444,6 +549,7 @@ export default function Home() {
     });
   };
 
+  // --- DOWNLOAD PDF HANDLER ---
   const handleDownloadOffline = async () => {
     const element = document.getElementById('itinerary-container');
 
@@ -474,6 +580,7 @@ export default function Home() {
     }
   };
 
+  // --- FEEDBACK HANDLER ---
   const submitFeedback = async () => {
     if (!feedbackText.trim()) return;
 
@@ -494,14 +601,34 @@ export default function Home() {
     }
   };
 
-  // --- STANDARD HANDLERS ---
+  // --- UTILITY HANDLERS ---
   const handleCopyLink = () => { navigator.clipboard.writeText(inviteLink); alert("Invite link copied!"); };
-  const handleSendMessage = () => { if (!newMessage.trim()) return; setMessages(prev => [...prev, { id: Date.now().toString(), user: 'You', text: newMessage, time: 'Now', isMe: true }]); setNewMessage(''); };
-  const handleAddExpense = () => { if (!newExpense.what) return; setExpenses([...expenses, { id: Date.now().toString(), ...newExpense, amount: Number(newExpense.amount) }]); setShowExpenseForm(false); setNewExpense({ what: '', amount: '', who: 'You' }); };
-  const addPackingItem = () => { if (!newPackingItem) return; setPackingList([...packingList, { id: Date.now().toString(), text: newPackingItem, checked: false }]); setNewPackingItem(''); };
-  const togglePackingItem = (id: string) => { setPackingList(packingList.map(i => i.id === id ? { ...i, checked: !i.checked } : i)); };
+  
+  const handleSendMessage = () => { 
+      if (!newMessage.trim()) return; 
+      setMessages(prev => [...prev, { id: Date.now().toString(), user: 'You', text: newMessage, time: 'Now', isMe: true }]); 
+      setNewMessage(''); 
+  };
+  
+  const handleAddExpense = () => { 
+      if (!newExpense.what) return; 
+      setExpenses([...expenses, { id: Date.now().toString(), ...newExpense, amount: Number(newExpense.amount) }]); 
+      setShowExpenseForm(false); 
+      setNewExpense({ what: '', amount: '', who: 'You' }); 
+  };
+  
+  const addPackingItem = () => { 
+      if (!newPackingItem) return; 
+      setPackingList([...packingList, { id: Date.now().toString(), text: newPackingItem, checked: false }]); 
+      setNewPackingItem(''); 
+  };
+  
+  const togglePackingItem = (id: string) => { 
+      setPackingList(packingList.map(i => i.id === id ? { ...i, checked: !i.checked } : i)); 
+  };
 
   const handleLogout = async () => { await supabase.auth.signOut(); window.location.reload(); };
+  
   const removeFromTrip = (id: string) => setTripPlan(tripPlan.filter(p => p.id !== id));
 
   const calculateDays = () => {
@@ -514,6 +641,7 @@ export default function Home() {
   const myTotalPaid = expenses.filter(e => e.who === 'You').reduce((a, b) => a + b.amount, 0);
   const myBalance = myTotalPaid - costPerPerson;
 
+  // --- AI ASSISTANT HANDLER ---
   const openAiAssistant = (place: Place) => {
     setAiActivePlace(place);
     setAiChatHistory([{ id: 'system', user: 'Genius', text: `Hello! I'm your expert guide for ${place.name}. Ask me about tickets, dress code, or best times to visit!`, time: 'Now', isMe: false }]);
@@ -535,10 +663,10 @@ export default function Home() {
   if (!session) return <LandingPage />;
 
   return (
-    // FIX: ADDED 'w-full max-w-[100vw] overflow-x-hidden relative' for MOBILE
+    // MAIN WRAPPER
     <div className="flex h-screen w-full max-w-[100vw] bg-gray-50 overflow-hidden font-sans relative">
 
-      {/* SIDEBAR */}
+      {/* SIDEBAR COMPONENT */}
       <Sidebar
         currentView={activeView}
         onChangeView={handleViewChange}
@@ -557,6 +685,7 @@ export default function Home() {
         onClose={() => setIsSidebarOpen(false)}
       />
 
+      {/* MAIN CONTENT AREA */}
       <main className="flex-1 relative h-full flex flex-col bg-gray-50">
 
         {/* --- GLOBAL HEADER --- */}
@@ -585,14 +714,14 @@ export default function Home() {
           </div>
         </header>
 
-        {/* --- DASHBOARD VIEW --- */}
+        {/* --- VIEW 1: DASHBOARD --- */}
         {activeView === 'DASHBOARD' && !isWizardActive && (
           <div className="h-full w-full pt-20 lg:pt-24">
             <DashboardView onPlanTrip={() => setShowWizard(true)} onDiscovery={() => setActiveView('DISCOVERY' as any)} />
           </div>
         )}
 
-        {/* --- SETTINGS VIEW --- */}
+        {/* --- VIEW 2: SETTINGS --- */}
         {activeView === 'SETTINGS' && (
           <div className="h-full bg-gray-50 p-4 lg:p-8 overflow-y-auto pt-24">
             <div className="max-w-2xl mx-auto space-y-6">
@@ -638,7 +767,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- COLLAB VIEW --- */}
+        {/* --- VIEW 3: COLLAB HUB --- */}
         {activeView === 'COLLAB' && (
           <div className="h-full bg-gray-50 p-4 lg:p-8 flex flex-col items-center pt-24">
             <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col h-[80vh]">
@@ -665,8 +794,10 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* COLLAB CONTENT */}
+              {/* COLLAB CONTENT TABS */}
               <div className="flex-1 overflow-y-auto p-4 lg:p-6 bg-gray-50">
+                
+                {/* TAB: MEMBERS */}
                 {collabTab === 'MEMBERS' && (
                   <div className="space-y-6">
                     <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100">
@@ -689,6 +820,8 @@ export default function Home() {
                     </div>
                   </div>
                 )}
+
+                {/* TAB: PACKING */}
                 {collabTab === 'PACKING' && (
                   <div className="space-y-4">
                     <div className="flex gap-2 mb-4">
@@ -705,6 +838,8 @@ export default function Home() {
                     </div>
                   </div>
                 )}
+
+                {/* TAB: CHAT */}
                 {collabTab === 'CHAT' && (
                   <div className="flex flex-col h-full">
                     <div className="flex-1 space-y-3 mb-4 overflow-y-auto pr-2">
@@ -722,6 +857,8 @@ export default function Home() {
                     </div>
                   </div>
                 )}
+
+                {/* TAB: EXPENSES */}
                 {collabTab === 'SPLIT' && (
                   <div className="h-full flex flex-col">
                     <div className="bg-green-50 border border-green-100 p-6 rounded-2xl mb-6 text-center shadow-sm">
@@ -766,12 +903,13 @@ export default function Home() {
           </div>
         )}
 
-        {/* --- PLAN VIEW (TIMELINE OR SELECTION) --- */}
+        {/* --- VIEW 4: PLAN & MAP --- */}
         {activeView === 'PLAN' && isLoaded && (
           <div className="h-full w-full relative flex">
 
-            {/* MODE 1: SELECTION MODE (Choosing 4 Options) */}
+            {/* LEFT: SELECTION OR ITINERARY LIST */}
             {isSelecting ? (
+              // SELECTION MODE
               <div className="h-full flex flex-col bg-gray-50 border-r border-gray-200 w-full md:w-[480px] shadow-2xl z-20 overflow-hidden absolute left-0 top-0 pt-20">
                 <div className="bg-white px-6 py-6 border-b border-gray-200">
                   <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Day {selectionQueue[currentSelectionIdx]?.day}</span>
@@ -789,8 +927,8 @@ export default function Home() {
                     <button
                       key={place.id}
                       onClick={() => handleSelectPlace(place)}
-                      onMouseEnter={() => setHoveredPlaceId(place.id)}
-                      onMouseLeave={() => setHoveredPlaceId(null)}
+                      onMouseEnter={() => setHoveredPlaceId(place.id)} 
+                      onMouseLeave={() => setHoveredPlaceId(null)} 
                       className="w-full bg-white border border-gray-200 rounded-2xl p-4 text-left hover:border-blue-500 hover:ring-2 hover:ring-blue-100 transition-all group hover-lift shadow-sm hover:shadow-wanderlog"
                     >
                       <div className="h-32 bg-gray-100 rounded-xl mb-3 overflow-hidden relative">
@@ -808,7 +946,7 @@ export default function Home() {
                 </div>
               </div>
             ) : (
-              // MODE 2: FINAL ITINERARY VIEW (Wrapped for PDF)
+              // FINAL ITINERARY MODE (Wrapped for PDF)
               tripPlan.length > 0 && (
                 <div id="itinerary-container" className="h-full relative z-20">
                   <ItineraryDisplay
@@ -829,25 +967,25 @@ export default function Home() {
                 {/* SHOW CANDIDATES IF SELECTING */}
                 {isSelecting ? (
                   selectionQueue[currentSelectionIdx]?.candidates.map((place, i) => (
-                    <Marker
-                      key={place.id}
-                      position={{ lat: place.lat, lng: place.lng }}
-                      label={{ text: `${i + 1}`, color: "white", fontWeight: "bold" }}
-                      title={place.name}
-                      animation={hoveredPlaceId === place.id ? (window.google as any).maps.Animation.BOUNCE : null}
-                      zIndex={hoveredPlaceId === place.id ? 999 : 1}
+                    <Marker 
+                        key={place.id} 
+                        position={{ lat: place.lat, lng: place.lng }} 
+                        label={{ text: `${i + 1}`, color: "white", fontWeight: "bold" }} 
+                        title={place.name}
+                        animation={hoveredPlaceId === place.id ? (window.google as any).maps.Animation.BOUNCE : null}
+                        zIndex={hoveredPlaceId === place.id ? 999 : 1}
                     />
                   ))
                 ) : (
                   // SHOW FINAL PLAN
                   tripPlan.map((place, index) => (
-                    <Marker
-                      key={place.id}
-                      position={{ lat: place.lat, lng: place.lng }}
-                      label={{ text: `${index + 1}`, color: "white", fontWeight: "bold" }}
-                      title={place.name}
-                      animation={hoveredPlaceId === place.id ? (window.google as any).maps.Animation.BOUNCE : null}
-                      zIndex={hoveredPlaceId === place.id ? 999 : 1}
+                    <Marker 
+                        key={place.id} 
+                        position={{ lat: place.lat, lng: place.lng }} 
+                        label={{ text: `${index + 1}`, color: "white", fontWeight: "bold" }} 
+                        title={place.name} 
+                        animation={hoveredPlaceId === place.id ? (window.google as any).maps.Animation.BOUNCE : null}
+                        zIndex={hoveredPlaceId === place.id ? 999 : 1}
                     />
                   ))
                 )}
