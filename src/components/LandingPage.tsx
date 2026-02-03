@@ -1,36 +1,50 @@
 'use client';
 
-import React from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase Client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
+import React, { useState } from 'react';
+import { createBrowserClient } from '@supabase/ssr';
 
 export default function LandingPage() {
+  const [loading, setLoading] = useState(false);
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
+  // --- THE FIXED LOGIN LOGIC ---
   const handleLogin = async () => {
-    console.log('🔐 Initiating OAuth login...');
-    console.log('Redirect URL:', `${window.location.origin}/auth/callback`);
+    setLoading(true);
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent',
+    // 1. Determine if we are on Localhost or Production
+    // This check prevents the "Mismatch" error by ensuring the URL matches Supabase exactly.
+    const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+
+    const redirectUrl = isLocal
+      ? 'http://localhost:3000/auth/callback'
+      : 'https://www.2wards.in/auth/callback';
+
+    console.log("🔐 Initiating OAuth login...");
+    console.log("Redirect URL:", redirectUrl);
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
-      },
-    });
+      });
 
-    if (error) {
-      console.error('❌ OAuth initiation error:', error);
-      alert('Failed to initiate login. Please try again.');
-    } else {
-      console.log('✅ OAuth initiated successfully');
+      if (error) {
+        console.error("❌ OAuth initiation error:", error.message);
+        alert("Login failed: " + error.message);
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error("Unexpected login error:", err);
+      setLoading(false);
     }
   };
 
@@ -48,14 +62,15 @@ export default function LandingPage() {
           <nav className="hidden md:flex items-center gap-8 text-sm font-bold text-gray-500">
             <a href="#features" className="hover:text-black transition-colors">Features</a>
             <a href="#reviews" className="hover:text-black transition-colors">Reviews</a>
-            <a href="#pricing" className="hover:text-black transition-colors">Pricing</a>
+            <a href="#" className="hover:text-black transition-colors">Pricing</a>
           </nav>
 
           <button
             onClick={handleLogin}
-            className="bg-black text-white px-6 py-2.5 rounded-full text-sm font-bold hover:scale-105 hover:shadow-lg transition-all"
+            disabled={loading}
+            className="bg-black text-white px-6 py-2.5 rounded-full text-sm font-bold hover:scale-105 hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Sign In
+            {loading ? 'Connecting...' : 'Sign In'}
           </button>
         </div>
       </header>
@@ -76,9 +91,14 @@ export default function LandingPage() {
           <div className="flex flex-col md:flex-row gap-4 justify-center items-center animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-300">
             <button
               onClick={handleLogin}
-              className="w-full md:w-auto bg-black text-white h-14 px-8 rounded-2xl font-bold text-lg hover:scale-105 hover:shadow-xl transition-all flex items-center justify-center gap-2"
+              disabled={loading}
+              className="w-full md:w-auto bg-black text-white h-14 px-8 rounded-2xl font-bold text-lg hover:scale-105 hover:shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-70"
             >
-              <span>🚀</span> Start Planning Free
+              {loading ? (
+                <span className="animate-spin">⏳</span>
+              ) : (
+                <><span>🚀</span> Start Planning Free</>
+              )}
             </button>
             <button className="w-full md:w-auto bg-gray-100 text-gray-900 h-14 px-8 rounded-2xl font-bold text-lg hover:bg-gray-200 transition-colors">
               View Demo
@@ -113,7 +133,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* --- LOVED BY TRAVELERS (HORIZONTAL SCROLL FIX) --- */}
+      {/* --- LOVED BY TRAVELERS --- */}
       <section id="reviews" className="py-24 bg-black text-white overflow-hidden relative">
         <div className="container mx-auto px-6 mb-12 text-center">
           <h2 className="text-3xl md:text-5xl font-black mb-4">
@@ -124,14 +144,7 @@ export default function LandingPage() {
           </p>
         </div>
 
-        {/* HORIZONTAL SCROLL CONTAINER 
-            - flex: horizontal layout
-            - overflow-x-auto: enables scrolling
-            - snap-x: enables snapping
-            - no-scrollbar: hides the scrollbar (ensure utility exists in globals.css)
-        */}
         <div className="flex overflow-x-auto pb-12 gap-6 px-6 md:px-20 snap-x snap-mandatory no-scrollbar cursor-grab active:cursor-grabbing">
-
           <ReviewCard
             initial="A"
             name="Arjun Mehta"
@@ -139,7 +152,6 @@ export default function LandingPage() {
             text="Finally an app that understands 'Vibe' based travel! The discovery mode found a hidden cafe right next to my hotel in Bangalore that wasn't on any other map."
             color="bg-blue-600"
           />
-
           <ReviewCard
             initial="S"
             name="Sarah Jenkins"
@@ -147,7 +159,6 @@ export default function LandingPage() {
             text="The AI itinerary generator saved me hours of research. I just entered 'Relaxing' and 'Coorg', and it gave me a perfect 3-day plan instantly."
             color="bg-purple-600"
           />
-
           <ReviewCard
             initial="R"
             name="Rahul & Team"
@@ -155,7 +166,6 @@ export default function LandingPage() {
             text="Used the split cost feature for our Goa trip. Usually, money talks are awkward, but this made it seamless. No fighting over bills!"
             color="bg-green-600"
           />
-
           <ReviewCard
             initial="P"
             name="Priya Sharma"
@@ -163,7 +173,6 @@ export default function LandingPage() {
             text="I love the 'Discovery Mode'. I found a beautiful trekking spot just 20km from my house that I never knew existed. Highly recommended!"
             color="bg-pink-600"
           />
-
           <ReviewCard
             initial="D"
             name="David Chen"
@@ -171,7 +180,6 @@ export default function LandingPage() {
             text="Perfect for solo travelers. I felt safe and guided. The local safety scores gave me peace of mind when exploring new areas at night."
             color="bg-indigo-600"
           />
-
         </div>
       </section>
 
