@@ -12,12 +12,26 @@ const supabase = createClient(
 export default function LandingPage() {
 
   const handleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
+    console.log('🔐 Initiating OAuth login...');
+    console.log('Redirect URL:', `${window.location.origin}/auth/callback`);
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
       },
     });
+
+    if (error) {
+      console.error('❌ OAuth initiation error:', error);
+      alert('Failed to initiate login. Please try again.');
+    } else {
+      console.log('✅ OAuth initiated successfully');
+    }
   };
 
   return (
