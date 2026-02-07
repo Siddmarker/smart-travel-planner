@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
+import Link from 'next/link';
 
 export default function LandingPage() {
   const [loading, setLoading] = useState(false);
@@ -15,7 +16,6 @@ export default function LandingPage() {
     setLoading(true);
 
     // 1. Determine if we are on Localhost or Production
-    // This check prevents the "Mismatch" error by ensuring the URL matches Supabase exactly.
     const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
 
     const redirectUrl = isLocal
@@ -193,10 +193,13 @@ export default function LandingPage() {
           <div className="text-sm font-medium">
             © {new Date().getFullYear()} 2wards Inc. All rights reserved.
           </div>
-          <div className="flex gap-6">
-            <a href="#" className="hover:text-white transition-colors">Privacy</a>
-            <a href="#" className="hover:text-white transition-colors">Terms</a>
-            <a href="#" className="hover:text-white transition-colors">Twitter</a>
+          <div className="flex items-center gap-8">
+            {/* Standardized Link for Google Verification */}
+            <Link href="/privacy" className="text-sm hover:text-white transition-colors">
+              Privacy Policy
+            </Link>
+            <a href="#" className="text-sm hover:text-white transition-colors">Terms</a>
+            <a href="#" className="text-sm hover:text-white transition-colors">Twitter</a>
           </div>
         </div>
       </footer>
