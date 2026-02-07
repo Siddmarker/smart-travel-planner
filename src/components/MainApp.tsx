@@ -13,8 +13,12 @@ import DashboardView from '@/components/DashboardView';
 import CreateTripWizard from '@/components/CreateTripWizard';
 import ItineraryDisplay from '@/components/ItineraryDisplay';
 
-// --- LIBRARIES FIX ---
-// We explicitly tell TypeScript that this array is exactly the type Google Maps expects
+// --- NEW UI COMPONENTS (2026 Features) ---
+import DayDrawer from '@/components/DayDrawer';
+import VibeMarker from '@/components/VibeMarker';
+import HapticSlider from '@/components/HapticSlider';
+
+// --- LIBRARIES ---
 const LIBRARIES: ("places")[] = ["places"];
 
 // --- CONSTANTS ---
@@ -93,6 +97,7 @@ export interface Place {
   distanceFromLast?: string;
   rating?: number;
   time?: string;
+  photos?: any[]; // Needed for VibeMarker
 }
 
 interface SelectionStep {
@@ -124,7 +129,6 @@ interface PackingItem {
 
 // --- MAIN APP COMPONENT ---
 export default function MainApp({ user }: { user: any }) {
-  // FIX: Using createBrowserClient from @supabase/ssr
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -200,37 +204,54 @@ export default function MainApp({ user }: { user: any }) {
   const [feedbackText, setFeedbackText] = useState('');
 
   // --- PERSISTENCE (AUTO-SAVE) ---
+  // FIX #1: Load saved data once on mount with proper error handling
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedData = localStorage.getItem('2wards_trip_data');
-      if (savedData) {
-        try {
+      try {
+        const savedData = localStorage.getItem('2wards_trip_data');
+        if (savedData) {
           const parsed = JSON.parse(savedData);
-          if (parsed.expenses) setExpenses(parsed.expenses);
-          if (parsed.packingList) setPackingList(parsed.packingList);
-          if (parsed.messages) setMessages(parsed.messages);
-          if (parsed.members) setTripMembers(parsed.members);
-          if (parsed.userSettings) setUserSettings(parsed.userSettings);
-        } catch (e) {
-          console.error("Failed to load saved trip data", e);
+          if (parsed.expenses && Array.isArray(parsed.expenses)) setExpenses(parsed.expenses);
+          if (parsed.packingList && Array.isArray(parsed.packingList)) setPackingList(parsed.packingList);
+          if (parsed.messages && Array.isArray(parsed.messages)) setMessages(parsed.messages);
+          if (parsed.members && Array.isArray(parsed.members)) setTripMembers(parsed.members);
+          if (parsed.userSettings && typeof parsed.userSettings === 'object') setUserSettings(parsed.userSettings);
         }
+      } catch (e) {
+        console.error("Failed to load saved trip data:", e);
+        // Clear corrupted data
+        localStorage.removeItem('2wards_trip_data');
       }
     }
-  }, []);
+  }, []); // ✅ Empty array is correct here - only run once on mount
 
+  // FIX #1: Debounced auto-save with error handling
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('2wards_trip_data', JSON.stringify({
-        expenses,
-        packingList,
-        messages,
-        members: tripMembers,
-        userSettings
-      }));
-    }
+    if (typeof window === 'undefined') return;
+
+    const timeoutId = setTimeout(() => {
+      try {
+        const dataToSave = {
+          expenses,
+          packingList,
+          messages,
+          members: tripMembers,
+          userSettings
+        };
+        localStorage.setItem('2wards_trip_data', JSON.stringify(dataToSave));
+      } catch (e) {
+        console.error("Failed to save trip data:", e);
+        // Handle quota exceeded or other localStorage errors
+        if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+          console.warn("LocalStorage quota exceeded. Consider clearing old data.");
+        }
+      }
+    }, 500); // Debounce: only save 500ms after last change
+
+    return () => clearTimeout(timeoutId);
   }, [expenses, packingList, messages, tripMembers, userSettings]);
 
-  // Generate Random Invite Link
+  // Generate Invite Link
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const mockTripId = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -297,8 +318,6 @@ export default function MainApp({ user }: { user: any }) {
 
     if (error) console.error("Supabase Error:", error);
 
-    // FIX: EXPLICITLY CAST DATA TO PLACE[]
-    // This tells TypeScript "I promise dbData is a list of Places", removing the red lines
     const allPlaces = (dbData || []) as Place[];
 
     if (!allPlaces || allPlaces.length === 0) {
@@ -316,7 +335,7 @@ export default function MainApp({ user }: { user: any }) {
     let newSelectionQueue: SelectionStep[] = [];
     let suggestedPlaceIds = new Set<string>();
 
-    // --- STEP 1: FIND THE PERFECT STAY ---
+    // Step 1: Stay
     let bestStays = allPlaces.filter((p) => {
       const isStay = ACCOMMODATION_KEYWORDS.some(k => p.type.toLowerCase().includes(k));
       const matchesBudget = p.price_level ? p.price_level <= maxPriceTier : true;
@@ -362,7 +381,7 @@ export default function MainApp({ user }: { user: any }) {
       topStays.forEach(p => suggestedPlaceIds.add(p.id));
     }
 
-    // --- STEP 2: GENERATE DAILY ITINERARY ---
+    // Step 2: Itinerary
     for (let day = 1; day <= totalDays; day++) {
       DAILY_TEMPLATE.forEach((slot) => {
         let candidates = allPlaces.filter((p) => {
@@ -442,7 +461,6 @@ export default function MainApp({ user }: { user: any }) {
       setCurrentSelectionIdx(prev => prev + 1);
     } else {
       setIsSelecting(false);
-      alert("Itinerary Complete! 🎉");
     }
   };
 
@@ -450,26 +468,58 @@ export default function MainApp({ user }: { user: any }) {
     setTripPlan(newOrder);
   };
 
+  // FIX #2: Guard Google Maps API calls with safety checks
   const calculateRoute = async () => {
-    if (tripPlan.length < 2) return;
-    setIsRouting(true);
-    const directionsService = new google.maps.DirectionsService();
-    const origin = { lat: tripPlan[0].lat, lng: tripPlan[0].lng };
-    const destination = { lat: tripPlan[tripPlan.length - 1].lat, lng: tripPlan[tripPlan.length - 1].lng };
-    const waypoints = tripPlan.slice(1, -1).map(p => ({ location: { lat: p.lat, lng: p.lng }, stopover: true }));
+    if (tripPlan.length < 2) {
+      alert("Add at least 2 places to calculate a route.");
+      return;
+    }
 
-    directionsService.route({
-      origin: origin,
-      destination: destination,
-      waypoints: waypoints,
-      travelMode: google.maps.TravelMode.DRIVING
-    }, (result, status) => {
-      if (status === 'OK' && result) setDirectionsResponse(result);
+    // Guard: Check if Google Maps API is loaded
+    if (!isLoaded || typeof window === 'undefined' || !window.google || !window.google.maps) {
+      alert("Google Maps is still loading. Please try again in a moment.");
+      return;
+    }
+
+    setIsRouting(true);
+
+    try {
+      const directionsService = new google.maps.DirectionsService();
+      const origin = { lat: tripPlan[0].lat, lng: tripPlan[0].lng };
+      const destination = { lat: tripPlan[tripPlan.length - 1].lat, lng: tripPlan[tripPlan.length - 1].lng };
+      const waypoints = tripPlan.slice(1, -1).map(p => ({ location: { lat: p.lat, lng: p.lng }, stopover: true }));
+
+      directionsService.route({
+        origin: origin,
+        destination: destination,
+        waypoints: waypoints,
+        travelMode: google.maps.TravelMode.DRIVING
+      }, (result, status) => {
+        setIsRouting(false);
+
+        if (status === 'OK' && result) {
+          setDirectionsResponse(result);
+        } else {
+          // Handle API errors gracefully
+          console.error("Directions request failed:", status);
+          if (status === 'ZERO_RESULTS') {
+            alert("No route found between these locations. Try different places.");
+          } else if (status === 'OVER_QUERY_LIMIT') {
+            alert("Too many requests. Please try again in a moment.");
+          } else {
+            alert(`Route calculation failed: ${status}`);
+          }
+        }
+      });
+    } catch (error) {
+      console.error("Route calculation error:", error);
+      alert("Failed to calculate route. Please check your internet connection.");
       setIsRouting(false);
-    });
+    }
   };
 
   const handleDownloadOffline = async () => {
+    // We try to grab the DayDrawer container now
     const element = document.getElementById('itinerary-container');
     if (!element) { alert("No itinerary to download!"); return; }
     const btn = document.getElementById('download-btn');
@@ -591,167 +641,19 @@ export default function MainApp({ user }: { user: any }) {
           </div>
         )}
 
-        {activeView === 'SETTINGS' && (
-          <div className="h-full bg-gray-50 p-4 lg:p-8 overflow-y-auto pt-24">
-            <div className="max-w-2xl mx-auto space-y-6">
-              <h2 className="text-2xl lg:text-3xl font-black text-gray-900">Settings</h2>
-              <div className="bg-white p-6 lg:p-8 rounded-3xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-bold text-gray-900 mb-6">Profile</h3>
-                <div className="flex items-center gap-6 mb-6">
-                  <div className="w-16 h-16 lg:w-20 lg:h-20 bg-gray-100 rounded-full flex items-center justify-center text-xl lg:text-2xl font-bold text-gray-400">{userSettings.name[0]}</div>
-                  <button className="text-blue-600 text-xs font-bold hover:underline">Change Avatar</button>
-                </div>
-                <div className="grid gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Display Name</label>
-                    <input className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold" value={userSettings.name} onChange={(e) => setUserSettings({ ...userSettings, name: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Email Address</label>
-                    <input className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-400 cursor-not-allowed" value={userSettings.email} disabled />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Currency</label>
-                    <select className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold" value={userSettings.currency} onChange={(e) => setUserSettings({ ...userSettings, currency: e.target.value })} >
-                      <option value="INR">INR (₹)</option>
-                      <option value="USD">USD ($)</option>
-                      <option value="EUR">EUR (€)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeView === 'COLLAB' && (
-          <div className="h-full bg-gray-50 p-4 lg:p-8 flex flex-col items-center pt-24">
-            <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col h-[80vh]">
-              <div className="bg-white border-b border-gray-100 p-4 lg:p-6 flex flex-col lg:flex-row justify-between items-center gap-4">
-                <div>
-                  <h2 className="text-xl lg:text-2xl font-black text-gray-900">Trip Hub</h2>
-                  <p className="text-xs lg:text-sm text-gray-500">Managing trip for <b>{tripMembers.length} people</b></p>
-                </div>
-                <div className="flex bg-gray-100 p-1 rounded-xl w-full lg:w-auto overflow-x-auto">
-                  {(['MEMBERS', 'PACKING', 'CHAT', 'SPLIT'] as const).map(tab => (
-                    <button key={tab} onClick={() => setCollabTab(tab)} className={`flex-1 lg:flex-none px-3 lg:px-4 py-2 rounded-lg text-[10px] lg:text-xs font-bold transition-all whitespace-nowrap ${collabTab === tab ? 'bg-white shadow-sm text-black' : 'text-gray-400'}`}>
-                      {tab === 'MEMBERS' && '👥 People'}
-                      {tab === 'PACKING' && '🎒 Packing'}
-                      {tab === 'CHAT' && '💬 Chat'}
-                      {tab === 'SPLIT' && '💸 Expenses'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 lg:p-6 bg-gray-50">
-                {collabTab === 'MEMBERS' && (
-                  <div className="space-y-6">
-                    <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100">
-                      <h4 className="font-bold text-blue-900 text-sm mb-3">Invite Friends to Plan</h4>
-                      <div className="flex gap-2">
-                        <div className="flex-1 bg-white border border-blue-200 rounded-xl px-4 py-3 text-xs font-mono text-gray-600 truncate flex items-center">{inviteLink}</div>
-                        <button onClick={handleCopyLink} className="bg-blue-600 text-white px-4 lg:px-6 rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200">Copy</button>
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-gray-900 text-sm mb-3">Who's here ({tripMembers.length})</h4>
-                      <div className="grid grid-cols-2 gap-3">
-                        {tripMembers.map((m, i) => (
-                          <div key={i} className="bg-white p-3 rounded-xl border border-gray-200 flex items-center gap-3">
-                            <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center font-bold text-xs">{m[0]}</div>
-                            <span className="font-bold text-sm text-gray-700">{m}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {collabTab === 'PACKING' && (
-                  <div className="space-y-4">
-                    <div className="flex gap-2 mb-4">
-                      <input className="flex-1 p-3 rounded-xl border border-gray-200 text-xs font-bold" placeholder="Add item..." value={newPackingItem} onChange={e => setNewPackingItem(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPackingItem()} />
-                      <button onClick={addPackingItem} className="bg-black text-white px-6 rounded-xl font-bold text-xs">Add</button>
-                    </div>
-                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                      {packingList.map(item => (
-                        <div key={item.id} onClick={() => togglePackingItem(item.id)} className="flex items-center gap-3 p-4 border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer">
-                          <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${item.checked ? 'bg-green-500 border-green-500' : 'border-gray-300'}`}>{item.checked && <span className="text-white text-xs">✓</span>}</div>
-                          <span className={`text-sm font-bold ${item.checked ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{item.text}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {collabTab === 'CHAT' && (
-                  <div className="flex flex-col h-full">
-                    <div className="flex-1 space-y-3 mb-4 overflow-y-auto pr-2">
-                      {messages.map(m => (
-                        <div key={m.id} className={`flex ${m.isMe ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-[75%] p-3 rounded-2xl text-xs ${m.isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none shadow-sm'}`}>
-                            {!m.isMe && <p className="text-[9px] font-bold opacity-60 mb-1">{m.user}</p>}{m.text}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="bg-white p-2 rounded-xl border border-gray-200 flex gap-2">
-                      <input className="flex-1 bg-transparent p-2 text-xs focus:outline-none" placeholder="Type message..." value={newMessage} onChange={e => setNewMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} />
-                      <button onClick={handleSendMessage} className="bg-black text-white px-4 rounded-lg font-bold text-xs">Send</button>
-                    </div>
-                  </div>
-                )}
-                {collabTab === 'SPLIT' && (
-                  <div className="h-full flex flex-col">
-                    <div className="bg-green-50 border border-green-100 p-6 rounded-2xl mb-6 text-center shadow-sm">
-                      <p className="text-[10px] font-bold text-green-600 uppercase tracking-widest mb-1">Total Trip Cost</p>
-                      <h3 className="text-4xl font-black text-gray-900">{userSettings.currency === 'INR' ? '₹' : '$'}{totalCost.toLocaleString()}</h3>
-                      <p className="text-xs text-green-800 mt-1 font-bold">{userSettings.currency === 'INR' ? '₹' : '$'}{costPerPerson.toFixed(0)} / person</p>
-                      <div className="flex justify-center gap-4 mt-4">
-                        <div className="bg-white px-3 py-1 rounded-lg border border-green-100 text-xs font-bold text-green-700">You Paid: {userSettings.currency === 'INR' ? '₹' : '$'}{myTotalPaid}</div>
-                        <div className={`bg-white px-3 py-1 rounded-lg border text-xs font-bold ${myBalance >= 0 ? 'border-green-100 text-green-700' : 'border-red-100 text-red-700'}`}>{myBalance >= 0 ? `Get Back: ${userSettings.currency === 'INR' ? '₹' : '$'}${myBalance.toFixed(0)}` : `You Owe: ${userSettings.currency === 'INR' ? '₹' : '$'}${Math.abs(myBalance).toFixed(0)}`}</div>
-                      </div>
-                    </div>
-                    <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-2">
-                      {expenses.map(e => (
-                        <div key={e.id} className="bg-white p-3 rounded-xl border border-gray-100 flex justify-between items-center shadow-sm">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${e.who === 'You' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>{e.who[0]}</div>
-                            <div><p className="font-bold text-xs text-gray-900">{e.what}</p><p className="text-[9px] text-gray-400">Paid by {e.who}</p></div>
-                          </div>
-                          <span className="font-mono font-bold text-xs text-gray-900">{userSettings.currency === 'INR' ? '₹' : '$'}{e.amount}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {showExpenseForm ? (
-                      <div className="bg-gray-100 p-4 rounded-xl animate-fade-in">
-                        <input className="w-full p-2 rounded-lg border border-gray-200 text-xs font-bold mb-2" placeholder="What for?" value={newExpense.what} onChange={e => setNewExpense({ ...newExpense, what: e.target.value })} />
-                        <div className="flex gap-2 mb-2">
-                          <input className="flex-1 p-2 rounded-lg border border-gray-200 text-xs font-bold" type="number" placeholder="Amount" value={newExpense.amount} onChange={e => setNewExpense({ ...newExpense, amount: e.target.value })} />
-                          <select className="flex-1 p-2 rounded-lg border border-gray-200 text-xs font-bold" value={newExpense.who} onChange={e => setNewExpense({ ...newExpense, who: e.target.value })}>{tripMembers.map(m => <option key={m} value={m}>{m}</option>)}</select>
-                        </div>
-                        <div className="flex gap-2">
-                          <button onClick={handleAddExpense} className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold text-xs">Save</button>
-                          <button onClick={() => setShowExpenseForm(false)} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-bold text-xs">Cancel</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button onClick={() => setShowExpenseForm(true)} className="w-full bg-black text-white py-3 rounded-xl font-bold text-xs shadow-lg hover:scale-[1.02] transition-transform">+ Add Expense</button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
+        {/* --- PLAN & MAP VIEW (UPDATED WITH NEW FEATURES) --- */}
         {activeView === 'PLAN' && isLoaded && (
           <div className="h-full w-full relative flex">
+            {/* LEFT PANEL */}
             {isSelecting ? (
-              <div className="h-full flex flex-col bg-gray-50 border-r border-gray-200 w-full md:w-[480px] shadow-2xl z-20 overflow-hidden absolute left-0 top-0 pt-20">
-                <div className="bg-white px-6 py-6 border-b border-gray-200">
+              // SELECTION MODE - FIX #3: Mobile responsive
+              <div className="h-full flex flex-col bg-gray-50 border-r border-gray-200 w-full md:w-[420px] lg:w-[480px] shadow-2xl z-20 overflow-hidden absolute left-0 top-0 pt-16 md:pt-20">
+                {/* FIX #3: Mobile responsive header */}
+                <div className="bg-white px-4 md:px-6 py-4 md:py-6 border-b border-gray-200">
                   <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Day {selectionQueue[currentSelectionIdx]?.day}</span>
-                  <h2 className="text-2xl font-black text-gray-900 mt-1">{selectionQueue[currentSelectionIdx]?.slotLabel}</h2>
+                  <h2 className="text-xl md:text-2xl font-black text-gray-900 mt-1">{selectionQueue[currentSelectionIdx]?.slotLabel}</h2>
                   <p className="text-xs text-gray-500 mt-2">Choose the best option for this slot.</p>
-                  <div className="w-full bg-gray-200 h-1.5 rounded-full mt-4 overflow-hidden">
+                  <div className="w-full bg-gray-200 h-1.5 rounded-full mt-3 md:mt-4 overflow-hidden">
                     <div className="bg-blue-600 h-full transition-all duration-300" style={{ width: `${((currentSelectionIdx + 1) / selectionQueue.length) * 100}%` }}></div>
                   </div>
                 </div>
@@ -764,11 +666,13 @@ export default function MainApp({ user }: { user: any }) {
                       onMouseLeave={() => setHoveredPlaceId(null)}
                       className="w-full bg-white border border-gray-200 rounded-2xl p-4 text-left hover:border-blue-500 hover:ring-2 hover:ring-blue-100 transition-all group hover-lift shadow-sm hover:shadow-wanderlog"
                     >
-                      <div className="h-32 bg-gray-100 rounded-xl mb-3 overflow-hidden relative">
+                      {/* FIX #3: Responsive image height */}
+                      <div className="h-28 sm:h-32 md:h-36 bg-gray-100 rounded-xl mb-3 overflow-hidden relative">
                         <img src={place.image || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={place.name} />
                         <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded text-xs font-bold">★ {place.rating || 4.5}</div>
                       </div>
-                      <h3 className="font-bold text-lg text-gray-900">{place.name}</h3>
+                      {/* FIX #3: Responsive text sizing */}
+                      <h3 className="font-bold text-base md:text-lg text-gray-900">{place.name}</h3>
                       <p className="text-xs text-gray-500 line-clamp-2 mt-1">{place.description}</p>
                       <div className="mt-3 flex gap-2">
                         <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-[10px] font-bold uppercase">{place.type}</span>
@@ -779,16 +683,49 @@ export default function MainApp({ user }: { user: any }) {
                 </div>
               </div>
             ) : (
+              // FIX #3: ITINERARY MODE -> Responsive mobile-first design
               tripPlan.length > 0 && (
-                <div id="itinerary-container" className="h-full relative z-20">
-                  <ItineraryDisplay tripMeta={tripMeta} places={tripPlan} onUpdatePlaces={handleReorder} onPlaceHover={setHoveredPlaceId} />
+                <div id="itinerary-container" className="h-full flex flex-col bg-white border-r border-gray-200 w-full md:w-[420px] lg:w-[480px] shadow-2xl z-20 overflow-hidden absolute left-0 top-0 pt-16 md:pt-20">
+                  {/* FEATURE 3: Haptic Slider Header - FIX #3: Mobile responsive padding */}
+                  <div className="p-4 md:p-6 bg-white border-b border-gray-100">
+                    <h2 className="text-xl md:text-2xl font-black mb-3 md:mb-4 text-gray-900">Your Itinerary</h2>
+                    <HapticSlider
+                      label="Trip Budget"
+                      value={Number(tripMeta.budget?.nightly || 5000)}
+                      onChange={(val: number) => console.log("New Budget", val)}
+                    />
+                  </div>
+
+                  {/* FEATURE 1: Day Drawers List */}
+                  <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+                    {Array.from(new Set(tripPlan.map(p => {
+                      // Grouping Logic
+                      if (p.time?.includes("Check-in")) return "Day 1";
+                      return p.time?.split(' - ')[0] || 'Day 1';
+                    }))).sort().map((dayLabel, index) => (
+                      <DayDrawer
+                        key={dayLabel}
+                        day={index + 1}
+                        title={dayLabel === "Day 1" ? "Arrival & Settling In" : `Exploration Day ${index + 1}`}
+                        isToday={index === 0}
+                        activities={tripPlan.filter(p => {
+                          if (dayLabel === "Day 1") return p.time?.includes("Check-in") || p.time?.startsWith("Day 1");
+                          return p.time?.startsWith(dayLabel);
+                        })}
+                      />
+                    ))}
+                  </div>
                 </div>
               )
             )}
-            <div className="flex-1 h-full relative ml-0 md:ml-[480px] transition-all duration-300">
+
+            {/* RIGHT PANEL: MAP - FIX #3: Responsive margin */}
+            <div className="flex-1 h-full relative ml-0 md:ml-[420px] lg:ml-[480px] transition-all duration-300">
               <GoogleMap mapContainerStyle={MAP_STYLES} center={mapCenter} zoom={12} options={{ disableDefaultUI: false, zoomControl: true }}>
                 {directionsResponse && <DirectionsRenderer directions={directionsResponse} />}
+
                 {isSelecting ? (
+                  // Selecting = Standard Markers
                   selectionQueue[currentSelectionIdx]?.candidates.map((place, i) => (
                     <Marker
                       key={place.id}
@@ -800,23 +737,24 @@ export default function MainApp({ user }: { user: any }) {
                     />
                   ))
                 ) : (
+                  // FEATURE 2: Vibe Markers
                   tripPlan.map((place, index) => (
-                    <Marker
+                    <VibeMarker
                       key={place.id}
                       position={{ lat: place.lat, lng: place.lng }}
-                      label={{ text: `${index + 1}`, color: "white", fontWeight: "bold" }}
-                      title={place.name}
-                      animation={hoveredPlaceId === place.id ? (window.google as any).maps.Animation.BOUNCE : null}
-                      zIndex={hoveredPlaceId === place.id ? 999 : 1}
+                      place={place}
+                      onClick={(p: any) => console.log('Clicked vibe', p)}
                     />
                   ))
                 )}
               </GoogleMap>
+
+              {/* FIX #3: Responsive action buttons with mobile optimization */}
               {!isSelecting && (
-                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-2xl p-2 flex gap-2">
-                  <button onClick={calculateRoute} className="bg-black text-white px-6 py-3 rounded-full font-bold text-xs hover:scale-105 transition-transform">{isRouting ? '...' : '🛣️ Show Route'}</button>
-                  <button id="download-btn" onClick={handleDownloadOffline} className="bg-gray-100 text-gray-700 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-200 transition-colors">⬇️ Download Offline</button>
-                  <button onClick={() => setDirectionsResponse(null)} className="bg-white text-gray-500 border border-gray-200 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-50">Reset</button>
+                <div className="absolute bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-2xl p-1.5 md:p-2 flex gap-1 md:gap-2 max-w-[95vw] md:max-w-none overflow-x-auto">
+                  <button onClick={calculateRoute} disabled={isRouting} className="bg-black text-white px-4 md:px-6 py-2 md:py-3 rounded-full font-bold text-[10px] md:text-xs hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">{isRouting ? '⏳ Routing...' : '🛣️ Show Route'}</button>
+                  <button id="download-btn" onClick={handleDownloadOffline} className="bg-gray-100 text-gray-700 px-3 md:px-4 py-2 md:py-3 rounded-full font-bold text-[10px] md:text-xs hover:bg-gray-200 transition-colors whitespace-nowrap"><span className="hidden sm:inline">⬇️ Download</span><span className="sm:hidden">⬇️</span></button>
+                  <button onClick={() => setDirectionsResponse(null)} className="bg-white text-gray-500 border border-gray-200 px-3 md:px-4 py-2 md:py-3 rounded-full font-bold text-[10px] md:text-xs hover:bg-gray-50 whitespace-nowrap">Reset</button>
                 </div>
               )}
             </div>

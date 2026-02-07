@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 
-// --- 1. INTERFACES ---
+// --- INTERFACES ---
 interface Place {
   place_id: string;
   name: string;
@@ -15,13 +15,22 @@ interface Place {
   price_level?: number;
 }
 
+// Interface for deeper details (fetched on click)
+interface PlaceDetails extends Place {
+  editorial_summary?: { overview: string };
+  reviews?: Array<{ author_name: string; text: string; rating: number; relative_time_description: string }>;
+  opening_hours?: { open_now: boolean; weekday_text: string[] };
+  website?: string;
+  formatted_phone_number?: string;
+}
+
 interface DiscoveryViewProps {
   onAddToTrip: (place: any) => void;
   onBack: () => void;
   initialCity: string;
 }
 
-// --- 2. CONFIGURATION & CONSTANTS ---
+// --- CONFIGURATION ---
 const CATEGORIES = [
   { id: 'tourist_attraction', label: '🎡 Attractions' },
   { id: 'trekking', label: '🥾 Trekking & Trails' },
@@ -44,8 +53,8 @@ const STAY_TYPES = [
   { value: 'resort', label: '🌴 Resort' },
   { value: 'villa', label: '🏡 Villa' },
   { value: 'homestay', label: '🏠 Homestay' },
-  { value: 'hostel', label: '🎒 Hostel / Dorm' },
-  { value: 'apartment', label: '🏢 Apartment' }
+  { value: 'hostel', label: '🎒 Hostel' },
+  { value: 'apartment', label: '🏢 Apt' }
 ];
 
 const BUDGET_LEVELS = [
@@ -55,16 +64,16 @@ const BUDGET_LEVELS = [
   { value: 'premium', label: '✨ Premium' }
 ];
 
-// Helper to wait for Google's API limit (2 seconds between pages)
+// Helper to wait for Google's API limit
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: DiscoveryViewProps) {
-  // --- 3. STATE MANAGEMENT ---
+  // --- STATE ---
   const [currentCity, setCurrentCity] = useState(initialCity || 'Bangalore');
   const [cityCoords, setCityCoords] = useState<google.maps.LatLng | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('tourist_attraction');
-  const [radius, setRadius] = useState(20000); // Default 20km
+  const [radius, setRadius] = useState(20000);
 
   // Extra Filters
   const [diet, setDiet] = useState('ANY');
@@ -74,19 +83,23 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
   // Results & Pagination
   const [results, setResults] = useState<Place[]>([]);
   const [loading, setLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState(''); // To show "Loading more..."
-  const [geoLoading, setGeoLoading] = useState(false); // GPS Loading State
+  const [statusMessage, setStatusMessage] = useState('');
 
   // Autocomplete
   const [citySuggestions, setCitySuggestions] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // Refs for Google Services
+  // --- NEW: MODAL STATE ---
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [placeDetails, setPlaceDetails] = useState<PlaceDetails | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+
+  // Refs
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
   const geocoderRef = useRef<google.maps.Geocoder | null>(null);
   const autocompleteServiceRef = useRef<google.maps.places.AutocompleteService | null>(null);
 
-  // --- 4. INITIALIZATION ---
+  // --- INITIALIZATION ---
   useEffect(() => {
     if (typeof window !== 'undefined' && window.google) {
       const mapDiv = document.createElement('div');
@@ -101,82 +114,57 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
     }
   }, [initialCity]);
 
-  // --- 5. GEOCODING & GPS LOGIC ---
+  // --- GEOCODING ---
   const geocodeAndSearch = (cityName: string) => {
     if (!geocoderRef.current) return;
-
     geocoderRef.current.geocode({ address: cityName }, (results, status) => {
       if (status === 'OK' && results && results[0]) {
         const location = results[0].geometry.location;
         setCityCoords(location);
         performSearch(cityName, activeCategory, location);
       } else {
-        // Fallback if geocoding fails, still try to search by text
         performSearch(cityName, activeCategory, null);
       }
     });
   };
 
-  const handleUseCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser.");
-      return;
-    }
+  // --- NEW: FETCH PLACE DETAILS (ON CLICK) ---
+  const handlePlaceClick = (place: Place) => {
+    setSelectedPlace(place);
+    setDetailsLoading(true);
+    setPlaceDetails(null);
 
-    setGeoLoading(true);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        const latLng = new window.google.maps.LatLng(latitude, longitude);
-        
-        // Update Coords State
-        setCityCoords(latLng);
-
-        // Reverse Geocode to get City Name
-        if (geocoderRef.current) {
-          geocoderRef.current.geocode({ location: latLng }, (results, status) => {
-            if (status === 'OK' && results && results[0]) {
-              // Try to extract city name
-              const cityComponent = results[0].address_components.find(c => c.types.includes('locality'));
-              const cityName = cityComponent ? cityComponent.long_name : results[0].formatted_address;
-              
-              setSearchTerm(cityName);
-              setCurrentCity(cityName);
-              performSearch(cityName, activeCategory, latLng);
-            } else {
-              setSearchTerm("Current Location");
-              setCurrentCity("Current Location");
-              performSearch("Current Location", activeCategory, latLng);
-            }
-            setGeoLoading(false);
-          });
-        }
-      },
-      (error) => {
-        console.error("Error getting location:", error);
-        alert("Unable to retrieve your location. Check browser permissions.");
-        setGeoLoading(false);
-      }
-    );
-  };
-
-  // --- 6. MAIN SEARCH LOGIC (ROBUST) ---
-  const performSearch = (city: string, category: string, location: google.maps.LatLng | null) => {
     if (!placesServiceRef.current) return;
 
-    // Reset Results
+    const request = {
+      placeId: place.place_id,
+      fields: ['name', 'rating', 'formatted_phone_number', 'opening_hours', 'website', 'editorial_summary', 'reviews', 'photos']
+    };
+
+    placesServiceRef.current.getDetails(request, (placeData, status) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK && placeData) {
+        setPlaceDetails({ ...place, ...placeData } as PlaceDetails);
+      }
+      setDetailsLoading(false);
+    });
+  };
+
+  const closeDetails = () => {
+    setSelectedPlace(null);
+    setPlaceDetails(null);
+  };
+
+  // --- MAIN SEARCH LOGIC ---
+  const performSearch = (city: string, category: string, location: google.maps.LatLng | null) => {
+    if (!placesServiceRef.current) return;
     setResults([]);
     setLoading(true);
     setStatusMessage(`Searching ${category.replace('_', ' ')}...`);
 
     let query = '';
-
-    // STRATEGY: If radius > 50km, we use broader terms to find distant places
     const useBroadSearch = radius > 50000;
 
     if (location) {
-      // --- SMART RADIUS MODE (Location Biased) ---
       switch (category) {
         case 'trekking': query = useBroadSearch ? `best trekking hills peaks` : `hiking trails hills nature`; break;
         case 'local_market': query = `flower market vegetable market bazaar santhe`; break;
@@ -185,11 +173,9 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
         case 'late_night': query = `late night food open 24 hours`; break;
         case 'trending': query = `popular tourist attractions`; break;
         case 'turf': query = `sports turf cricket football`; break;
-        case 'amusement_park': query = `amusement park water park`; break;
         default: query = category.replace('_', ' '); break;
       }
     } else {
-      // --- TEXT FALLBACK MODE (No Location) ---
       switch (category) {
         case 'trekking': query = `hiking trails hills peaks near ${city}`; break;
         case 'local_market': query = `market santhe bazaar in ${city}`; break;
@@ -198,7 +184,6 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       }
     }
 
-    // Apply Filters to Query String
     if (['restaurant', 'cafe', 'trending', 'iconic', 'late_night'].includes(category)) {
       if (diet === 'VEG') query += ' pure vegetarian';
       if (diet === 'JAIN') query += ' jain food';
@@ -217,37 +202,26 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
       ...(location && { location: location, radius: radius }),
     };
 
-    // --- RECURSIVE PAGINATION HANDLER ---
     let allPlaces: Place[] = [];
 
     const fetchPage = (nextPageToken?: any) => {
-      // NOTE: textSearch doesn't accept a pageToken directly in the initial request object in JS API.
-      // Instead, we rely on the pagination object callback.
-
       placesServiceRef.current?.textSearch(request, async (places, status, pagination) => {
         if (status === google.maps.places.PlacesServiceStatus.OK && places) {
-
-          // 1. Filter out unwanted types
           const filtered = places.filter(place => {
             const types = place.types || [];
             const name = (place.name || '').toLowerCase();
             if (types.includes('travel_agency')) return false;
             if (name.includes('travels') || name.includes('holidays') || name.includes('tours &')) return false;
-            if (category === 'trekking' && (types.includes('store') || types.includes('shopping_mall'))) return false;
             return true;
           });
 
-          // 2. Accumulate Results
           allPlaces = [...allPlaces, ...(filtered as Place[])];
-
-          // Remove duplicates by ID
           const uniquePlaces = Array.from(new Map(allPlaces.map(item => [item.place_id, item])).values());
           setResults(uniquePlaces);
 
-          // 3. Handle Pagination (Max 60 results / 3 pages)
           if (pagination && pagination.hasNextPage && allPlaces.length < 60) {
             setStatusMessage(`Loading more results... (${uniquePlaces.length} found)`);
-            await sleep(2000); // MANDATORY WAIT for Google API
+            await sleep(2000);
             pagination.nextPage();
           } else {
             setLoading(false);
@@ -258,12 +232,10 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
         }
       });
     };
-
-    // Start fetching
     fetchPage();
   };
 
-  // --- 7. UI HANDLERS ---
+  // --- HANDLERS ---
   const handleCityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearchTerm(val);
@@ -284,67 +256,34 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
 
   const handleRadiusChange = (e: any) => {
     const km = Number(e.target.value);
-    if (km >= 0) {
-      const meters = km * 1000;
-      setRadius(meters);
-    }
-  };
-
-  const handleKeyDown = (e: any) => {
-    if (e.key === 'Enter') {
-      setCurrentCity(searchTerm); geocodeAndSearch(searchTerm); setShowDropdown(false);
-    }
+    if (km >= 0) setRadius(km * 1000);
   };
 
   return (
-    // FIX: max-w-[100vw] prevents the "Zoomed Out" effect
-    <div className="h-full flex flex-col bg-gray-50 overflow-hidden w-full max-w-[100vw]">
+    <div className="h-full flex flex-col bg-gray-50 overflow-hidden w-full max-w-full relative">
 
-      {/* --- HEADER --- */}
+      {/* HEADER */}
       <div className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-20 flex-shrink-0">
-
-        {/* Title Row */}
         <div className="px-4 py-3 md:px-6 md:py-4 flex justify-between items-center border-b border-gray-100">
           <div className="overflow-hidden">
             <h2 className="text-lg md:text-xl font-black text-gray-900 truncate pr-2">Discover {currentCity}</h2>
-            <p className="text-[10px] md:text-xs text-gray-500 truncate font-bold">Explore {activeCategory.replace('_', ' ')} spots</p>
+            <p className="text-[10px] md:text-xs text-gray-500 truncate">Explore {activeCategory.replace('_', ' ')} spots</p>
           </div>
-          <button onClick={onBack} className="flex-shrink-0 text-xs md:text-sm font-bold text-gray-600 bg-gray-100 px-3 py-2 rounded-lg hover:bg-gray-200">
+          <button onClick={onBack} className="flex-shrink-0 text-sm md:text-base font-bold text-gray-500 bg-gray-100 px-3 py-2 rounded-lg hover:bg-gray-200">
             ← Back
           </button>
         </div>
 
-        {/* CONTROLS (Mobile Optimized Grid) */}
         <div className="px-4 py-4 md:px-6 flex flex-col gap-4 md:grid md:grid-cols-12 items-center relative">
-
-          {/* A. City Input (WITH LIVE LOCATION PIN) */}
           <div className="w-full md:col-span-4 relative z-50">
             <input
-              className="w-full pl-10 pr-12 py-3 rounded-xl border border-gray-200 bg-gray-50 text-base font-bold focus:outline-none focus:ring-2 focus:ring-black/5 shadow-sm"
+              className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-base font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
               placeholder="Enter City..."
               value={searchTerm}
               onChange={handleCityInput}
-              onKeyDown={handleKeyDown}
               onFocus={() => { if (citySuggestions.length > 0) setShowDropdown(true); }}
             />
             <span className="absolute left-3 top-3.5 text-gray-400">🌍</span>
-
-            {/* LIVE LOCATION BUTTON */}
-            <button
-              onClick={handleUseCurrentLocation}
-              disabled={geoLoading}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-gray-100 text-blue-600 transition-colors z-20"
-              title="Use Current Location"
-            >
-              {geoLoading ? (
-                <span className="animate-spin block">⏳</span>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                  <path fillRule="evenodd" d="M11.54 22.351l.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742zM12 13.5a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-                </svg>
-              )}
-            </button>
-
             {showDropdown && citySuggestions.length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl z-[100] max-h-60 overflow-y-auto">
                 {citySuggestions.map((s) => (
@@ -356,33 +295,16 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
             )}
           </div>
 
-          {/* B. Radius Input & Search Button (Side-by-Side on Mobile) */}
-          <div className="w-full md:col-span-5 grid grid-cols-2 gap-3">
-             <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
-                <span className="text-sm font-bold text-gray-500 whitespace-nowrap">Radius:</span>
-                <input
-                  type="number" min="1" max="500"
-                  value={radius / 1000}
-                  onChange={handleRadiusChange}
-                  className="w-full bg-transparent text-base font-bold focus:outline-none"
-                  placeholder="20"
-                />
-             </div>
-             <button
-              onClick={() => { setCurrentCity(searchTerm); geocodeAndSearch(searchTerm); setShowDropdown(false); }}
-              className="w-full bg-black text-white py-3 rounded-xl font-bold text-base hover:bg-gray-800 transition-all shadow-md active:scale-95 flex items-center justify-center"
-             >
-              Search
-             </button>
+          <div className="w-full md:col-span-3 flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+            <span className="text-sm font-bold text-gray-500 whitespace-nowrap">Radius (km):</span>
+            <input type="number" min="1" max="500" value={radius / 1000} onChange={handleRadiusChange} className="flex-1 min-w-0 bg-transparent text-base font-bold focus:outline-none" />
           </div>
 
-          {/* C. Filters (Full Width) */}
           <div className="w-full md:col-span-3">
             {(['restaurant', 'cafe', 'iconic', 'late_night', 'trending'].includes(activeCategory)) ? (
-              <select className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold focus:outline-none cursor-pointer" value={diet} onChange={(e) => { setDiet(e.target.value); if (cityCoords) performSearch(currentCity, activeCategory, cityCoords); }}>
+              <select className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold focus:outline-none" value={diet} onChange={(e) => { setDiet(e.target.value); if (cityCoords) performSearch(currentCity, activeCategory, cityCoords); }}>
                 <option value="ANY">🍽️ Any Diet</option>
-                <option value="VEG">🥦 Vegetarian</option>
-                <option value="EGG">🍳 Eggetarian</option>
+                <option value="VEG">🥦 Veg</option>
                 <option value="NON_VEG">🍗 Non-Veg</option>
               </select>
             ) : activeCategory === 'lodging' ? (
@@ -394,21 +316,18 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
                   {BUDGET_LEVELS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
                 </select>
               </div>
-            ) : (
-              <div className="text-xs text-gray-400 text-center italic py-3">No extra filters</div>
-            )}
+            ) : <div className="text-xs text-gray-400 text-center italic py-3">No extra filters</div>}
+          </div>
+
+          <div className="w-full md:col-span-2">
+            <button onClick={() => { setCurrentCity(searchTerm); geocodeAndSearch(searchTerm); setShowDropdown(false); }} className="w-full bg-black text-white py-3 rounded-xl font-bold text-base hover:bg-gray-800 transition-all shadow-md">Search</button>
           </div>
         </div>
 
-        {/* Categories Scroll */}
-        <div className="w-full overflow-x-auto no-scrollbar pb-2 border-t border-gray-50 pt-2">
-          <div className="flex gap-2 px-4 md:px-6 w-max">
+        <div className="w-full overflow-x-auto no-scrollbar pb-2">
+          <div className="flex gap-2 px-4 md:px-6 pb-2 w-max">
             {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => { setActiveCategory(cat.id); if (cityCoords) performSearch(currentCity, cat.id, cityCoords); }}
-                className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all border flex-shrink-0 ${activeCategory === cat.id ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
-              >
+              <button key={cat.id} onClick={() => { setActiveCategory(cat.id); if (cityCoords) performSearch(currentCity, cat.id, cityCoords); }} className={`px-4 py-2 rounded-full text-sm font-bold border transition-all ${activeCategory === cat.id ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
                 {cat.label}
               </button>
             ))}
@@ -416,76 +335,135 @@ export default function DiscoveryView({ onAddToTrip, onBack, initialCity }: Disc
         </div>
       </div>
 
-      {/* --- RESULTS GRID --- */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50" onClick={() => setShowDropdown(false)}>
-        {/* Loading State */}
-        {loading && (
+      {/* RESULTS GRID */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-6" onClick={() => setShowDropdown(false)}>
+        {loading ? (
           <div className="text-center py-20 text-gray-400">
             <div className="animate-spin text-3xl mb-2">⏳</div>
-            <p className="font-bold">{statusMessage}</p>
+            <p>{statusMessage}</p>
           </div>
-        )}
-
-        {/* Empty State */}
-        {!loading && results.length === 0 && (
-          <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
-            <p className="text-gray-500 font-bold">No results found.</p>
-            <p className="text-sm text-gray-400">Try increasing the radius or changing the city.</p>
-          </div>
-        )}
-
-        {/* Results */}
-        {!loading && results.length > 0 && (
-          // FIX: Desktop Grid (lg:grid-cols-4)
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 pb-20">
+        ) : results.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-20">
             {results.map((place) => (
-              <div key={place.place_id} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-gray-100 group flex flex-col h-full">
-
-                {/* FIX: aspect-video for perfect 16:9 images */}
+              <div
+                key={place.place_id}
+                className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-gray-100 group flex flex-col h-full cursor-pointer"
+                onClick={() => handlePlaceClick(place)} // --- CLICK CARD TO OPEN MODAL ---
+              >
                 <div className="aspect-video bg-gray-200 relative w-full overflow-hidden">
                   {place.photos?.[0] ? (
                     <img src={place.photos[0].getUrl({ maxWidth: 400 })} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={place.name} />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-300 text-3xl">📷</div>
-                  )}
-
-                  {place.rating && (
-                    <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur px-2 py-1 rounded-md text-[10px] font-bold text-white">⭐ {place.rating} ({place.user_ratings_total})</div>
-                  )}
-
-                  {/* RESTORED: The "Local Market" pink badge from original code */}
-                  {activeCategory === 'local_market' && (
-                    <div className="absolute top-2 right-2 bg-pink-500 text-white px-2 py-1 rounded-md text-[10px] font-bold shadow-md">🌸 Local Market</div>
-                  )}
+                  ) : <div className="w-full h-full flex items-center justify-center text-gray-300 text-3xl">📷</div>}
+                  {place.rating && <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur px-2 py-1 rounded-md text-[10px] font-bold text-white">⭐ {place.rating}</div>}
+                  {activeCategory === 'local_market' && <div className="absolute top-2 right-2 bg-pink-500 text-white px-2 py-1 rounded-md text-[10px] font-bold shadow-md">🌸 Local Market</div>}
                 </div>
-
                 <div className="p-4 flex flex-col flex-1">
                   <h4 className="font-bold text-base text-gray-900 line-clamp-1">{place.name}</h4>
                   <p className="text-xs text-gray-500 line-clamp-2 mb-3">{place.formatted_address}</p>
 
+                  {/* BUTTONS (Stop propagation so they don't trigger modal) */}
                   <div className="mt-auto flex gap-2">
-                    {/* FIX: Primary Button = Get Directions */}
-                    <button
-                      onClick={() => window.open(`http://googleusercontent.com/maps.google.com/search?q=${encodeURIComponent(place.name || '')}&query_place_id=${place.place_id}`, '_blank')}
-                      className="flex-1 bg-black text-white py-3 rounded-xl text-xs font-bold uppercase hover:bg-gray-800 transition-colors"
-                    >
+                    <button onClick={(e) => { e.stopPropagation(); window.open(`http://googleusercontent.com/maps.google.com/search?q=${encodeURIComponent(place.name || '')}&query_place_id=${place.place_id}`, '_blank'); }} className="flex-1 bg-black text-white py-3 rounded-xl text-xs font-bold uppercase hover:bg-gray-800 transition-colors">
                       Get Directions 📍
                     </button>
-                    {/* FIX: Secondary Button = Add (+) */}
-                    <button 
-                      onClick={() => onAddToTrip(place)} 
-                      className="w-12 flex items-center justify-center bg-gray-100 rounded-xl text-gray-600 hover:bg-green-50 hover:text-green-600 transition-colors border border-gray-200"
-                      title="Add to Plan"
-                    >
-                      <span className="text-xl font-bold">+</span>
-                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); onAddToTrip(place); }} className="bg-gray-100 text-black px-4 py-3 rounded-xl font-bold text-lg hover:bg-gray-200">+</button>
                   </div>
                 </div>
               </div>
             ))}
           </div>
+        ) : (
+          <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
+            <p className="text-gray-500 font-bold">No results found.</p>
+            <p className="text-sm text-gray-400">Try increasing the radius or changing the city.</p>
+          </div>
         )}
       </div>
+
+      {/* --- DETAILS MODAL --- */}
+      {selectedPlace && (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-fade-in" onClick={closeDetails}>
+          <div className="bg-white w-full md:max-w-2xl h-[85vh] md:h-auto md:max-h-[85vh] rounded-t-3xl md:rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-slide-up" onClick={(e) => e.stopPropagation()}>
+
+            {/* Modal Header Image */}
+            <div className="h-48 md:h-64 bg-gray-200 relative flex-shrink-0">
+              {selectedPlace.photos?.[0] ? (
+                <img src={selectedPlace.photos[0].getUrl({ maxWidth: 800 })} className="w-full h-full object-cover" alt={selectedPlace.name} />
+              ) : <div className="w-full h-full flex items-center justify-center text-gray-400">No Image Available</div>}
+              <button onClick={closeDetails} className="absolute top-4 right-4 bg-white/90 p-2 rounded-full shadow-md text-gray-800 hover:bg-white font-bold">✕</button>
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6 pt-20">
+                <h2 className="text-2xl md:text-3xl font-black text-white leading-tight">{selectedPlace.name}</h2>
+                <p className="text-white/80 text-xs md:text-sm font-medium mt-1">{selectedPlace.formatted_address}</p>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50">
+
+              {/* Quick Actions */}
+              <div className="flex gap-3">
+                <button onClick={() => window.open(`http://googleusercontent.com/maps.google.com/search?q=${encodeURIComponent(selectedPlace.name || '')}&query_place_id=${selectedPlace.place_id}`, '_blank')} className="flex-1 bg-black text-white py-3 rounded-xl font-bold text-sm shadow-md hover:scale-[1.02] transition-transform">Get Directions 📍</button>
+                <button onClick={() => { onAddToTrip(selectedPlace); closeDetails(); }} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-sm shadow-md hover:bg-blue-700 transition-colors">+ Add to Trip</button>
+              </div>
+
+              {detailsLoading ? (
+                <div className="text-center py-10"><div className="animate-spin text-2xl">⏳</div><p className="text-xs font-bold text-gray-400 mt-2">Loading details...</p></div>
+              ) : placeDetails ? (
+                <>
+                  {/* --- SECTION: WHAT'S BEST (Editorial Summary) --- */}
+                  <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                    <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><span>✨</span> Highlights & What to Know</h3>
+                    <p className="text-sm text-gray-600 leading-relaxed font-medium">
+                      {placeDetails.editorial_summary?.overview ||
+                        (placeDetails.reviews && placeDetails.reviews.length > 0 ? `Users say: "${placeDetails.reviews[0].text.slice(0, 150)}..."` : "No summary available. Be the first to explore!")}
+                    </p>
+                  </div>
+
+                  {/* --- SECTION: INFO & HOURS --- */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                      <h3 className="font-bold text-gray-900 mb-3 text-xs uppercase tracking-wider text-gray-400">Good to Know</h3>
+                      <div className="space-y-3 text-sm font-medium">
+                        <div className="flex justify-between border-b border-gray-50 pb-2">
+                          <span className="text-gray-500">Status</span>
+                          <span className={placeDetails.opening_hours?.open_now ? "text-green-600" : "text-red-500"}>{placeDetails.opening_hours?.open_now ? "Open Now" : "Closed"}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-gray-50 pb-2">
+                          <span className="text-gray-500">Rating</span>
+                          <span>★ {placeDetails.rating} ({placeDetails.user_ratings_total})</span>
+                        </div>
+                        {placeDetails.website && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-500">Website</span>
+                            <a href={placeDetails.website} target="_blank" className="text-blue-600 truncate max-w-[150px] hover:underline">Visit Link ↗</a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* --- SECTION: REVIEWS --- */}
+                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                      <h3 className="font-bold text-gray-900 mb-3 text-xs uppercase tracking-wider text-gray-400">Recent Buzz</h3>
+                      <div className="space-y-4">
+                        {placeDetails.reviews?.slice(0, 2).map((review, i) => (
+                          <div key={i} className="text-xs">
+                            <div className="flex justify-between mb-1">
+                              <span className="font-bold">{review.author_name}</span>
+                              <span className="text-yellow-500">{'★'.repeat(review.rating)}</span>
+                            </div>
+                            <p className="text-gray-500 line-clamp-3 italic">"{review.text}"</p>
+                          </div>
+                        ))}
+                        {!placeDetails.reviews?.length && <p className="text-xs text-gray-400">No reviews yet.</p>}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
